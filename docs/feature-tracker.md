@@ -143,3 +143,24 @@
 - Scope: Package the two Windows screenshots as a phone-accessible download.
 - Acceptance criteria: Verify the archive includes both PNGs and provide a working remote link.
 - Outcome: Published a screenshot-only GitHub prerelease with both PNGs in a ZIP. Verified the public download and archive contents.
+
+## Desktop coding session dashboard
+
+- Status: Built and smoke-tested on Windows.
+- Scope: Review the Omarchy reference and add a dock view for Claude Code and Codex desktop sessions.
+- Acceptance criteria: Show useful session information without requiring terminal sessions, and verify the dashboard on Windows.
+
+### Desktop approvals and model controls
+
+- Status: Built. Provider-level confirmation pending.
+- Scope: Surface approval requests, display observed model and reasoning effort, and expose supported default model and effort settings from the dock.
+- Acceptance criteria: Approval alerts lead back to the provider, default changes preserve unrelated configuration, and desktop behavior is accurately labeled.
+
+### Keep approval and settings actions in the dock
+
+- Status: Built and verified with simulated requests.
+- Scope: Evaluate in-dock one-time decisions via supported hooks, and keep default model and thinking edits inside the dashboard.
+- Acceptance criteria: Decisions are tied to a single pending request, and provider prompts remain available when the dock cannot handle a request.
+- Outcome: Added the Coding chats dashboard with provider filters, recent desktop sessions, observed model and effort, status chips, and an approval queue. Optional per-provider hooks relay explicit one-time choices locally and yield to the provider after 30 seconds. The defaults editor writes supported provider settings and creates backups.
+- Verification: Published x64 and restarted the native dock. Windows UI Automation verified local session cards and default controls. Simulated Claude and Codex requests exercised deny and allow through the Windows relay. Temporary TOML and hook configuration tests verified edits and preservation of unrelated settings.
+- Remaining work: The live hooks require user enablement and provider trust where applicable. A genuine desktop approval from each provider and provider application of the saved defaults remain unverified. The editor does not change the model or effort of a chat already open in another client.

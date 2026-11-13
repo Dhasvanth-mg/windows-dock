@@ -46,6 +46,7 @@ public partial class DashboardWindow : Window
         AddTab(PrimaryTabs, DashboardPage.Controls, 0xE9E9, "Quick controls");
         AddTab(PrimaryTabs, DashboardPage.Calendar, 0xE787, "Calendar and focus");
         AddTab(PrimaryTabs, DashboardPage.Weather, 0xE753, "Weather");
+        AddTab(PrimaryTabs, DashboardPage.Agents, 0xE943, "Coding chats");
         AddTab(SecondaryTabs, DashboardPage.Stats, 0xE9D9, "System stats");
         AddTab(SecondaryTabs, DashboardPage.Shelf, 0xE8B7, "Files");
         AddTab(SecondaryTabs, DashboardPage.Wallpapers, 0xE91B, "Wallpapers");
@@ -140,6 +141,7 @@ public partial class DashboardWindow : Window
             DashboardPage.Controls => ControlsPage(),
             DashboardPage.Calendar => CalendarPage(),
             DashboardPage.Weather => WeatherPage(),
+            DashboardPage.Agents => AgentsPage(),
             DashboardPage.Stats => StatsPage(),
             DashboardPage.Shelf => ShelfPage(),
             DashboardPage.Wallpapers => WallpapersPage(),
@@ -149,11 +151,14 @@ public partial class DashboardWindow : Window
 
         UpdateDashboard();
     }
-
     private void UpdateDashboard()
     {
         var now = DateTime.Now;
         HeaderClock.Text = now.ToString("t") + "   " + now.ToString("dddd, MMMM d");
+        var pending = AgentApprovals.Read();
+        pendingApprovals = pending;
+        if (currentPage != DashboardPage.Agents)
+            tabs[DashboardPage.Agents].Background = pending.Length > 0 ? Brush("#65431E") : Brushes.Transparent;
         updatePage?.Invoke();
     }
 
@@ -293,5 +298,5 @@ public partial class DashboardWindow : Window
     [DllImport("user32")]
     private static extern bool SetWindowPos(nint window, nint insertAfter, int x, int y, int width, int height, uint flags);
 
-    private enum DashboardPage { Home, Media, Controls, Calendar, Weather, Stats, Shelf, Wallpapers, Power, Settings }
+    private enum DashboardPage { Home, Media, Controls, Calendar, Weather, Agents, Stats, Shelf, Wallpapers, Power, Settings }
 }

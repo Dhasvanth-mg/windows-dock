@@ -11,6 +11,14 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        if (e.Args is ["--agent-status", _] or ["--agent-status", _, "--approval"])
+        {
+            try { AgentSessions.Receive(e.Args[1], Console.In, Console.Out, e.Args.Length == 3); }
+            catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+            Shutdown();
+            return;
+        }
+
         if (e.Args.Length > 0 && e.Args[0] == "--dashboard")
         {
             var controller = e.Args.Length == 2 && int.TryParse(e.Args[1], out var pid) ? pid : 0;

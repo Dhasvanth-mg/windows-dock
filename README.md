@@ -10,6 +10,14 @@ Use only one taskbar appearance tool at a time. The native controller exits if i
 
 The dashboard includes media sessions and volume, Windows settings shortcuts, a calendar, local reminders, a focus timer, system statistics, a file shelf, a wallpaper picker, and optional city-based weather. Entering a city and fetching a forecast uses Open-Meteo. In Music and mixer, the lyrics button sends track metadata to LRCLIB to look up line-synced lyrics.
 
+## Coding chats
+
+Open the dashboard and select **Coding chats** to see local Claude Code and Codex activity. The initial view reads local desktop metadata and Codex turn events. It never needs a terminal session or an API key. It can miss chats whose data is only available in the cloud.
+
+Under **Connections and defaults**, enable the provider hooks for live updates. Turn on **Allow or deny individual requests here** before enabling the hooks if you want the dock to handle one-time tool approvals. Codex requires you to review the new hooks in **Settings → Hooks**. Start or resume a Claude Code session for the new settings to take effect. Each supported request shows its tool, working directory, and arguments. After 30 seconds the dock yields to the provider's own approval flow. The dock stores status metadata locally and removes the approval payload when the request ends.
+
+**Save defaults** updates the provider's user configuration and creates a backup. These are defaults for new sessions when the provider loads its settings. Existing chats can have their own model and thinking overrides. Use **Remove dock hooks** to remove this integration from a provider.
+
 ## Build the native dock
 
 Use MSVC, the Windows SDK, CMake, and the .NET 10 SDK on Windows:
