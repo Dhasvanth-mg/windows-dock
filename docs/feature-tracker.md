@@ -98,3 +98,29 @@
 - Research: Hitodama publicly describes a Windows assistant. Its taskbar implementation could not be verified. Apple's macOS Tahoe design informed the dock visuals.
 - Verification: Self-contained x64 publish passed. Started the build and captured the 529 by 56 px dock on Windows. UI Automation found Explorer, the status button, and the Settings gear. The Quick Settings invocation did not produce a conclusive automation result.
 - Remaining work: The dock still runs as a separate companion surface. Explorer's taskbar remains active. In-place restyling, confirmed native flyout invocation, and production release testing remain open.
+
+## Native taskbar design correction
+
+- Status: In-place styling and restoration verified on Windows 11 build 26200. Dashboard validation in progress.
+- Scope: Replace the rejected companion preview with custom styling of Explorer's native Windows 11 taskbar. Keep native Start, apps, notification area, clock, and flyouts. The visual target is a centered macOS-inspired glass dock with a single shared surface and no magnification.
+- Acceptance criteria: Use no Windhawk dependency, verify that Explorer still owns the interactive taskbar, validate the rendered layout on this Windows build, and verify a way to restore the original appearance.
+- Verification: XAML Diagnostics reached the Explorer-owned app and tray controls. The compact bar rendered with the native clock and tray on the same glass surface. A stop request restored the full-width bar without restarting Explorer.
+
+### Video and DG-Dock reference
+
+- Status: In progress.
+- Scope: Inspect the saved inspiration video and DG-Dock source, then reproduce the demonstrated appearance and behavior using the applicable implementation route.
+- Acceptance criteria: Verify the video reference, account for any differences between it and the source, and test the resulting UI on Windows.
+
+### Hitodama implementation reference
+
+- Status: In progress.
+- Scope: Inspect Hitodama's taskbar and the supplied demo, then reproduce their visible design and interactions with independent project code.
+- Acceptance criteria: Native Explorer taskbar styling and a same-edge dashboard, with evidence that the two work together on Windows.
+- Research: The installed app has a taskbar appearance component running inside Explorer. The public site focuses on the assistant. DG-Dock was reviewed as a separate reference for interactions and its code is excluded from this implementation.
+
+### Additional reference clip
+
+- Status: In progress.
+- Scope: Inspect the newly attached MOV and incorporate compatible visual or interaction details into the native dock and dashboard.
+- Acceptance criteria: Record the relevant details and verify the resulting implementation on Windows.

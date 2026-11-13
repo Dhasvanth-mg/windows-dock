@@ -1,0 +1,3 @@
+EXPORTS
+    DllGetClassObject=GetDiagnosticsClass PRIVATE
+    DllCanUnloadNow=CanUnloadDiagnostics PRIVATE
