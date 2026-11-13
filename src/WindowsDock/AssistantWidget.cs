@@ -1,6 +1,4 @@
 using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,10 +7,6 @@ namespace WindowsDock;
 
 public partial class MainWindow
 {
-    private static readonly HttpClient ChatClient = new(new HttpClientHandler { AllowAutoRedirect = false })
-    {
-        Timeout = TimeSpan.FromSeconds(45)
-    };
     private Window? assistant;
 
     private void AddAssistantWidget() => AddButton("Assistant", "✦", OpenAssistant);
@@ -62,7 +56,7 @@ public partial class MainWindow
             status.Text = "Waiting for a response…";
             try
             {
-                var response = await SendChat((string)provider.SelectedItem == "Gemini", modelId,
+                var response = await TextModelClient.SendChat((string)provider.SelectedItem == "Gemini", modelId,
                     key.Password.Trim(), requestHistory, lifetime.Token);
                 history.Clear();
                 history.AddRange(requestHistory);
@@ -123,41 +117,5 @@ public partial class MainWindow
             history.Clear();
             transcript.Clear();
         }
-    }
-
-    private static async System.Threading.Tasks.Task<string> SendChat(bool gemini, string model,
-        string key, (bool User, string Text)[] turns, System.Threading.CancellationToken cancellation)
-    {
-        var url = gemini
-            ? $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model)}:generateContent"
-            : "https://api.groq.com/openai/v1/chat/completions";
-        using var request = new HttpRequestMessage(HttpMethod.Post, url);
-        if (gemini)
-        {
-            request.Headers.Add("x-goog-api-key", key);
-            request.Content = JsonContent.Create(new
-            {
-                contents = turns.Select(turn => new { role = turn.User ? "user" : "model", parts = new[] { new { text = turn.Text } } }),
-                generationConfig = new { maxOutputTokens = 1024 }
-            });
-        }
-        else
-        {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-            request.Content = JsonContent.Create(new
-            {
-                model, messages = turns.Select(turn => new { role = turn.User ? "user" : "assistant", content = turn.Text }),
-                max_completion_tokens = 1024
-            });
-        }
-        using var response = await ChatClient.SendAsync(request, cancellation);
-        response.EnsureSuccessStatusCode();
-        using var result = await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: cancellation);
-        var root = result!.RootElement;
-        return gemini
-            ? string.Concat(root.GetProperty("candidates").EnumerateArray().First().GetProperty("content")
-                .GetProperty("parts").EnumerateArray().Where(part => !part.TryGetProperty("thought", out var thought) || !thought.GetBoolean())
-                .Select(part => part.TryGetProperty("text", out var text) ? text.GetString() : ""))
-            : root.GetProperty("choices").EnumerateArray().First().GetProperty("message").GetProperty("content").GetString() ?? "";
     }
 }

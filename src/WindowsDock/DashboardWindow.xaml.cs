@@ -17,6 +17,7 @@ public partial class DashboardWindow : Window
 {
     private readonly Dictionary<DashboardPage, Button> tabs = new();
     private readonly DispatcherTimer ticker = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer agentTicker = new() { Interval = TimeSpan.FromSeconds(6) };
     private readonly CancellationTokenSource lifetime = new();
     private readonly int controllerPid;
     private readonly SolidColorBrush subdued = Brush("#B1B3BC");
@@ -31,6 +32,7 @@ public partial class DashboardWindow : Window
     private bool modalOpen;
     private bool closed;
     private bool positioning;
+    private bool compactAgents;
     private long lastReveal;
 
     public DashboardWindow() : this(0, null) { }
@@ -39,6 +41,7 @@ public partial class DashboardWindow : Window
     {
         InitializeComponent();
         this.controllerPid = controllerPid;
+        agentGrid = AgentGrid.Connect(controllerPid);
         ShowInTaskbar = controllerPid == 0;
 
         AddTab(PrimaryTabs, DashboardPage.Home, 0xE80F, "Overview");
@@ -69,6 +72,8 @@ public partial class DashboardWindow : Window
             }
             lastReveal = Environment.TickCount64;
             UpdateDashboard();
+            if (currentPage is DashboardPage.Weather or DashboardPage.Home)
+                _ = RefreshSavedWeatherAsync();
             ticker.Start();
             PositionAtTaskbar();
             if (SystemParameters.ClientAreaAnimation)
@@ -98,10 +103,18 @@ public partial class DashboardWindow : Window
         {
             closed = true;
             ticker.Stop();
+            agentTicker.Stop();
             lifetime.Cancel();
             lifetime.Dispose();
+            agentGrid?.Dispose();
         };
         ticker.Tick += (_, _) => UpdateDashboard();
+        if (agentGrid != null)
+        {
+            agentTicker.Tick += (_, _) => _ = RefreshAgentsAsync();
+            agentTicker.Start();
+            _ = RefreshAgentsAsync();
+        }
         InitializeFocus();
         var page = Enum.TryParse<DashboardPage>(initialPage, true, out var initial) && Enum.IsDefined(initial)
             ? initial : DashboardPage.Home;
@@ -150,6 +163,8 @@ public partial class DashboardWindow : Window
         };
 
         UpdateDashboard();
+        if (IsVisible && currentPage is DashboardPage.Weather or DashboardPage.Home)
+            _ = RefreshSavedWeatherAsync();
     }
     private void UpdateDashboard()
     {
@@ -157,6 +172,7 @@ public partial class DashboardWindow : Window
         HeaderClock.Text = now.ToString("t") + "   " + now.ToString("dddd, MMMM d");
         var pending = AgentApprovals.Read();
         pendingApprovals = pending;
+        RefreshVisibleUsage();
         if (currentPage != DashboardPage.Agents)
             tabs[DashboardPage.Agents].Background = pending.Length > 0 ? Brush("#65431E") : Brushes.Transparent;
         updatePage?.Invoke();
@@ -166,7 +182,9 @@ public partial class DashboardWindow : Window
     {
         var screen = TaskbarScreen();
         var dpi = VisualTreeHelper.GetDpi(this);
-        Width = Math.Min(1060, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
+        Width = Math.Min(compactAgents ? 506 : 1060, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
+        DashboardHeader.Visibility = compactAgents ? Visibility.Collapsed : Visibility.Visible;
+        PanelLayout.RowDefinitions[0].Height = new GridLength(compactAgents ? 0 : 35);
         var narrow = Width < 760;
         HeaderClock.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
     }
@@ -184,10 +202,19 @@ public partial class DashboardWindow : Window
             var width = ActualWidth * dpi.DpiScaleX;
             var height = ActualHeight * dpi.DpiScaleY;
             var x = screen.Bounds.Left + (screen.Bounds.Width - width) / 2;
-            var bottom = screen.Bounds.Bottom - 5 * dpi.DpiScaleY;
+            var bottom = compactAgents ? screen.Bounds.Bottom - 51 * dpi.DpiScaleY : screen.Bounds.Bottom - 5 * dpi.DpiScaleY;
             MoveWindowWithoutActivation(source.Handle, (int)x, (int)Math.Max(screen.Bounds.Top, bottom - height));
         }
         finally { positioning = false; }
+    }
+
+    internal void OpenMainDashboard()
+    {
+        if (!compactAgents)
+            return;
+        compactAgents = false;
+        ConfigureWidth();
+        ShowPage(DashboardPage.Home);
     }
 
     private static Forms.Screen TaskbarScreen()
@@ -279,10 +306,10 @@ public partial class DashboardWindow : Window
 
     private void ShowOwnedMessage(string message)
     {
-        // Keep the dashboard open while the message box has focus.
+        var wasModal = modalOpen;
         modalOpen = true;
         try { MessageBox.Show(this, message, "Windows Dock"); }
-        finally { modalOpen = false; }
+        finally { modalOpen = wasModal; }
     }
 
     private static SolidColorBrush Brush(string color)

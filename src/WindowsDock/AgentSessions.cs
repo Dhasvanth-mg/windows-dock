@@ -6,13 +6,14 @@ using System.Text.Json;
 namespace WindowsDock;
 
 internal enum AgentProvider { Claude, Codex }
-internal enum AgentState { Recent, Ready, Working, Attention, Finished, Failed, Interrupted }
+internal enum AgentState { Recent, Ready, Working, Attention, Finished, Failed, Interrupted, QuotaReached }
 
 internal sealed record AgentSession(AgentProvider Provider, string Id, string Title, string Project,
     AgentState State, string Step, DateTimeOffset Updated, string? DesktopId = null,
-    string? Model = null, string? Effort = null);
+    string? Model = null, string? Effort = null, string? LastReplySessionId = null, string? LastReplyId = null,
+    string? ProjectPath = null);
 
-internal static class AgentSessions
+internal static partial class AgentSessions
 {
     private static string Profile => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     internal static string StatusDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -52,7 +53,8 @@ internal static class AgentSessions
                         Step = newer ? record.Step : known.Step,
                         Updated = newer ? record.Updated : known.Updated,
                         Model = newer ? record.Model ?? known.Model : known.Model,
-                        Effort = newer ? record.Effort ?? known.Effort : known.Effort
+                        Effort = newer ? record.Effort ?? known.Effort : known.Effort,
+                        ProjectPath = known.ProjectPath ?? record.ProjectPath
                     };
                 }
                 else
@@ -61,7 +63,10 @@ internal static class AgentSessions
         }
 
         return sessions.Values.Select(session => Expire(session, now))
-            .OrderBy(session => session.State switch { AgentState.Attention => 0, AgentState.Working => 1, _ => 2 })
+            .OrderBy(session => session.State switch
+            {
+                AgentState.Attention or AgentState.QuotaReached => 0, AgentState.Working => 1, _ => 2
+            })
             .ThenByDescending(session => session.Updated).Take(48).ToArray();
     }
 
@@ -94,8 +99,14 @@ internal static class AgentSessions
                 var updated = item.TryGetProperty("lastActivityAt", out var activity) && activity.ValueKind == JsonValueKind.Number &&
                     activity.TryGetInt64(out var ms) && ms is > 0 and < 253402300799999
                     ? DateTimeOffset.FromUnixTimeMilliseconds(ms) : File.GetLastWriteTimeUtc(path);
+                var summary = Property(item, "postTurnSummary");
+                var lastReply = String(item, "lastAssistantUuid");
+                var finished = lastReply != null && lastReply == String(summary, "summarizes_uuid") &&
+                    String(summary, "status_category") is "completed" or "review_ready";
                 sessions[(AgentProvider.Claude, id)] = new(AgentProvider.Claude, id, title, project,
-                    AgentState.Recent, "Desktop chat", updated, desktopId, String(item, "model"), String(item, "effort"));
+                    finished ? AgentState.Finished : AgentState.Recent, finished ? "Reply ready" : "Desktop chat",
+                    updated, desktopId, String(item, "model"), String(item, "effort"),
+                    String(item, "lastAssistantCliSessionId"), lastReply, String(item, "cwd"));
             });
         }
     }
@@ -139,6 +150,7 @@ internal static class AgentSessions
                 AgentSession? latest = null;
                 string? model = null;
                 string? effort = null;
+                string? cwd = null;
                 foreach (var line in Tail(file, 768_000).Reverse())
                 {
                     if (model == null && line.Contains("\"turn_context\"", StringComparison.Ordinal))
@@ -151,6 +163,7 @@ internal static class AgentSessions
                             {
                                 model = String(context, "model");
                                 effort = String(context, "effort") ?? String(context, "reasoning_effort");
+                                cwd = String(context, "cwd");
                             }
                         });
                     }
@@ -159,7 +172,9 @@ internal static class AgentSessions
                     if (latest != null)
                         continue;
                     if (!line.Contains("\"event_msg\"", StringComparison.Ordinal) ||
-                        !line.Contains("\"task_", StringComparison.Ordinal) && !line.Contains("\"turn_aborted\"", StringComparison.Ordinal))
+                        !line.Contains("\"task_", StringComparison.Ordinal) &&
+                        !line.Contains("\"turn_aborted\"", StringComparison.Ordinal) &&
+                        !line.Contains("\"usage_limit_reached\"", StringComparison.Ordinal))
                         continue;
                     TryRead(() =>
                     {
@@ -173,19 +188,35 @@ internal static class AgentSessions
                             "task_started" => AgentState.Working,
                             "task_complete" => AgentState.Finished,
                             "turn_aborted" => AgentState.Interrupted,
+                            "error" when IsCodexQuotaError(payload) => AgentState.QuotaReached,
                             _ => AgentState.Recent
                         };
                         if (state != AgentState.Recent)
-                            latest = session with { State = state, Step = "Local turn status", Updated = at };
+                            latest = session with
+                            {
+                                State = state, Updated = at,
+                                Step = state switch
+                                {
+                                    AgentState.Working => "Turn in progress",
+                                    AgentState.Finished => "Reply ready",
+                                    AgentState.QuotaReached => "Usage limit reached",
+                                    _ => "Turn stopped"
+                                }
+                            };
                     });
                 }
-                if (latest != null)
-                    sessions[key] = latest with { Model = model, Effort = effort };
-                else if (model != null)
-                    sessions[key] = session with { Model = model, Effort = effort };
+                sessions[key] = (latest ?? session) with
+                {
+                    Model = model, Effort = effort,
+                    Project = cwd == null ? session.Project : ProjectName(cwd), ProjectPath = cwd
+                };
             });
         }
     }
+
+    private static bool IsCodexQuotaError(JsonElement payload) =>
+        String(payload, "codex_error_info") is "usage_limit_reached" or "UsageLimitReached" ||
+        Property(Property(payload, "codex_error_info"), "usage_limit_reached").ValueKind != JsonValueKind.Undefined;
 
     internal static void Receive(string providerName, TextReader input, TextWriter output, bool approvals)
     {
@@ -224,7 +255,7 @@ internal static class AgentSessions
 
         var project = ProjectName(String(item, "cwd"));
         var record = new AgentSession(provider, id, project, project, status.Item1, status.Item2, DateTimeOffset.UtcNow,
-            Model: String(item, "model"));
+            Model: String(item, "model"), ProjectPath: String(item, "cwd"));
         Directory.CreateDirectory(StatusDirectory);
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(provider + ":" + id)));
         var path = Path.Combine(StatusDirectory, hash + ".json");
@@ -265,6 +296,13 @@ internal static class AgentSessions
     internal static string? String(JsonElement item, string key) =>
         item.ValueKind == JsonValueKind.Object && item.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() : null;
+
+    internal static JsonElement Property(JsonElement item, string key) =>
+        item.ValueKind == JsonValueKind.Object && item.TryGetProperty(key, out var value) ? value : default;
+
+    internal static long? Count(JsonElement item, string key) =>
+        Property(item, key) is { ValueKind: JsonValueKind.Number } value && value.TryGetInt64(out var count) && count >= 0
+            ? count : null;
 
     private static IEnumerable<string> Files(string directory, string pattern, bool recursive, int limit)
     {

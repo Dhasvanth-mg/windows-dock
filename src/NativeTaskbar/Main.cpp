@@ -1,4 +1,5 @@
 #include "Connection.h"
+#include "AgentGridState.h"
 
 #include <cstdio>
 #include <cwchar>
@@ -31,13 +32,17 @@ namespace
               restored(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"Restored").c_str())),
               stop(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"Stop").c_str())),
               dashboard(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"Dashboard").c_str())),
-              showDashboard(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowDashboard").c_str()))
+              showDashboard(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowDashboard").c_str())),
+              agent(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"Agent").c_str())),
+              showAgent(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowAgent").c_str())),
+              agentGrid(CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(AgentGridState),
+                  SessionName(pid, L"AgentGrid").c_str()))
         {
-            if (!ready || !restored || !stop || !dashboard || !showDashboard)
+            if (!ready || !restored || !stop || !dashboard || !showDashboard || !agent || !showAgent || !agentGrid)
                 winrt::throw_last_error();
         }
 
-        winrt::handle ready, restored, stop, dashboard, showDashboard;
+        winrt::handle ready, restored, stop, dashboard, showDashboard, agent, showAgent, agentGrid;
     };
 
     LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
@@ -225,34 +230,35 @@ namespace
             std::fputws(L"Use the notification area icon to restore.\n", stdout);
         std::fflush(stdout);
         winrt::handle dashboardProcess;
-        const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get()};
+        const auto ensureDashboard = [&]
+        {
+            if (dashboardProcess && WaitForSingleObject(dashboardProcess.get(), 0) == WAIT_TIMEOUT)
+                return true;
+            dashboardProcess.close();
+            const auto args = L"--dashboard " + initialization + L" --hidden";
+            SHELLEXECUTEINFOW launch{};
+            launch.cbSize = sizeof(launch);
+            launch.fMask = SEE_MASK_NOCLOSEPROCESS;
+            launch.lpFile = panel.c_str();
+            launch.lpParameters = args.c_str();
+            launch.nShow = SW_SHOWNORMAL;
+            if (ShellExecuteExW(&launch))
+                dashboardProcess.attach(launch.hProcess);
+            return static_cast<bool>(dashboardProcess);
+        };
+        ensureDashboard();
+        const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get(), session.agent.get()};
         for (;;)
         {
             const auto result = MsgWaitForMultipleObjects(ARRAYSIZE(signals), signals, FALSE, INFINITE, QS_ALLINPUT);
             if (result == WAIT_OBJECT_0 || result == WAIT_OBJECT_0 + 1 || result == WAIT_FAILED)
                 break;
-            if (result == WAIT_OBJECT_0 + 2)
+            if (result == WAIT_OBJECT_0 + 2 || result == WAIT_OBJECT_0 + 3)
             {
-                if (dashboardProcess && WaitForSingleObject(dashboardProcess.get(), 0) == WAIT_TIMEOUT)
+                if (ensureDashboard())
                 {
                     AllowSetForegroundWindow(GetProcessId(dashboardProcess.get()));
-                    SetEvent(session.showDashboard.get());
-                }
-                else
-                {
-                    const auto args = L"--dashboard " + initialization;
-                    SHELLEXECUTEINFOW launch{};
-                    launch.cbSize = sizeof(launch);
-                    launch.fMask = SEE_MASK_NOCLOSEPROCESS;
-                    launch.lpFile = panel.c_str();
-                    launch.lpParameters = args.c_str();
-                    launch.nShow = SW_SHOWNORMAL;
-                    if (ShellExecuteExW(&launch))
-                    {
-                        dashboardProcess.attach(launch.hProcess);
-                        if (dashboardProcess)
-                            AllowSetForegroundWindow(GetProcessId(dashboardProcess.get()));
-                    }
+                    SetEvent(result == WAIT_OBJECT_0 + 2 ? session.showDashboard.get() : session.showAgent.get());
                 }
                 continue;
             }

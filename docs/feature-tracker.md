@@ -164,3 +164,66 @@
 - Outcome: Added the Coding chats dashboard with provider filters, recent desktop sessions, observed model and effort, status chips, and an approval queue. Optional per-provider hooks relay explicit one-time choices locally and yield to the provider after 30 seconds. The defaults editor writes supported provider settings and creates backups.
 - Verification: Published x64 and restarted the native dock. Windows UI Automation verified local session cards and default controls. Simulated Claude and Codex requests exercised deny and allow through the Windows relay. Temporary TOML and hook configuration tests verified edits and preservation of unrelated settings.
 - Remaining work: The live hooks require user enablement and provider trust where applicable. A genuine desktop approval from each provider and provider application of the saved defaults remain unverified. The editor does not change the model or effort of a chat already open in another client.
+
+## Active chat controls and reply summaries
+
+- Status: In progress.
+- Scope: Investigate per-chat model and thinking controls and add a dock popup for summarizing recent assistant replies.
+- Acceptance criteria: Verify any supported active-chat controls, and keep summary requests explicit and scoped to the selected chat.
+- Remaining work: Implement and test reply loading, summarization, and the in-dock display. Verify which live chat controls the installed clients expose.
+
+## Coding chat token usage and resets
+
+- Status: In progress.
+- Scope: Add token usage and provider rate-limit reset times to the Coding chats dashboard.
+- Acceptance criteria: Show reported counts and reset times where available, label their scope and freshness, and verify behavior when a provider does not report them.
+- Remaining work: Identify what Codex and Claude Code expose to the dock, then implement and verify the display.
+
+## Coucou-inspired coding agents
+
+- Status: In progress.
+- Scope: Review Coucou and redesign the Coding chats interaction around animated status, hover details, and slide-up actions.
+- Acceptance criteria: Recognizable states for working, approval required, finished, and quota reached. A mouse or keyboard user can reach chat actions, reply summaries, and usage without leaving the dock.
+- Remaining work: Verify the reference, implement the dock interaction and state visuals, and test on Windows.
+
+### Minimal dock interface
+
+- Status: In progress.
+- Scope: Bring the new coding-agent experience into the existing native dock, drawing on Coucou's compact interaction and Hitodama's restrained styling.
+- Acceptance criteria: A small 2×2 grid on the native taskbar displays up to four chat states. Hover identifies the chat and its current status. Click opens the chat's actions in a compact panel from the dock.
+- Remaining work: Build and connect the native grid, then verify the live states, hover, clicks, and layout on Windows.
+
+### Dock and tray refinement
+
+- Status: In progress.
+- Scope: Refine the dock surface, tray, date, clock, and calendar presentation while keeping Windows controls usable and background work small.
+- Acceptance criteria: Shared spacing and styling across the native dock and flyouts, with the clock and tray controls still using Windows interactions. Keep refresh and animation work scoped to what is visible or changing.
+- Remaining work: Build and test the native and managed layout together.
+
+### Grid previews, navigation, and assignments
+
+- Status: In progress.
+- Scope: Show a quick preview when hovering over a tile. Open an all-chat menu from the grid, surface pending approvals and fresh replies, and provide a direct open action and saved chat or project assignments.
+- Acceptance criteria: Hover shows the tile's chat and status, click keeps all chats accessible and highlights an urgent or recently finished chat, and slot assignments survive a restart.
+- Remaining work: Implement the preview and routing, saved assignments, and Windows verification.
+
+### Automatic weather location and styled controls
+
+- Status: In progress.
+- Scope: Add weather location detection and make the dashboard's controls visually consistent with the native dock.
+- Acceptance criteria: Weather can use the Windows location permission flow with city search still available. Custom inputs, selectors, buttons, and scrolling remain readable and usable by keyboard.
+- Remaining work: Implement the location flow and control styles, then verify both paths and the resulting Windows layout.
+
+### Widget ideas
+
+- Status: Shortlist delivered. The owner selected all eight and asked for more ideas.
+- Scope: Suggest additional widgets that fit the dock.
+- Acceptance criteria: Provide a short list of useful, distinct widgets with the action each would make easier.
+- Outcome: Shared audio switching, a meeting card, a clipboard and file shelf, PR and build checks, workspace shortcuts, a download queue, a focus switch, and a command palette. The request is for ideas to review before choosing features to build.
+
+### Selected widgets and notification summaries
+
+- Status: In progress.
+- Scope: Add the audio switchboard, meeting card, clipboard and file shelf, GitHub checks and reviews, workspace shortcuts, download queue, focus controls, command palette, and notification summaries. Suggest more widgets separately.
+- Acceptance criteria: Every enabled widget has a usable dock entry, operates on real local or connected data, and identifies any Windows or service limitations. Notification text leaves the device only when the user sends it for summarization.
+- Remaining work: Complete the dock and coding-agent build, extend the existing widgets, add the new widgets, and test the supported Windows and account flows.

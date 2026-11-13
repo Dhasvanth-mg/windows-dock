@@ -15,7 +15,7 @@ add_executable(NativeTaskbar Main.cpp)
 target_include_directories(NativeTaskbar SYSTEM PRIVATE
     "${CMAKE_WINDOWS_KITS_10_DIR}/Include/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/cppwinrt")
 target_link_libraries(NativeTaskbar PRIVATE user32 ole32 shell32 windowsapp)
-add_library(NativeTaskbar.Xaml SHARED Diagnostics.cpp TaskbarStyle.cpp Diagnostics.def)
+add_library(NativeTaskbar.Xaml SHARED Diagnostics.cpp TaskbarStyle.cpp TaskbarAgents.cpp Diagnostics.def)
 set_target_properties(NativeTaskbar.Xaml PROPERTIES UNITY_BUILD ON)
 set(NATIVE_TASKBAR_MODULE_NAME "NativeTaskbar.Xaml" CACHE STRING "Output name of the XAML diagnostics DLL")
 set_target_properties(NativeTaskbar.Xaml PROPERTIES OUTPUT_NAME "${NATIVE_TASKBAR_MODULE_NAME}")

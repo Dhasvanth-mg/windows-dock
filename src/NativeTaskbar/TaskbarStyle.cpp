@@ -7,6 +7,7 @@
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 #include <algorithm>
 #include <cmath>
 
@@ -29,7 +30,7 @@ namespace
         brush.StartPoint({0, 0});
         brush.EndPoint({0, 1});
         for (const auto [position, color] : std::initializer_list<std::pair<double, Color>>{
-            {0.0, {105, 255, 255, 255}}, {0.42, {37, 255, 255, 255}}, {1.0, {68, 255, 255, 255}}})
+            {0.0, {84, 255, 255, 255}}, {0.42, {31, 255, 255, 255}}, {1.0, {54, 255, 255, 255}}})
         {
             media::GradientStop stop;
             stop.Offset(position);
@@ -40,8 +41,12 @@ namespace
     }
 }
 
-TaskbarStyle::TaskbarStyle(Grid const& root, winrt::handle const& dashboard)
-    : root(root), dashboard(dashboard.get())
+TaskbarStyle::TaskbarStyle(Grid const& root, winrt::handle const& dashboard, DWORD controllerPid)
+    : root(root), dashboard(dashboard.get()),
+      agentEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Agent").c_str())),
+      agentMapping(OpenFileMappingW(FILE_MAP_WRITE, FALSE, SessionName(controllerPid, L"AgentGrid").c_str())),
+      agentState(agentMapping ? static_cast<AgentGridState*>(MapViewOfFile(agentMapping.get(), FILE_MAP_WRITE,
+          0, 0, sizeof(AgentGridState))) : nullptr)
 {
 }
 
@@ -104,6 +109,8 @@ void TaskbarStyle::Apply(FrameworkElement const& apps, FrameworkElement const& t
 
     AddChrome();
     AddDashboardButton();
+    AddAgentGrid();
+    StyleTray(tray);
 
     rootSize = root.SizeChanged([this](auto&&, auto&&) { try { FitApps(); } catch (...) {} });
     traySize = tray.SizeChanged([this](auto&&, auto&&) { try { FitApps(); } catch (...) {} });
@@ -124,14 +131,14 @@ void TaskbarStyle::AddChrome()
     chrome = controls::Border();
     chrome.Name(L"WindowsDockGlass");
     chrome.IsHitTestVisible(false);
-    chrome.CornerRadius({14, 14, 14, 14});
+    chrome.CornerRadius({16, 16, 16, 16});
     chrome.Margin({0, 2, 0, 4});
     chrome.BorderThickness({1, 1, 1, 1});
     chrome.BorderBrush(Rim());
     media::AcrylicBrush glass;
     glass.BackgroundSource(media::AcrylicBackgroundSource::Backdrop);
     glass.TintColor(Color{255, 10, 11, 13});
-    glass.TintOpacity(0.78);
+    glass.TintOpacity(0.83);
     glass.TintLuminosityOpacity(0.10);
     glass.FallbackColor(Color{246, 14, 15, 17});
     chrome.Background(glass);
@@ -177,8 +184,34 @@ void TaskbarStyle::AddDashboardButton()
     icon.Foreground(Solid(242, 255, 255, 255));
     dashboardButton.Content(icon);
     dashboardButton.Click([event = dashboard](auto&&, auto&&) { SetEvent(event); });
-    Grid::SetColumn(dashboardButton, 2);
-    root.Children().Append(dashboardButton);
+    dockControls = controls::Grid();
+    dockControls.VerticalAlignment(xaml::VerticalAlignment::Center);
+    for (int index = 0; index < 2; ++index)
+    {
+        controls::ColumnDefinition column;
+        column.Width({1, xaml::GridUnitType::Auto});
+        dockControls.ColumnDefinitions().Append(column);
+    }
+    dockControls.Children().Append(dashboardButton);
+    Grid::SetColumn(dockControls, 2);
+    root.Children().Append(dockControls);
+}
+
+void TaskbarStyle::StyleTray(FrameworkElement const& tray)
+{
+    const auto time = Find(tray, L"TimeInnerTextBlock").try_as<controls::TextBlock>();
+    const auto date = Find(tray, L"DateInnerTextBlock").try_as<controls::TextBlock>();
+    if (time)
+    {
+        Set(time, controls::TextBlock::FontWeightProperty(), winrt::Windows::UI::Text::FontWeight{600});
+        Set(time, controls::TextBlock::FontSizeProperty(), 12.0);
+        Set(time, controls::TextBlock::ForegroundProperty(), Solid(255, 246, 248, 252));
+    }
+    if (date)
+    {
+        Set(date, controls::TextBlock::FontSizeProperty(), 10.0);
+        Set(date, controls::TextBlock::ForegroundProperty(), Solid(255, 185, 191, 205));
+    }
 }
 
 void TaskbarStyle::FitApps()
@@ -187,7 +220,7 @@ void TaskbarStyle::FitApps()
     {
         const auto tray = trayFrame.get();
         const auto trayWidth = tray ? tray.ActualWidth() : 0;
-        const auto maxWidth = std::max(120.0, root.ActualWidth() - trayWidth - 88.0);
+        const auto maxWidth = std::max(120.0, root.ActualWidth() - trayWidth - (agentState ? 128.0 : 88.0));
         if (apps.MaxWidth() != maxWidth)
             Set(apps, FrameworkElement::MaxWidthProperty(), maxWidth);
     }
@@ -223,6 +256,15 @@ void TaskbarStyle::Restore() noexcept
 {
     try
     {
+        if (agentTimer)
+        {
+            agentTimer.Stop();
+            agentTimer.Tick(agentTick);
+            agentTimer = nullptr;
+        }
+        for (auto& animation : agentAnimations)
+            if (animation)
+                animation.Stop();
         if (rootSize.value)
             root.SizeChanged(rootSize);
         if (traySize.value)
@@ -232,7 +274,7 @@ void TaskbarStyle::Restore() noexcept
         traySize = {};
         const auto children = root.Children();
         for (const auto& item : {chrome.as<xaml::UIElement>(), divider.as<xaml::UIElement>(),
-            dashboardButton.as<xaml::UIElement>()})
+            dockControls.as<xaml::UIElement>()})
         {
             uint32_t position = 0;
             if (item && children.IndexOf(item, position))

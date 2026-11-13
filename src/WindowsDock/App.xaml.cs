@@ -21,13 +21,15 @@ public partial class App : Application
 
         if (e.Args.Length > 0 && e.Args[0] == "--dashboard")
         {
-            var controller = e.Args.Length == 2 && int.TryParse(e.Args[1], out var pid) ? pid : 0;
+            var controller = e.Args.Length >= 2 && int.TryParse(e.Args[1], out var pid) ? pid : 0;
             var initialPage = controller == 0 && e.Args.Length == 2 ? e.Args[1] : null;
             base.OnStartup(e);
             if (controller > 0)
             {
                 dashboardSession = NativeDashboardSession.Connect(controller,
-                    () => Dispatcher.BeginInvoke(ShowDashboard), () => Dispatcher.InvokeAsync(() => Shutdown()));
+                    () => Dispatcher.BeginInvoke(() => ShowDashboard(false)),
+                    () => Dispatcher.BeginInvoke(() => ShowDashboard(true)),
+                    () => Dispatcher.InvokeAsync(() => Shutdown()));
                 if (dashboardSession == null)
                 {
                     Shutdown();
@@ -35,21 +37,23 @@ public partial class App : Application
                 }
                 ShutdownMode = ShutdownMode.OnExplicitShutdown;
             }
-            ShowDashboard();
+            MainWindow = new DashboardWindow(controller, initialPage);
+            if (e.Args.Length < 3 || e.Args[2] != "--hidden")
+                ShowDashboard(false);
             return;
 
-            void ShowDashboard()
+            void ShowDashboard(bool agents)
             {
                 if (MainWindow is DashboardWindow current)
                 {
+                    if (agents)
+                        current.OpenAgentGrid();
+                    else
+                        current.OpenMainDashboard();
                     if (!current.IsVisible)
                         current.Show();
                     current.Activate();
-                    return;
                 }
-                MainWindow = new DashboardWindow(controller, initialPage);
-                MainWindow.Show();
-                MainWindow.Activate();
             }
         }
 

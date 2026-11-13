@@ -37,6 +37,7 @@ namespace
     {
     public:
         Watcher(winrt::com_ptr<IXamlDiagnostics> diagnostics, DWORD controllerPid) : diagnostics(std::move(diagnostics)),
+            controllerPid(controllerPid),
             controller(OpenProcess(SYNCHRONIZE, FALSE, controllerPid)),
             ready(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Ready").c_str())),
             restored(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Restored").c_str())),
@@ -152,7 +153,7 @@ namespace
                         TaskbarStyle::Find(grid, L"WindowsDockGlass"))
                         return;
 
-                    auto next = std::make_unique<TaskbarStyle>(grid, self->dashboard);
+                    auto next = std::make_unique<TaskbarStyle>(grid, self->dashboard, self->controllerPid);
                     next->Apply(apps, tray);
                     {
                         std::scoped_lock guard(self->taskbarLock);
@@ -215,6 +216,7 @@ namespace
         }
 
         winrt::com_ptr<IXamlDiagnostics> diagnostics;
+        DWORD controllerPid;
         winrt::handle controller, ready, restored, stop, dashboard;
         std::atomic<bool> stopping{};
         std::mutex taskbarLock;

@@ -2,8 +2,10 @@ using System.Globalization;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using Windows.Devices.Geolocation;
 
 namespace WindowsDock;
 
@@ -16,6 +18,8 @@ public partial class DashboardWindow
     private string? weatherError;
     private City[] cityMatches = [];
     private string cityQuery = "";
+    private bool weatherLocationDenied;
+    private DateTimeOffset weatherUpdated;
 
     private UIElement WeatherPage()
     {
@@ -25,6 +29,12 @@ public partial class DashboardWindow
         credit.Padding = new Thickness(7, 4, 7, 4);
         DockPanel.SetDock(credit, Dock.Right);
         toolbar.Children.Add(credit);
+        var detect = ActionButton("Use my location", () => _ = LocateWeatherAsync());
+        detect.Margin = new Thickness(5, 0, 5, 0);
+        detect.IsEnabled = !loadingWeather;
+        detect.ToolTip = "Uses Windows location and sends rounded coordinates to Open-Meteo.";
+        DockPanel.SetDock(detect, Dock.Right);
+        toolbar.Children.Add(detect);
         var search = Field("City name", 100);
         search.Text = cityQuery;
         search.ToolTip = "Enter a city name";
@@ -77,6 +87,13 @@ public partial class DashboardWindow
             status.Margin = new Thickness(0, 0, 0, 6);
             layout.Children.Add(status);
         }
+        if (weatherLocationDenied)
+        {
+            var settings = ActionButton("Windows location settings", () => OpenTarget("ms-settings:privacy-location"));
+            settings.HorizontalAlignment = HorizontalAlignment.Left;
+            settings.Margin = new Thickness(0, 0, 0, 7);
+            layout.Children.Add(settings);
+        }
         if (cityMatches.Length > 1)
         {
             var matches = new WrapPanel { Margin = new Thickness(0, 0, 0, 7) };
@@ -102,7 +119,7 @@ public partial class DashboardWindow
 
         if (weather is not { } forecast)
         {
-            layout.Children.Add(Card(Text("Choose a city to display local weather.", 13, subdued)));
+            layout.Children.Add(Card(Text("Use your location or search for a city.", 13, subdued)));
             return layout;
         }
 
@@ -126,7 +143,7 @@ public partial class DashboardWindow
         return layout;
     }
 
-    private async System.Threading.Tasks.Task SetCityAsync(City selected)
+    private async Task SetCityAsync(City selected)
     {
         weatherError = null;
         try
@@ -147,6 +164,7 @@ public partial class DashboardWindow
             }
             weather = new Forecast(selected.Name, current.GetProperty("temperature_2m").GetDouble(),
                 current.GetProperty("weather_code").GetInt32(), days);
+            weatherUpdated = DateTimeOffset.UtcNow;
             if (city != selected)
             {
                 city = selected;
@@ -161,16 +179,60 @@ public partial class DashboardWindow
         }
     }
 
-    private async void LoadSavedWeather()
+    private void LoadSavedWeather() => city = ReadJson<City>("weather-city.json");
+
+    private async Task RefreshSavedWeatherAsync()
     {
-        city = ReadJson<City>("weather-city.json");
-        if (city == null)
+        if (city == null || loadingWeather || DateTimeOffset.UtcNow - weatherUpdated < TimeSpan.FromMinutes(20))
             return;
         loadingWeather = true;
+        weatherUpdated = DateTimeOffset.UtcNow;
         await SetCityAsync(city);
         loadingWeather = false;
-        if (!closed && (currentPage is DashboardPage.Weather or DashboardPage.Home))
+        if (!closed && IsVisible && currentPage is DashboardPage.Weather or DashboardPage.Home)
             ShowPage(currentPage);
+    }
+
+    private async Task LocateWeatherAsync()
+    {
+        if (loadingWeather)
+            return;
+        loadingWeather = true;
+        weatherError = null;
+        weatherLocationDenied = false;
+        cityMatches = [];
+        ShowPage(DashboardPage.Weather);
+        try
+        {
+            modalOpen = true;
+            var access = await Geolocator.RequestAccessAsync().AsTask(lifetime.Token);
+            modalOpen = false;
+            if (access != GeolocationAccessStatus.Allowed)
+            {
+                weatherLocationDenied = true;
+                weatherError = "Location is unavailable. Enable location for desktop apps or search for a city.";
+                return;
+            }
+            var locator = new Geolocator { DesiredAccuracyInMeters = 5000 };
+            var position = await locator.GetGeopositionAsync(TimeSpan.FromMinutes(15), TimeSpan.FromSeconds(10)).AsTask(lifetime.Token);
+            var coordinates = position.Coordinate.Point.Position;
+            await SetCityAsync(new City("Current location", null, null,
+                Math.Round(coordinates.Latitude, 2), Math.Round(coordinates.Longitude, 2)));
+        }
+        catch (OperationCanceledException) when (closed) { }
+        catch (Exception error) when (error is UnauthorizedAccessException or System.Runtime.InteropServices.COMException
+            or TimeoutException or OperationCanceledException)
+        {
+            weatherLocationDenied = error is UnauthorizedAccessException;
+            weatherError = "Windows could not locate this device. Search for a city to get the forecast.";
+        }
+        finally
+        {
+            modalOpen = false;
+            loadingWeather = false;
+            if (!closed && currentPage == DashboardPage.Weather && IsVisible)
+                ShowPage(DashboardPage.Weather);
+        }
     }
 
     private static City CityFromJson(JsonElement result) => new(result.GetProperty("name").GetString()!,
