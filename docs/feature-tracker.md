@@ -68,3 +68,14 @@
 - Scope: Push local main commits to GitHub.
 - Acceptance criteria: GitHub main matches local main and new commits use the configured owner identity.
 - Outcome: Pushed the five local milestones and confirmed that GitHub main matched the local tip. Verified owner attribution and commit messages.
+
+## Match the reference dock and flyout
+
+- Status: Built and verified on one Windows display.
+- Scope: Match the screenshots with a compact dark dock, grouped status icons, and a centered quick-controls flyout.
+- Acceptance criteria: Verify compact geometry and flyout placement on Windows and preserve direct Studio access.
+
+- Follow-up: User rejected the visual quality. Prioritize the screenshot proportions and replace the list flyout with a custom tile surface.
+- Outcome: Reworked the live dock into a compact dark bar, grouped status icons, and a centered six-tile quick-controls surface with volume and battery. Kept the Studio gear outside the scrolling row.
+- Verification: Published self-contained x64, launched the updated build, measured a 38 px dock, checked flyout centering and Studio access, and visually inspected the captured output.
+- Remaining differences: The reference shows native Quick Settings with a media card, brightness slider, and live system toggles. The custom popup uses Settings links for its tiles, with its own output-volume slider. App icons depend on running and pinned applications.

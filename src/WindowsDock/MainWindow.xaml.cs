@@ -92,6 +92,8 @@ public partial class MainWindow : Window
 
     private void RetryRender(object sender, RoutedEventArgs e) => Dispatcher.BeginInvoke(RequestRender);
 
+    private int RenderedIconSize => Math.Max(14, settings.IconSize - 12);
+
     private void Render()
     {
         refreshPending = false;
@@ -100,19 +102,18 @@ public partial class MainWindow : Window
         Items.Children.Clear();
         clock = null;
         widgetReadouts.Clear();
-        Surface.CornerRadius = new CornerRadius(settings.Radius);
+        Surface.CornerRadius = new CornerRadius(settings.Radius * 0.55);
         Surface.Background = new LinearGradientBrush(
-            Color.FromArgb((byte)(settings.Opacity * 255 / 100), settings.Tint == "Ocean" ? (byte)32 : settings.Tint == "Violet" ? (byte)61 : (byte)42, 47, 62),
-            Color.FromArgb((byte)(settings.Opacity * 255 / 100), 20, 26, 37), 90);
+            Color.FromArgb((byte)(settings.Opacity * 255 / 100), settings.Tint == "Ocean" ? (byte)16 : settings.Tint == "Violet" ? (byte)43 : (byte)24, 29, 29),
+            Color.FromArgb((byte)(settings.Opacity * 255 / 100), 13, 17, 18), 90);
 
-        AddButton("Windows Settings", "⚙", () => Launch("ms-settings:"));
-        AddButton("Search files", "⌕", () => Launch("search-ms:"));
+        AddButton("Start", StartMark(), OpenStart);
+        AddButton("Search files", Glyph(0xE721), () => Launch("search-ms:"));
         RenderLayout("Before pins");
         foreach (var pin in settings.Pins)
         {
             AddApplication(pin.Name, pin.Target,
                 windows.Where(window => string.Equals(window.Path, pin.Target, StringComparison.OrdinalIgnoreCase)).ToArray(), pin);
-            AddDivider();
         }
         RenderLayout("After pins");
         foreach (var group in windows.Where(window => !settings.Pins.Any(pin =>
@@ -129,20 +130,18 @@ public partial class MainWindow : Window
         RenderWidgets();
         if (settings.SystemLinks)
         {
-            AddButton("Network settings", "◉", () => Launch("ms-settings:network"));
-            AddButton("Sound settings", "♪", () => Launch("ms-settings:sound"));
-            AddButton("Power and battery", "▰", () => Launch("ms-settings:powersleep"));
+            AddStatusGroup();
         }
         RenderLayout("Before clock");
         if (settings.Clock)
         {
             AddDivider();
-            clock = new TextBlock { TextAlignment = TextAlignment.Center };
+            clock = new TextBlock { TextAlignment = TextAlignment.Center, FontSize = 10 };
             AddButton("Date and time settings", clock, () => Launch("ms-settings:dateandtime"));
             UpdateClock();
         }
         DockActions.Children.Clear();
-        var options = AddButton("Dock settings", "Settings", ShowStudio, DockActions);
+        var options = AddButton("Dock settings", Glyph(0xE713), ShowStudio, DockActions);
         var menu = new ContextMenu();
         AddMenuItem(menu, "Exit Windows Dock", Close);
         AttachMenu(options, menu);
@@ -152,13 +151,16 @@ public partial class MainWindow : Window
     private void UpdateClock()
     {
         if (clock != null)
-            clock.Text = DateTime.Now.ToString(settings.Use24Hour ? "HH:mm\nddd, MMM d" : "t\nddd, MMM d");
+        {
+            var now = DateTime.Now;
+            clock.Text = now.ToString(settings.Use24Hour ? "HH:mm" : "t") + "\n" + now.ToString("M/d/yyyy");
+        }
         UpdateWidgets();
     }
 
     private void AddDivider() => Items.Children.Add(new Border
     {
-        Width = 1, Height = settings.IconSize, Margin = new Thickness(4, 0, 4, 0),
+        Width = 1, Height = RenderedIconSize, Margin = new Thickness(4, 0, 4, 0),
         Background = new SolidColorBrush(Color.FromArgb(88, 220, 230, 249))
     });
 
@@ -166,11 +168,11 @@ public partial class MainWindow : Window
     {
         var button = new Button
         {
-            Content = content, ToolTip = label, MinWidth = settings.IconSize + 12,
-            Height = settings.IconSize + 16, Padding = new Thickness(6, 2, 6, 2),
+            Content = content, ToolTip = label, MinWidth = RenderedIconSize + 8,
+            Height = RenderedIconSize + 12, Padding = new Thickness(4, 1, 4, 1),
             Margin = new Thickness(settings.Spacing, 0, settings.Spacing, 0), Background = Brushes.Transparent,
             BorderBrush = Brushes.Transparent, Foreground = Brushes.White,
-            FontSize = content is string ? 22 : 12, Cursor = Cursors.Hand
+            FontSize = content is string ? 16 : 12, Cursor = Cursors.Hand
         };
         AutomationProperties.SetName(button, label);
         var template = new ControlTemplate(typeof(Button));
@@ -202,13 +204,13 @@ public partial class MainWindow : Window
         var tile = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
         var icon = GetIcon(target);
         tile.Children.Add(icon is null
-            ? new TextBlock { Text = name[..1].ToUpperInvariant(), FontSize = settings.IconSize * 0.65,
-                Height = settings.IconSize, TextAlignment = TextAlignment.Center }
-            : new Image { Source = icon, Width = settings.IconSize, Height = settings.IconSize });
+            ? new TextBlock { Text = name[..1].ToUpperInvariant(), FontSize = RenderedIconSize * 0.72,
+                Height = RenderedIconSize, TextAlignment = TextAlignment.Center }
+            : new Image { Source = icon, Width = RenderedIconSize, Height = RenderedIconSize });
         tile.Children.Add(new System.Windows.Shapes.Ellipse
         {
-            Height = 4, Width = group.Count > 1 ? 9 : 4, Margin = new Thickness(0, 3, 0, 0),
-            Fill = group.Count > 0 ? Brushes.LightSkyBlue : Brushes.Transparent
+            Height = 2, Width = group.Count > 1 ? 8 : 4, Margin = new Thickness(0, 2, 0, 0),
+            Fill = group.Count > 0 ? Brushes.White : Brushes.Transparent
         });
         var menu = new ContextMenu { Placement = System.Windows.Controls.Primitives.PlacementMode.Top };
         var button = AddButton(name, tile, () =>

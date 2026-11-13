@@ -108,7 +108,7 @@ public partial class MainWindow
             Hide();
     }
 
-    private bool HasOpenMenu() => Items.Children.OfType<Button>().Concat(DockActions.Children.OfType<Button>())
+    private bool HasOpenMenu() => quickControls?.IsOpen == true || Items.Children.OfType<Button>().Concat(DockActions.Children.OfType<Button>())
         .Any(button => button.ContextMenu?.IsOpen == true);
 
     private void ConfigureCenteredMenu(ContextMenu menu)
@@ -127,22 +127,6 @@ public partial class MainWindow
         menu.Foreground = Brushes.White;
         menu.Padding = new Thickness(8);
         menu.Opened += (_, _) => lastInteraction = Environment.TickCount64;
-    }
-
-    private void AddOverflow()
-    {
-        var menu = new ContextMenu { MinWidth = 240 };
-        var heading = new MenuItem { Header = "QUICK CONTROLS", IsEnabled = false };
-        menu.Items.Add(heading);
-        AddMenuItem(menu, "Wi-Fi and network", () => Launch("ms-settings:network"));
-        AddMenuItem(menu, "Bluetooth and devices", () => Launch("ms-settings:bluetooth"));
-        AddMenuItem(menu, "Sound and output devices", () => Launch("ms-settings:sound"));
-        AddMenuItem(menu, "Power and battery", () => Launch("ms-settings:powersleep"));
-        AddMenuItem(menu, "Notifications", () => Launch("ms-settings:notifications"));
-        menu.Items.Add(new Separator());
-        AddMenuItem(menu, "Customization Studio", ShowStudio);
-        var button = AddButton("Dock overflow", "⌃", () => menu.IsOpen = !menu.IsOpen);
-        AttachMenu(button, menu);
     }
 
     private void RenderWidgets()
