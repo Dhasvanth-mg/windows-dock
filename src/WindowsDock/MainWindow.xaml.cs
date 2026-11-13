@@ -92,7 +92,7 @@ public partial class MainWindow : Window
 
     private void RetryRender(object sender, RoutedEventArgs e) => Dispatcher.BeginInvoke(RequestRender);
 
-    private int RenderedIconSize => Math.Max(14, settings.IconSize - 12);
+    private int RenderedIconSize => settings.IconSize;
 
     private void Render()
     {
@@ -102,10 +102,25 @@ public partial class MainWindow : Window
         Items.Children.Clear();
         clock = null;
         widgetReadouts.Clear();
-        Surface.CornerRadius = new CornerRadius(settings.Radius * 0.55);
-        Surface.Background = new LinearGradientBrush(
-            Color.FromArgb((byte)(settings.Opacity * 255 / 100), settings.Tint == "Ocean" ? (byte)16 : settings.Tint == "Violet" ? (byte)43 : (byte)24, 29, 29),
-            Color.FromArgb((byte)(settings.Opacity * 255 / 100), 13, 17, 18), 90);
+        var alpha = (byte)(settings.Opacity * 255 / 100);
+        var tint = settings.Tint switch
+        {
+            "Ocean" => Color.FromArgb(alpha, 63, 100, 120),
+            "Violet" => Color.FromArgb(alpha, 105, 81, 121),
+            _ => Color.FromArgb(alpha, 76, 83, 98)
+        };
+        Surface.CornerRadius = new CornerRadius(settings.Radius);
+        Surface.Background = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(0, 1),
+            GradientStops =
+            [
+                new GradientStop(Color.FromArgb(alpha, 113, 120, 135), 0),
+                new GradientStop(tint, 0.14),
+                new GradientStop(Color.FromArgb(alpha, 39, 44, 56), 1)
+            ]
+        };
 
         AddButton("Start", StartMark(), OpenStart);
         AddButton("Search files", Glyph(0xE721), () => Launch("search-ms:"));
@@ -125,7 +140,6 @@ public partial class MainWindow : Window
             AddApplication(first.Title, first.Path, group.ToArray(), null);
         }
         AddDivider();
-        AddOverflow();
         RenderLayout("Before widgets");
         RenderWidgets();
         if (settings.SystemLinks)
@@ -136,8 +150,8 @@ public partial class MainWindow : Window
         if (settings.Clock)
         {
             AddDivider();
-            clock = new TextBlock { TextAlignment = TextAlignment.Center, FontSize = 10 };
-            AddButton("Date and time settings", clock, () => Launch("ms-settings:dateandtime"));
+            clock = new TextBlock { TextAlignment = TextAlignment.Center, FontSize = 11, LineHeight = 14 };
+            AddButton("Date and time settings", clock, () => OpenShellFlyout(0x4E));
             UpdateClock();
         }
         DockActions.Children.Clear();
@@ -153,7 +167,10 @@ public partial class MainWindow : Window
         if (clock != null)
         {
             var now = DateTime.Now;
-            clock.Text = now.ToString(settings.Use24Hour ? "HH:mm" : "t") + "\n" + now.ToString("M/d/yyyy");
+            clock.Inlines.Clear();
+            clock.Inlines.Add(new System.Windows.Documents.Run(now.ToString(settings.Use24Hour ? "HH:mm" : "t")) { FontWeight = FontWeights.SemiBold });
+            clock.Inlines.Add(new System.Windows.Documents.LineBreak());
+            clock.Inlines.Add(new System.Windows.Documents.Run(now.ToString("ddd, MMM d")) { Foreground = Brushes.Gainsboro });
         }
         UpdateWidgets();
     }
@@ -169,11 +186,12 @@ public partial class MainWindow : Window
         var button = new Button
         {
             Content = content, ToolTip = label, MinWidth = RenderedIconSize + 8,
-            Height = RenderedIconSize + 12, Padding = new Thickness(4, 1, 4, 1),
+            Height = RenderedIconSize + 14, Padding = new Thickness(4, 1, 4, 1),
             Margin = new Thickness(settings.Spacing, 0, settings.Spacing, 0), Background = Brushes.Transparent,
             BorderBrush = Brushes.Transparent, Foreground = Brushes.White,
             FontSize = content is string ? 16 : 12, Cursor = Cursors.Hand
         };
+        ToolTipService.SetInitialShowDelay(button, 300);
         AutomationProperties.SetName(button, label);
         var template = new ControlTemplate(typeof(Button));
         var background = new FrameworkElementFactory(typeof(Border));

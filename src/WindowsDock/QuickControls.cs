@@ -23,7 +23,7 @@ public partial class MainWindow
         VerticalAlignment = VerticalAlignment.Center
     };
 
-    private void AddOverflow() => AddButton("Dock overflow", Glyph(0xE70E), ToggleQuickControls);
+
 
     private void AddStatusGroup()
     {
@@ -41,7 +41,10 @@ public partial class MainWindow
             Padding = new Thickness(2, 4, 2, 4),
             Child = icons
         };
-        AddButton("Quick controls", group, ToggleQuickControls);
+        var status = AddButton("Windows Quick Settings", group, () => OpenShellFlyout(0x41));
+        var menu = new ContextMenu();
+        AddMenuItem(menu, "Dock quick controls", ToggleQuickControls);
+        AttachMenu(status, menu);
     }
 
     private void ToggleQuickControls()
@@ -172,6 +175,15 @@ public partial class MainWindow
         for (var pane = 0; pane < 4; pane++)
             mark.Children.Add(new Border { Background = blue, Margin = new Thickness(0.45) });
         return mark;
+    }
+
+    private static void OpenShellFlyout(byte key)
+    {
+        const byte windowsKey = 0x5B;
+        keybd_event(windowsKey, 0, 0, 0);
+        keybd_event(key, 0, 0, 0);
+        keybd_event(key, 0, 2, 0);
+        keybd_event(windowsKey, 0, 2, 0);
     }
 
     private static void OpenStart()
