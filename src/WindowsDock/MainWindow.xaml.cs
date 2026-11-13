@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         PreviewMouseDown += (_, _) => priorForeground = ShellIntegration.GetForegroundWindow();
         clockTimer.Tick += (_, _) => UpdateClock();
         clockTimer.Start();
+        InitializeDesktopControls();
         Closed += (_, _) =>
         {
             clockTimer.Stop();
@@ -98,9 +99,10 @@ public partial class MainWindow : Window
         LostKeyboardFocus -= RetryRender;
         Items.Children.Clear();
         clock = null;
+        widgetReadouts.Clear();
         Surface.CornerRadius = new CornerRadius(settings.Radius);
         Surface.Background = new LinearGradientBrush(
-            Color.FromArgb((byte)(settings.Opacity * 255 / 100), 53, 65, 84),
+            Color.FromArgb((byte)(settings.Opacity * 255 / 100), settings.Tint == "Ocean" ? (byte)32 : settings.Tint == "Violet" ? (byte)61 : (byte)42, 47, 62),
             Color.FromArgb((byte)(settings.Opacity * 255 / 100), 20, 26, 37), 90);
 
         AddButton("Windows Settings", "⚙", () => Launch("ms-settings:"));
@@ -119,9 +121,15 @@ public partial class MainWindow : Window
             var first = group.First();
             AddApplication(first.Title, first.Path, group.ToArray(), null);
         }
-        AddButton("Network settings", "◉", () => Launch("ms-settings:network"));
-        AddButton("Sound settings", "♪", () => Launch("ms-settings:sound"));
-        AddButton("Power and battery", "▰", () => Launch("ms-settings:powersleep"));
+        AddDivider();
+        AddOverflow();
+        RenderWidgets();
+        if (settings.SystemLinks)
+        {
+            AddButton("Network settings", "◉", () => Launch("ms-settings:network"));
+            AddButton("Sound settings", "♪", () => Launch("ms-settings:sound"));
+            AddButton("Power and battery", "▰", () => Launch("ms-settings:powersleep"));
+        }
         if (settings.Clock)
         {
             AddDivider();
@@ -141,7 +149,8 @@ public partial class MainWindow : Window
     private void UpdateClock()
     {
         if (clock != null)
-            clock.Text = DateTime.Now.ToString("t\nddd, MMM d");
+            clock.Text = DateTime.Now.ToString(settings.Use24Hour ? "HH:mm\nddd, MMM d" : "t\nddd, MMM d");
+        UpdateWidgets();
     }
 
     private void AddDivider() => Items.Children.Add(new Border
@@ -156,7 +165,7 @@ public partial class MainWindow : Window
         {
             Content = content, ToolTip = label, MinWidth = settings.IconSize + 12,
             Height = settings.IconSize + 16, Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(2, 0, 2, 0), Background = Brushes.Transparent,
+            Margin = new Thickness(settings.Spacing, 0, settings.Spacing, 0), Background = Brushes.Transparent,
             BorderBrush = Brushes.Transparent, Foreground = Brushes.White,
             FontSize = content is string ? 22 : 12, Cursor = Cursors.Hand
         };
@@ -225,6 +234,7 @@ public partial class MainWindow : Window
 
     private void AttachMenu(Button button, ContextMenu menu)
     {
+        ConfigureCenteredMenu(menu);
         button.ContextMenu = menu;
         menu.Closed += (_, _) =>
         {
@@ -303,65 +313,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        var panel = new StackPanel { Margin = new Thickness(24) };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Centered Glass Dock", FontSize = 24, FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(0, 0, 0, 12)
-        });
-        if (safeMode)
-            panel.Children.Add(new TextBlock { Text = "Safe Mode · Changes apply for this session." });
-
-        AddSlider("Icon size", 20, 64, settings.IconSize, value => settings with { IconSize = value });
-        AddSlider("Background opacity", 25, 100, settings.Opacity, value => settings with { Opacity = value });
-        AddSlider("Corner radius", 0, 36, settings.Radius, value => settings with { Radius = value });
-        AddSlider("Elevation", 0, 80, settings.Elevation, value => settings with { Elevation = value });
-
-        var showClock = new CheckBox { Content = "Show clock and date", IsChecked = settings.Clock, Margin = new Thickness(0, 8, 0, 8) };
-        showClock.Click += (_, _) => Apply(settings with { Clock = showClock.IsChecked == true });
-        panel.Children.Add(showClock);
-        var addPin = new Button { Content = "Pin an application…", Padding = new Thickness(9, 5, 9, 5), HorizontalAlignment = HorizontalAlignment.Left };
-        addPin.Click += (_, _) =>
-        {
-            if (settings.Pins.Length >= 24)
-            {
-                MessageBox.Show("Unpin an application before adding another.", "Windows Dock");
-                return;
-            }
-            var picker = new OpenFileDialog { Filter = "Applications and shortcuts|*.exe;*.lnk", CheckFileExists = true };
-            if (picker.ShowDialog(studio) == true && !settings.Pins.Any(pin =>
-                string.Equals(pin.Target, picker.FileName, StringComparison.OrdinalIgnoreCase)))
-                Apply(settings with { Pins = [.. settings.Pins, new Pin(Path.GetFileNameWithoutExtension(picker.FileName), picker.FileName)] });
-        };
-        panel.Children.Add(addPin);
-
-        studio = new Window
-        {
-            Title = "Windows Dock Customization Studio", Content = panel, Width = 435,
-            SizeToContent = SizeToContent.Height, ResizeMode = ResizeMode.NoResize,
-            WindowStartupLocation = WindowStartupLocation.CenterScreen
-        };
+        studio = CreateStudio();
         studio.Closed += (_, _) => studio = null;
         studio.Show();
-
-        void AddSlider(string name, int min, int max, int current, Func<int, DockSettings> change)
-        {
-            var label = new TextBlock { Text = $"{name} · {current}" };
-            var slider = new Slider
-            {
-                Minimum = min, Maximum = max, Value = current, IsSnapToTickEnabled = true,
-                TickFrequency = 1, Margin = new Thickness(0, 2, 0, 10)
-            };
-            AutomationProperties.SetName(slider, name);
-            slider.ValueChanged += (_, e) =>
-            {
-                var value = (int)e.NewValue;
-                label.Text = $"{name} · {value}";
-                Apply(change(value));
-            };
-            panel.Children.Add(label);
-            panel.Children.Add(slider);
-        }
     }
 
     [DllImport("user32")]

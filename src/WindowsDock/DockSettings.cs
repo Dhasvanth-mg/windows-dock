@@ -12,6 +12,14 @@ internal sealed record DockSettings
     public int Radius { get; init; } = 21;
     public int Elevation { get; init; } = 10;
     public bool Clock { get; init; } = true;
+    public bool AutoHide { get; init; }
+    public int HideDelay { get; init; } = 700;
+    public int EdgeDepth { get; init; } = 4;
+    public int Spacing { get; init; } = 2;
+    public string Tint { get; init; } = "Graphite";
+    public bool Use24Hour { get; init; }
+    public bool SystemLinks { get; init; } = true;
+    public string[] Widgets { get; init; } = [];
     public Pin[] Pins { get; init; } = [new("File Explorer", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"))];
 
     private static string FilePath => Path.Combine(
@@ -27,7 +35,8 @@ internal sealed record DockSettings
             {
                 var config = JsonSerializer.Deserialize<DockSettings>(File.ReadAllText(file));
                 if (config is { Version: 1, IconSize: >= 20 and <= 64, Opacity: >= 25 and <= 100,
-                    Radius: >= 0 and <= 36, Elevation: >= 0 and <= 80, Pins.Length: <= 24 } &&
+                    Radius: >= 0 and <= 36, Elevation: >= 0 and <= 80, Pins.Length: <= 24, HideDelay: >= 200 and <= 3000, EdgeDepth: >= 2 and <= 24,
+                    Spacing: >= 0 and <= 10, Tint: "Graphite" or "Ocean" or "Violet", Widgets.Length: <= 4 } &&
                     config.Pins.All(pin => pin is not null && !string.IsNullOrWhiteSpace(pin.Name) &&
                         !string.IsNullOrWhiteSpace(pin.Target) && Path.IsPathFullyQualified(pin.Target)))
                     return config;
