@@ -54,3 +54,17 @@
 - Acceptance criteria: Open Studio directly from a labeled dock button.
 
 - Outcome: Settings is a labeled button outside the scrollable app row. UI Automation verified that it was visible and opened Studio in the published executable. The screenshot shows the Windows tray overflow.
+
+## Restart Windows Dock
+
+- Status: Verified.
+- Scope: Restart the latest published Windows x64 build.
+- Acceptance criteria: Verify that the published process stays running and exposes its Settings button.
+- Outcome: Started the published executable and verified its dock window and Settings button through Windows UI Automation.
+
+## Publish local milestones
+
+- Status: Verified.
+- Scope: Push local main commits to GitHub.
+- Acceptance criteria: GitHub main matches local main and new commits use the configured owner identity.
+- Outcome: Pushed the five local milestones and confirmed that GitHub main matched the local tip. Verified owner attribution and commit messages.
