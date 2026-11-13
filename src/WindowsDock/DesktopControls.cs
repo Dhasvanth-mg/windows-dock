@@ -13,7 +13,7 @@ public partial class MainWindow
 {
     private const int RevealHotkey = 1;
     private readonly Dictionary<string, TextBlock> widgetReadouts = new();
-    private static readonly string[] AvailableWidgets = ["Battery", "Network", "Memory", "Date"];
+    private static readonly string[] AvailableWidgets = ["Battery", "Network", "Memory", "Date", "Media", "Assistant"];
     private long lastInteraction;
     private bool hotkeyRegistered;
 
@@ -101,12 +101,15 @@ public partial class MainWindow
         if (!IsVisible)
             return;
 
-        if (IsMouseOver || IsKeyboardFocusWithin || studio?.IsActive == true ||
-            Items.Children.OfType<Button>().Any(button => button.ContextMenu?.IsOpen == true))
+        if (IsMouseOver || IsKeyboardFocusWithin || studio?.IsActive == true || assistant?.IsVisible == true ||
+            HasOpenMenu())
             lastInteraction = Environment.TickCount64;
         else if (Environment.TickCount64 - lastInteraction >= settings.HideDelay)
             Hide();
     }
+
+    private bool HasOpenMenu() => Items.Children.OfType<Button>().Concat(DockActions.Children.OfType<Button>())
+        .Any(button => button.ContextMenu?.IsOpen == true);
 
     private void ConfigureCenteredMenu(ContextMenu menu)
     {
@@ -146,6 +149,16 @@ public partial class MainWindow
     {
         foreach (var name in settings.Widgets.Distinct().Intersect(AvailableWidgets))
         {
+            if (name == "Media")
+            {
+                AddMediaWidget();
+                continue;
+            }
+            if (name == "Assistant")
+            {
+                AddAssistantWidget();
+                continue;
+            }
             var readout = new TextBlock { TextAlignment = TextAlignment.Center };
             widgetReadouts[name] = readout;
             AddButton(name + " widget", readout, () =>

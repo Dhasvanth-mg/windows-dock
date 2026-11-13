@@ -40,6 +40,7 @@ public partial class MainWindow
         AddNavigation("Behavior", Behavior);
         AddNavigation("Widgets", Widgets);
         AddNavigation("Applications", Applications);
+        AddNavigation("Layout", () => EditLayout(panel));
         Appearance();
 
         return new Window

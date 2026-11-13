@@ -76,7 +76,7 @@ public partial class MainWindow : Window
 
     private void RequestRender()
     {
-        if (ContextMenuService.GetContextMenu(this)?.IsOpen == true || Items.Children.OfType<Button>().Any(button => button.ContextMenu?.IsOpen == true) ||
+        if (ContextMenuService.GetContextMenu(this)?.IsOpen == true || HasOpenMenu() ||
             Items.IsMouseOver || Items.IsKeyboardFocusWithin)
         {
             if (!refreshPending)
@@ -107,12 +107,14 @@ public partial class MainWindow : Window
 
         AddButton("Windows Settings", "⚙", () => Launch("ms-settings:"));
         AddButton("Search files", "⌕", () => Launch("search-ms:"));
+        RenderLayout("Before pins");
         foreach (var pin in settings.Pins)
         {
             AddApplication(pin.Name, pin.Target,
                 windows.Where(window => string.Equals(window.Path, pin.Target, StringComparison.OrdinalIgnoreCase)).ToArray(), pin);
             AddDivider();
         }
+        RenderLayout("After pins");
         foreach (var group in windows.Where(window => !settings.Pins.Any(pin =>
                      string.Equals(pin.Target, window.Path, StringComparison.OrdinalIgnoreCase)))
                      .GroupBy(window => string.IsNullOrEmpty(window.Path) ? window.Handle.ToString() : window.Path,
@@ -123,6 +125,7 @@ public partial class MainWindow : Window
         }
         AddDivider();
         AddOverflow();
+        RenderLayout("Before widgets");
         RenderWidgets();
         if (settings.SystemLinks)
         {
@@ -130,6 +133,7 @@ public partial class MainWindow : Window
             AddButton("Sound settings", "♪", () => Launch("ms-settings:sound"));
             AddButton("Power and battery", "▰", () => Launch("ms-settings:powersleep"));
         }
+        RenderLayout("Before clock");
         if (settings.Clock)
         {
             AddDivider();
@@ -137,12 +141,11 @@ public partial class MainWindow : Window
             AddButton("Date and time settings", clock, () => Launch("ms-settings:dateandtime"));
             UpdateClock();
         }
-        var options = AddButton("Dock options", "⋯", () => { });
-        var menu = new ContextMenu { PlacementTarget = options, Placement = System.Windows.Controls.Primitives.PlacementMode.Top };
-        AddMenuItem(menu, "Customization Studio", ShowStudio);
+        DockActions.Children.Clear();
+        var options = AddButton("Dock settings", "Settings", ShowStudio, DockActions);
+        var menu = new ContextMenu();
         AddMenuItem(menu, "Exit Windows Dock", Close);
         AttachMenu(options, menu);
-        options.Click += (_, _) => menu.IsOpen = true;
         PositionDock();
     }
 
@@ -159,7 +162,7 @@ public partial class MainWindow : Window
         Background = new SolidColorBrush(Color.FromArgb(88, 220, 230, 249))
     });
 
-    private Button AddButton(string label, object content, Action action)
+    private Button AddButton(string label, object content, Action action, Panel? destination = null)
     {
         var button = new Button
         {
@@ -190,7 +193,7 @@ public partial class MainWindow : Window
         }
         button.Template = template;
         button.Click += (_, _) => action();
-        Items.Children.Add(button);
+        (destination ?? Items).Children.Add(button);
         return button;
     }
 

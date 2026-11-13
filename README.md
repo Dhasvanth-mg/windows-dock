@@ -2,7 +2,7 @@
 
 Windows Dock is a standalone Windows 11 companion dock. It displays pinned and running applications on a centered translucent surface above the current monitor work area's bottom edge.
 
-Open the three-dot menu or click the Windows Dock icon in the notification area to access Customization Studio. The dock arrow opens centered quick controls. Studio includes Appearance, Behavior, Widgets, and Applications pages. Enable auto-hide in Behavior, then reveal from the bottom edge or with Ctrl+Alt+D when available. The tray icon also offers Reveal dock. Windows Settings links open the corresponding system pages. Explorer handles its own tray and flyouts.
+Click Settings at the right end of the dock to open Customization Studio. Right-click Settings to exit. The notification-area icon also offers Studio access. The dock arrow opens centered quick controls. Studio includes Appearance, Behavior, Widgets, Applications, and Layout pages. Layout adds dividers and shortcuts at section boundaries. Enable Media in Widgets for playback buttons and the default-output mixer. Enable Assistant for optional Gemini or Groq chat. Enter a provider model ID and API key in the Assistant window. The key and conversation live only in that window, and Send shares the conversation with the selected provider. Enable auto-hide in Behavior, then reveal from the bottom edge or with Ctrl+Alt+D when available. The tray icon also offers Reveal dock. Windows Settings links open the corresponding system pages. Explorer handles its own tray and flyouts.
 
 ## Build and run
 

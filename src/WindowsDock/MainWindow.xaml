@@ -5,8 +5,11 @@
         ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" ShowActivated="False" Topmost="True">
     <Border x:Name="Surface" Padding="9,7" BorderThickness="1" BorderBrush="#65BAC6D8">
+        <DockPanel>
+            <StackPanel x:Name="DockActions" DockPanel.Dock="Right"/>
         <ScrollViewer x:Name="Viewport" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
             <StackPanel x:Name="Items" Orientation="Horizontal"/>
         </ScrollViewer>
+        </DockPanel>
     </Border>
 </Window>
