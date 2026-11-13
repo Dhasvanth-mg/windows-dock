@@ -108,19 +108,21 @@
 
 ### Video and DG-Dock reference
 
-- Status: In progress.
+- Status: The first clip is reviewed. The native dock and core dashboard pages are implemented.
 - Scope: Inspect the saved inspiration video and DG-Dock source, then reproduce the demonstrated appearance and behavior using the applicable implementation route.
 - Acceptance criteria: Verify the video reference, account for any differences between it and the source, and test the resulting UI on Windows.
 
 ### Hitodama implementation reference
 
-- Status: In progress.
+- Status: In-place taskbar styling and the dashboard are working on the tested build.
 - Scope: Inspect Hitodama's taskbar and the supplied demo, then reproduce their visible design and interactions with independent project code.
 - Acceptance criteria: Native Explorer taskbar styling and a same-edge dashboard, with evidence that the two work together on Windows.
 - Research: The installed app has a taskbar appearance component running inside Explorer. The public site focuses on the assistant. DG-Dock was reviewed as a separate reference for interactions and its code is excluded from this implementation.
 
 ### Additional reference clip
 
-- Status: In progress.
+- Status: Reviewed and applied to the current dashboard.
 - Scope: Inspect the newly attached MOV and incorporate compatible visual or interaction details into the native dock and dashboard.
 - Acceptance criteria: Record the relevant details and verify the resulting implementation on Windows.
+- Outcome: The second clip showed Docktor's widgets, lyrics, focus timer, and live app previews. Implemented the compact media/mixer and focus drawers, with Explorer retaining native app previews. Verified the live system statistics, media slider and audio-session list, calendar page, and timer countdown on Windows.
+- Remaining work: The reference clips also show synchronized lyrics, full power/sleep scheduling, independent inline widgets, and a richer wallpaper carousel. These are outstanding. The dashboard currently uses Windows settings links for radio/display controls, a local wallpaper picker, and manual city search for weather.

@@ -1,4 +1,14 @@
-# Architecture
+# Native dock architecture
+
+The native dock uses a small x64 controller and a C++/WinRT XAML diagnostics site. The controller connects to the Explorer shell on the tested build. The site checks for the taskbar and tray frames under the expected parent and changes their layout and paint properties on Explorer's XAML dispatcher. It inserts one non-interactive glass background and one dashboard button. The native frames and their buttons keep their original input handlers and flyout anchors. No other shell surfaces are styled.
+
+The controller and dashboard use session-local events. The dashboard only opens when requested and owns its media, calendar, weather, file and settings UI outside Explorer. A named stop event or controller process exit triggers restoration of the captured XAML values and column definitions. The diagnostic DLL can remain loaded until Explorer exits. No taskbar registry values or startup settings are required by the project.
+
+Windows exposes XAML Diagnostics as a developer API. Explorer's XAML tree is an implementation detail, so this version is limited to build 26200 and guarded by runtime layout checks. Secondary taskbars, vertical taskbars, Explorer restarts, and future cumulative updates need independent verification.
+
+References [Microsoft XAML Diagnostics](https://learn.microsoft.com/windows/win32/api/_xaml_diagnostics/), [DG-Dock](https://github.com/Dippy1234/DG-Dock), and [Docktor](https://docktorapp.com/). The supplied clips and installed Hitodama taskbar were visual and behavioral references.
+
+# Legacy companion architecture
 
 The companion dock uses WPF on .NET 10 for transparent desktop rendering, keyboard-accessible controls, and direct Win32 interop. WinUI 3 is a candidate for a separate Studio process after the configuration and IPC contracts stabilize. DirectComposition can be evaluated if rendering measurements warrant it.
 

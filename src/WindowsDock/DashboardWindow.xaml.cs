@@ -1,0 +1,278 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Threading;
+using Forms = System.Windows.Forms;
+
+namespace WindowsDock;
+
+public partial class DashboardWindow : Window
+{
+    private readonly Dictionary<DashboardPage, Button> tabs = new();
+    private readonly DispatcherTimer ticker = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly int controllerPid;
+    private readonly SolidColorBrush subdued = Brush("#B1B3BC");
+    private readonly SolidColorBrush muted = Brush("#898D99");
+    private readonly SolidColorBrush accent = Brush("#6BB1FF");
+    private readonly SolidColorBrush green = Brush("#58DA9B");
+    private readonly SolidColorBrush purple = Brush("#A593FF");
+    private readonly SolidColorBrush amber = Brush("#FFBA57");
+    private readonly TranslateTransform revealOffset = new();
+    private DashboardPage currentPage;
+    private Action? updatePage;
+    private bool modalOpen;
+    private bool closed;
+    private bool positioning;
+
+    public DashboardWindow() : this(0) { }
+
+    internal DashboardWindow(int controllerPid) : this(controllerPid, null) { }
+
+    internal DashboardWindow(int controllerPid, string? initialPage)
+    {
+        InitializeComponent();
+        this.controllerPid = controllerPid;
+        ShowInTaskbar = controllerPid == 0;
+
+        AddTab(PrimaryTabs, DashboardPage.Home, 0xE80F, "Overview");
+        AddTab(PrimaryTabs, DashboardPage.Media, 0xE8D6, "Music and mixer");
+        AddTab(PrimaryTabs, DashboardPage.Controls, 0xE9E9, "Quick controls");
+        AddTab(PrimaryTabs, DashboardPage.Calendar, 0xE787, "Calendar and focus");
+        AddTab(PrimaryTabs, DashboardPage.Weather, 0xE753, "Weather");
+        AddTab(SecondaryTabs, DashboardPage.Stats, 0xE9D9, "System stats");
+        AddTab(SecondaryTabs, DashboardPage.Shelf, 0xE8B7, "Files");
+        AddTab(SecondaryTabs, DashboardPage.Wallpapers, 0xE91B, "Wallpapers");
+        AddTab(SecondaryTabs, DashboardPage.Power, 0xE7E8, "Power");
+        AddTab(SecondaryTabs, DashboardPage.Settings, 0xE713, "Dashboard settings");
+        SecondaryTabs.Children.Add(IconButton(0xE711, "Close dashboard", Close));
+
+        Shell.RenderTransform = revealOffset;
+        SourceInitialized += (_, _) => ConfigureWidth();
+        Loaded += (_, _) =>
+        {
+            PositionAtTaskbar();
+            if (SystemParameters.ClientAreaAnimation)
+            {
+                var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+                revealOffset.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(17, 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
+                Shell.BeginAnimation(OpacityProperty, new DoubleAnimation(0.4, 1, TimeSpan.FromMilliseconds(160)) { EasingFunction = ease });
+            }
+        };
+        SizeChanged += (_, _) => PositionAtTaskbar();
+        DpiChanged += (_, _) => Dispatcher.BeginInvoke(() => { ConfigureWidth(); PositionAtTaskbar(); });
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                Close();
+            }
+        };
+        Deactivated += (_, _) => Dispatcher.BeginInvoke(() =>
+        {
+            if (!closed && IsLoaded && !IsActive && !modalOpen && Mouse.Captured == null)
+                Close();
+        });
+        Closed += (_, _) =>
+        {
+            closed = true;
+            ticker.Stop();
+            lifetime.Cancel();
+            lifetime.Dispose();
+        };
+        ticker.Tick += (_, _) => UpdateDashboard();
+        InitializeFocus();
+        var page = Enum.TryParse<DashboardPage>(initialPage, true, out var initial) && Enum.IsDefined(initial)
+            ? initial : DashboardPage.Home;
+        ShowPage(page);
+        LoadSavedWeather();
+        ticker.Start();
+    }
+
+    private void AddTab(Panel strip, DashboardPage page, int icon, string label)
+    {
+        var button = IconButton(icon, label, () => ShowPage(page));
+        tabs[page] = button;
+        strip.Children.Add(button);
+    }
+
+    private void ShowPage(DashboardPage page)
+    {
+        currentPage = page;
+        updatePage = null;
+        foreach (var (key, button) in tabs)
+        {
+            button.Background = key == page ? Brush("#38FFFFFF") : Brushes.Transparent;
+            button.Foreground = key == page ? Brushes.White : subdued;
+        }
+
+        PageHost.Content = page switch
+        {
+            DashboardPage.Home => HomePage(),
+            DashboardPage.Media => MediaPage(),
+            DashboardPage.Controls => ControlsPage(),
+            DashboardPage.Calendar => CalendarPage(),
+            DashboardPage.Weather => WeatherPage(),
+            DashboardPage.Stats => StatsPage(),
+            DashboardPage.Shelf => ShelfPage(),
+            DashboardPage.Wallpapers => WallpapersPage(),
+            DashboardPage.Power => PowerPage(),
+            _ => SettingsPage()
+        };
+
+        UpdateDashboard();
+    }
+
+    private void UpdateDashboard()
+    {
+        var now = DateTime.Now;
+        HeaderClock.Text = now.ToString("t") + "   " + now.ToString("dddd, MMMM d");
+        updatePage?.Invoke();
+    }
+
+    private void ConfigureWidth()
+    {
+        var screen = TaskbarScreen();
+        var dpi = VisualTreeHelper.GetDpi(this);
+        Width = Math.Min(1060, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
+        var narrow = Width < 760;
+        HeaderClock.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void PositionAtTaskbar()
+    {
+        if (positioning || PresentationSource.FromVisual(this) is not HwndSource source)
+            return;
+
+        positioning = true;
+        try
+        {
+            var screen = TaskbarScreen();
+            var dpi = VisualTreeHelper.GetDpi(this);
+            var width = ActualWidth * dpi.DpiScaleX;
+            var height = ActualHeight * dpi.DpiScaleY;
+            var x = screen.Bounds.Left + (screen.Bounds.Width - width) / 2;
+            var bottom = screen.Bounds.Bottom - 5 * dpi.DpiScaleY;
+            MoveWindowWithoutActivation(source.Handle, (int)x, (int)Math.Max(screen.Bounds.Top, bottom - height));
+        }
+        finally { positioning = false; }
+    }
+
+    private static Forms.Screen TaskbarScreen()
+    {
+        var taskbar = FindWindowW("Shell_TrayWnd", null);
+        return taskbar != 0 ? Forms.Screen.FromHandle(taskbar) : Forms.Screen.PrimaryScreen!;
+    }
+
+    private static void MoveWindowWithoutActivation(nint window, int x, int y) =>
+        SetWindowPos(window, 0, x, y, 0, 0, 0x15);
+
+    private Border Card(UIElement child) => new()
+    {
+        Background = new LinearGradientBrush(Color.FromRgb(34, 35, 39), Color.FromRgb(23, 24, 27), 90),
+        BorderBrush = Brush("#14FFFFFF"), BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(13), Padding = new Thickness(12), Child = child,
+        ClipToBounds = true
+    };
+
+    private static Grid Columns(params double[] weights)
+    {
+        var grid = new Grid();
+        foreach (var weight in weights)
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(weight, GridUnitType.Star) });
+        return grid;
+    }
+
+    private static void Put(Grid grid, FrameworkElement element, int column)
+    {
+        element.Margin = new Thickness(column == 0 ? 0 : 7, 0, 0, 0);
+        Grid.SetColumn(element, column);
+        grid.Children.Add(element);
+    }
+
+    private Button ActionButton(string label, Action action) => MakeButton(label, label, action);
+
+    private Button IconButton(int icon, string label, Action action)
+    {
+        var glyph = new TextBlock
+        {
+            Text = char.ConvertFromUtf32(icon), FontSize = 13,
+            FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets")
+        };
+        var button = MakeButton(glyph, label, action);
+        button.Padding = new Thickness(0);
+        button.Width = 28;
+        button.Height = 26;
+        button.Background = Brushes.Transparent;
+        button.BorderBrush = Brushes.Transparent;
+        button.Margin = new Thickness(1, 0, 1, 0);
+        return button;
+    }
+
+    private Button MakeButton(object content, string name, Action action)
+    {
+        var button = new Button { Content = content, Style = (Style)FindResource("Chip"), ToolTip = name };
+        AutomationProperties.SetName(button, name);
+        button.Click += (_, _) => action();
+        return button;
+    }
+
+    private TextBlock Text(string value, double size = 12, Brush? color = null, bool strong = false) => new()
+    {
+        Text = value, FontSize = size, Foreground = color ?? Foreground,
+        FontWeight = strong ? FontWeights.SemiBold : FontWeights.Normal,
+        TextTrimming = TextTrimming.CharacterEllipsis
+    };
+
+    private Slider Range(string label, double maximum, double value)
+    {
+        var range = new Slider { Minimum = 0, Maximum = maximum, Value = value,
+            Style = (Style)FindResource("ValueSlider") };
+        AutomationProperties.SetName(range, label);
+        return range;
+    }
+
+    private TextBox Field(string name, int maxLength)
+    {
+        var field = new TextBox { Style = (Style)FindResource("Field"), MaxLength = maxLength };
+        AutomationProperties.SetName(field, name);
+        return field;
+    }
+
+    private void OpenTarget(string target)
+    {
+        try { ShellIntegration.Launch(target); }
+        catch (Win32Exception) { ShowOwnedMessage("Windows could not open this item."); }
+    }
+
+    private void ShowOwnedMessage(string message)
+    {
+        // Keep the dashboard open while the message box has focus.
+        modalOpen = true;
+        try { MessageBox.Show(this, message, "Windows Dock"); }
+        finally { modalOpen = false; }
+    }
+
+    private static SolidColorBrush Brush(string color)
+    {
+        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
+        brush.Freeze();
+        return brush;
+    }
+
+    [DllImport("user32", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern nint FindWindowW(string className, string? windowName);
+
+    [DllImport("user32")]
+    private static extern bool SetWindowPos(nint window, nint insertAfter, int x, int y, int width, int height, uint flags);
+
+    private enum DashboardPage { Home, Media, Controls, Calendar, Weather, Stats, Shelf, Wallpapers, Power, Settings }
+}

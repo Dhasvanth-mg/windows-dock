@@ -124,7 +124,7 @@ void TaskbarStyle::AddChrome()
     chrome = controls::Border();
     chrome.Name(L"WindowsDockGlass");
     chrome.IsHitTestVisible(false);
-    chrome.CornerRadius({13, 13, 13, 13});
+    chrome.CornerRadius({14, 14, 14, 14});
     chrome.Margin({0, 2, 0, 4});
     chrome.BorderThickness({1, 1, 1, 1});
     chrome.BorderBrush(Rim());
@@ -146,6 +146,7 @@ void TaskbarStyle::AddChrome()
     divider.Height(20);
     divider.HorizontalAlignment(xaml::HorizontalAlignment::Left);
     divider.VerticalAlignment(xaml::VerticalAlignment::Center);
+    divider.Margin({1, 0, 0, 0});
     divider.Background(Solid(50, 255, 255, 255));
     divider.IsHitTestVisible(false);
     Grid::SetColumn(divider, 2);
@@ -156,9 +157,9 @@ void TaskbarStyle::AddDashboardButton()
 {
     dashboardButton = controls::Button();
     dashboardButton.Name(L"WindowsDockDashboard");
-    dashboardButton.Width(32);
+    dashboardButton.Width(34);
     dashboardButton.Height(30);
-    dashboardButton.Margin({5, 0, 3, 1});
+    dashboardButton.Margin({7, 0, 4, 1});
     dashboardButton.Padding({0, 0, 0, 0});
     dashboardButton.Background(Solid(29, 255, 255, 255));
     dashboardButton.BorderThickness({0, 0, 0, 0});

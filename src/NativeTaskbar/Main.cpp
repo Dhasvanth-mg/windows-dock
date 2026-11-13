@@ -23,13 +23,14 @@ namespace
             : ready(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"Ready").c_str())),
               restored(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"Restored").c_str())),
               stop(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"Stop").c_str())),
-              dashboard(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"Dashboard").c_str()))
+              dashboard(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"Dashboard").c_str())),
+              showDashboard(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowDashboard").c_str()))
         {
-            if (!ready || !restored || !stop || !dashboard)
+            if (!ready || !restored || !stop || !dashboard || !showDashboard)
                 winrt::throw_last_error();
         }
 
-        winrt::handle ready, restored, stop, dashboard;
+        winrt::handle ready, restored, stop, dashboard, showDashboard;
     };
 
     LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
@@ -114,10 +115,10 @@ namespace
         if (!pathLength || pathLength == ARRAYSIZE(path))
             return 1;
         const auto directory = std::filesystem::path(path).parent_path();
-        const auto module = directory / L"NativeTaskbar.Xaml.dll";
+        const auto module = directory / NATIVE_TASKBAR_DLL;
         if (!std::filesystem::is_regular_file(module))
         {
-            std::fputws(L"NativeTaskbar.Xaml.dll must be beside this executable.\n", stderr);
+            std::fwprintf(stderr, L"%ls must be beside this executable.\n", NATIVE_TASKBAR_DLL);
             return 1;
         }
 
@@ -153,8 +154,6 @@ namespace
         icon.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
         wcscpy_s(icon.szTip, L"Windows Dock");
         const bool hasIcon = Shell_NotifyIconW(NIM_ADD, &icon) != FALSE;
-        if (!hotkey && !hasIcon)
-            return 1;
         struct Cleanup
         {
             HWND window;
@@ -169,6 +168,8 @@ namespace
                 DestroyWindow(window);
             }
         } cleanup{window, icon, hasIcon, hotkey};
+        if (!hotkey && !hasIcon)
+            return 1;
 
         const auto xaml = LoadLibraryExW(L"Windows.UI.Xaml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!xaml)
@@ -218,8 +219,11 @@ namespace
                 break;
             if (result == WAIT_OBJECT_0 + 2)
             {
-                if ((!dashboardProcess || WaitForSingleObject(dashboardProcess.get(), 0) == WAIT_OBJECT_0) &&
-                    std::filesystem::is_regular_file(panel))
+                if (dashboardProcess && WaitForSingleObject(dashboardProcess.get(), 0) == WAIT_TIMEOUT)
+                {
+                    SetEvent(session.showDashboard.get());
+                }
+                else if (std::filesystem::is_regular_file(panel))
                 {
                     const auto args = L"--dashboard " + initialization;
                     SHELLEXECUTEINFOW launch{};

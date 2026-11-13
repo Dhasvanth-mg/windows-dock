@@ -140,7 +140,8 @@ namespace
                     for (const auto& child : grid.Children())
                         if (winrt::get_class_name(child) == L"SystemTray.SystemTrayFrame")
                             tray = child.try_as<xaml::FrameworkElement>();
-                    if (!tray || TaskbarStyle::Find(apps, L"HitodamaLook"))
+                    if (!tray || TaskbarStyle::Find(apps, L"HitodamaLook") ||
+                        TaskbarStyle::Find(grid, L"WindowsDockGlass"))
                         return;
 
                     auto next = std::make_unique<TaskbarStyle>(grid, self->dashboard);
