@@ -202,17 +202,20 @@ public partial class DashboardWindow
             focusMinutes = saved.Minutes;
             focusEnds = saved.Ends > DateTimeOffset.Now ? saved.Ends : null;
         }
-        focusTicker.Tick += (_, _) =>
-        {
-            if (!focusEnds.HasValue || focusEnds > DateTimeOffset.Now)
-                return;
-            focusEnds = null;
-            PersistFocus();
-            System.Media.SystemSounds.Asterisk.Play();
-            UpdateDashboard();
-        };
+        focusTicker.Tick += (_, _) => CheckFocusTimer();
         focusTicker.Start();
         Closed += (_, _) => focusTicker.Stop();
+    }
+
+    private void CheckFocusTimer()
+    {
+        if (!focusEnds.HasValue || focusEnds > DateTimeOffset.Now)
+            return;
+        focusEnds = null;
+        PersistFocus();
+        System.Media.SystemSounds.Asterisk.Play();
+        if (IsVisible)
+            UpdateDashboard();
     }
 
     private void PersistFocus() => WriteJson("focus.json", new FocusState(focusMinutes, focusEnds));

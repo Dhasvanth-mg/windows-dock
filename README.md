@@ -8,7 +8,7 @@ Keep the contents of the native publish directory together and run NativeTaskbar
 
 Use only one taskbar appearance tool at a time. The native controller exits if it cannot find the expected taskbar layout. Explorer stays in charge of taskbar auto-hide and screen space. If Explorer restarts, run the controller again.
 
-The dashboard includes media sessions and volume, Windows settings shortcuts, a calendar, local reminders, a focus timer, system statistics, a file shelf, a wallpaper picker, and optional city-based weather. Entering a city and fetching a forecast uses Open-Meteo.
+The dashboard includes media sessions and volume, Windows settings shortcuts, a calendar, local reminders, a focus timer, system statistics, a file shelf, a wallpaper picker, and optional city-based weather. Entering a city and fetching a forecast uses Open-Meteo. In Music and mixer, the lyrics button sends track metadata to LRCLIB to look up line-synced lyrics.
 
 ## Build the native dock
 

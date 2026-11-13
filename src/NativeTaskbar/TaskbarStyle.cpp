@@ -130,10 +130,10 @@ void TaskbarStyle::AddChrome()
     chrome.BorderBrush(Rim());
     media::AcrylicBrush glass;
     glass.BackgroundSource(media::AcrylicBackgroundSource::Backdrop);
-    glass.TintColor(Color{255, 13, 15, 19});
-    glass.TintOpacity(0.67);
-    glass.TintLuminosityOpacity(0.27);
-    glass.FallbackColor(Color{246, 20, 22, 26});
+    glass.TintColor(Color{255, 10, 11, 13});
+    glass.TintOpacity(0.78);
+    glass.TintLuminosityOpacity(0.10);
+    glass.FallbackColor(Color{246, 14, 15, 17});
     chrome.Background(glass);
 
     Grid::SetColumn(chrome, 1);
@@ -195,6 +195,8 @@ void TaskbarStyle::FitApps()
 
 void TaskbarStyle::StyleIndicator(FrameworkElement const& element)
 {
+    properties.erase(std::remove_if(properties.begin(), properties.end(),
+        [](const Property& saved) { return !saved.object.get(); }), properties.end());
     const auto indicator = element.try_as<shapes::Rectangle>();
     if (!indicator)
         return;

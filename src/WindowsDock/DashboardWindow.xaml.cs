@@ -31,10 +31,9 @@ public partial class DashboardWindow : Window
     private bool modalOpen;
     private bool closed;
     private bool positioning;
+    private long lastReveal;
 
-    public DashboardWindow() : this(0) { }
-
-    internal DashboardWindow(int controllerPid) : this(controllerPid, null) { }
+    public DashboardWindow() : this(0, null) { }
 
     internal DashboardWindow(int controllerPid, string? initialPage)
     {
@@ -52,12 +51,24 @@ public partial class DashboardWindow : Window
         AddTab(SecondaryTabs, DashboardPage.Wallpapers, 0xE91B, "Wallpapers");
         AddTab(SecondaryTabs, DashboardPage.Power, 0xE7E8, "Power");
         AddTab(SecondaryTabs, DashboardPage.Settings, 0xE713, "Dashboard settings");
-        SecondaryTabs.Children.Add(IconButton(0xE711, "Close dashboard", Close));
+        SecondaryTabs.Children.Add(IconButton(0xE711, "Close dashboard", Dismiss));
 
         Shell.RenderTransform = revealOffset;
         SourceInitialized += (_, _) => ConfigureWidth();
         Loaded += (_, _) =>
         {
+            PositionAtTaskbar();
+        };
+        IsVisibleChanged += (_, _) =>
+        {
+            if (!IsVisible)
+            {
+                ticker.Stop();
+                return;
+            }
+            lastReveal = Environment.TickCount64;
+            UpdateDashboard();
+            ticker.Start();
             PositionAtTaskbar();
             if (SystemParameters.ClientAreaAnimation)
             {
@@ -70,16 +81,17 @@ public partial class DashboardWindow : Window
         DpiChanged += (_, _) => Dispatcher.BeginInvoke(() => { ConfigureWidth(); PositionAtTaskbar(); });
         PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.Escape)
+            if (e.Key == Key.Escape && !e.Handled)
             {
                 e.Handled = true;
-                Close();
+                Dismiss();
             }
         };
         Deactivated += (_, _) => Dispatcher.BeginInvoke(() =>
         {
-            if (!closed && IsLoaded && !IsActive && !modalOpen && Mouse.Captured == null)
-                Close();
+            if (!closed && IsVisible && !IsActive && !modalOpen && Mouse.Captured == null &&
+                Environment.TickCount64 - lastReveal > 200)
+                Dismiss();
         });
         Closed += (_, _) =>
         {
@@ -94,7 +106,14 @@ public partial class DashboardWindow : Window
             ? initial : DashboardPage.Home;
         ShowPage(page);
         LoadSavedWeather();
-        ticker.Start();
+    }
+
+    private void Dismiss()
+    {
+        if (controllerPid > 0)
+            Hide();
+        else
+            Close();
     }
 
     private void AddTab(Panel strip, DashboardPage page, int icon, string label)

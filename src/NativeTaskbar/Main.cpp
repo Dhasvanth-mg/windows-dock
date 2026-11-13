@@ -17,6 +17,13 @@ namespace
     HANDLE activeStop = nullptr;
     HANDLE activeDashboard = nullptr;
 
+    void ReportFailure(const wchar_t* message)
+    {
+        std::fwprintf(stderr, L"%ls\n", message);
+        if (GetConsoleWindow() && IsWindowVisible(GetConsoleWindow()))
+            MessageBoxW(nullptr, message, L"Windows Dock", MB_OK | MB_ICONINFORMATION);
+    }
+
     struct Session
     {
         explicit Session(DWORD pid)
@@ -90,7 +97,7 @@ namespace
             GetProcAddress(ntdll, "RtlGetVersion"));
         if (!getVersion || getVersion(&version) != 0 || version.dwBuildNumber != TestedWindowsBuild)
         {
-            std::fputws(L"This preview is limited to Windows 11 x64 build 26200 (25H2).\n", stderr);
+            ReportFailure(L"This native dock build supports Windows 11 x64 25H2 (build 26200).");
             return 1;
         }
 
@@ -119,6 +126,12 @@ namespace
         if (!std::filesystem::is_regular_file(module))
         {
             std::fwprintf(stderr, L"%ls must be beside this executable.\n", NATIVE_TASKBAR_DLL);
+            return 1;
+        }
+        const auto panel = directory / L"WindowsDock.exe";
+        if (!std::filesystem::is_regular_file(panel))
+        {
+            std::fputws(L"WindowsDock.exe must be beside this executable.\n", stderr);
             return 1;
         }
 
@@ -198,8 +211,10 @@ namespace
         if (!attached || WaitForMultipleObjects(ARRAYSIZE(readySignals), readySignals, FALSE, 4000) != WAIT_OBJECT_0)
         {
             SetEvent(session.stop.get());
-            std::fwprintf(stderr, L"Native dock could not style the current taskbar (0x%08lX). "
-                L"Turn off other taskbar appearance tools and try again.\n", static_cast<unsigned long>(lastError));
+            wchar_t message[200];
+            swprintf_s(message, L"Native dock could not style the current taskbar (0x%08lX). "
+                L"Turn off other taskbar appearance tools and try again.", static_cast<unsigned long>(lastError));
+            ReportFailure(message);
             return 1;
         }
 
@@ -210,7 +225,6 @@ namespace
             std::fputws(L"Use the notification area icon to restore.\n", stdout);
         std::fflush(stdout);
         winrt::handle dashboardProcess;
-        const auto panel = directory / L"WindowsDock.exe";
         const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get()};
         for (;;)
         {
@@ -221,9 +235,10 @@ namespace
             {
                 if (dashboardProcess && WaitForSingleObject(dashboardProcess.get(), 0) == WAIT_TIMEOUT)
                 {
+                    AllowSetForegroundWindow(GetProcessId(dashboardProcess.get()));
                     SetEvent(session.showDashboard.get());
                 }
-                else if (std::filesystem::is_regular_file(panel))
+                else
                 {
                     const auto args = L"--dashboard " + initialization;
                     SHELLEXECUTEINFOW launch{};
@@ -233,7 +248,11 @@ namespace
                     launch.lpParameters = args.c_str();
                     launch.nShow = SW_SHOWNORMAL;
                     if (ShellExecuteExW(&launch))
+                    {
                         dashboardProcess.attach(launch.hProcess);
+                        if (dashboardProcess)
+                            AllowSetForegroundWindow(GetProcessId(dashboardProcess.get()));
+                    }
                 }
                 continue;
             }

@@ -169,7 +169,7 @@ public partial class DashboardWindow
         loadingWeather = true;
         await SetCityAsync(city);
         loadingWeather = false;
-        if (!closed && currentPage is DashboardPage.Weather or DashboardPage.Home)
+        if (!closed && (currentPage is DashboardPage.Weather or DashboardPage.Home))
             ShowPage(currentPage);
     }
 

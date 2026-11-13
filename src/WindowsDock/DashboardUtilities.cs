@@ -241,7 +241,7 @@ public partial class DashboardWindow
         buttons.Children.Add(ActionButton("Lock Windows", () =>
         {
             if (LockWorkStation())
-                Close();
+                Dismiss();
         }));
         actions.Children.Add(buttons);
         Put(row, Card(actions), 1);

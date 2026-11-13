@@ -29,8 +29,11 @@ public partial class DashboardWindow
 
         var date = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var today = DateTime.Today;
-        date.Children.Add(Text(today.ToString("ddd MMM"), 11, amber, true));
-        date.Children.Add(Text(today.ToString("dd"), 30, strong: true));
+        var dateLabel = Text(today.ToString("ddd MMM"), 11, amber, true);
+        var dateNumber = Text(today.ToString("dd"), 30, strong: true);
+        dateLabel.TextAlignment = dateNumber.TextAlignment = TextAlignment.Center;
+        date.Children.Add(dateLabel);
+        date.Children.Add(dateNumber);
         var calendar = ActionButton("Calendar", () => ShowPage(DashboardPage.Calendar));
         calendar.Padding = new Thickness(6, 3, 6, 3);
         calendar.HorizontalAlignment = HorizontalAlignment.Center;
@@ -39,7 +42,8 @@ public partial class DashboardWindow
 
         var forecast = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         forecast.Children.Add(Text("Weather", 11, muted, true));
-        forecast.Children.Add(Text(weather == null ? "—" : $"{weather.Temperature:0}°", 27, strong: true));
+        var temperature = Text(weather == null ? "—" : $"{weather.Temperature:0}°", 27, strong: true);
+        forecast.Children.Add(temperature);
         var weatherLink = ActionButton(weather?.City ?? "Choose city", () => ShowPage(DashboardPage.Weather));
         weatherLink.Padding = new Thickness(6, 3, 6, 3);
         weatherLink.HorizontalAlignment = HorizontalAlignment.Left;
@@ -58,6 +62,10 @@ public partial class DashboardWindow
         updatePage = () =>
         {
             updateMedia();
+            var current = DateTime.Today;
+            dateLabel.Text = current.ToString("ddd MMM");
+            dateNumber.Text = current.ToString("dd");
+            temperature.Text = weather == null ? "—" : $"{weather.Temperature:0}°";
             var snapshot = ReadMetrics();
             cpu(snapshot.Cpu, $"{snapshot.Cpu:0}%");
             memory(snapshot.Memory, $"{snapshot.Memory:0}%");
@@ -70,8 +78,16 @@ public partial class DashboardWindow
         var grid = Columns(1.35, 1);
         var card = MediaCard(true, out var update);
         Put(grid, card, 0);
-        Put(grid, MixerCard(), 1);
-        updatePage = update;
+        if (lyricsOpen)
+        {
+            Put(grid, LyricsCard(out var refreshLyrics), 1);
+            updatePage = () => { update(); refreshLyrics(); };
+        }
+        else
+        {
+            Put(grid, MixerCard(), 1);
+            updatePage = update;
+        }
         return grid;
     }
 
@@ -93,12 +109,22 @@ public partial class DashboardWindow
         row.Children.Add(artworkFrame);
         var transport = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         DockPanel.SetDock(transport, Dock.Right);
-        transport.Children.Add(IconButton(0xE892, "Previous track", () => SendMediaKey(0xB1)));
-        var play = IconButton(0xE768, "Play or pause", () => SendMediaKey(0xB3));
+        transport.Children.Add(IconButton(0xE892, "Previous track", () => ControlPlayback(0xB1)));
+        var play = IconButton(0xE768, "Play or pause", () => ControlPlayback(0xB3));
         play.Background = Brushes.White;
         play.Foreground = Brush("#171A21");
         transport.Children.Add(play);
-        transport.Children.Add(IconButton(0xE893, "Next track", () => SendMediaKey(0xB0)));
+        transport.Children.Add(IconButton(0xE893, "Next track", () => ControlPlayback(0xB0)));
+        if (expanded)
+        {
+            var lyrics = IconButton(lyricsOpen ? 0xE9E9 : 0xE8A5, lyricsOpen ? "Show mixer" : "Find synced lyrics with LRCLIB", () =>
+            {
+                lyricsOpen = !lyricsOpen;
+                lyricError = null;
+                ShowPage(DashboardPage.Media);
+            });
+            transport.Children.Add(lyrics);
+        }
         row.Children.Add(transport);
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) };
         var title = Text("Nothing playing", expanded ? 21 : 13, strong: true);
@@ -193,7 +219,7 @@ public partial class DashboardWindow
             var elapsed = playing ? DateTimeOffset.UtcNow - timeline.LastUpdatedTime : TimeSpan.Zero;
             if (elapsed < TimeSpan.Zero || elapsed > TimeSpan.FromDays(1))
                 elapsed = TimeSpan.Zero;
-            playback = new Playback(identity, item.Title, item.Artist, artwork, playing,
+            playback = new Playback(identity, item.Title, item.Artist, item.AlbumTitle, artwork, playing,
                 timeline.Position - timeline.StartTime + elapsed, timeline.EndTime - timeline.StartTime);
         }
         catch (OperationCanceledException) { }
@@ -227,6 +253,7 @@ public partial class DashboardWindow
         var slider = OutputSlider();
         slider.Margin = new Thickness(0, 8, 0, 0);
         controls.Children.Add(slider);
+        controls.Children.Add(Text("Output volume", 10, subdued));
         return Card(controls);
     }
 
@@ -370,6 +397,29 @@ public partial class DashboardWindow
 
     private static string FormatTime(TimeSpan time) => $"{(int)time.TotalMinutes}:{time.Seconds:00}";
 
+    private async void ControlPlayback(byte key)
+    {
+        try
+        {
+            var session = mediaManager?.GetCurrentSession();
+            if (session != null)
+            {
+                var action = key switch
+                {
+                    0xB1 => session.TrySkipPreviousAsync(),
+                    0xB0 => session.TrySkipNextAsync(),
+                    _ => session.TryTogglePlayPauseAsync()
+                };
+                if (await action.AsTask(lifetime.Token))
+                    return;
+            }
+        }
+        catch (OperationCanceledException) { return; }
+        catch (Exception error) when (error is COMException or InvalidOperationException or UnauthorizedAccessException) { }
+        if (!closed)
+            SendMediaKey(key);
+    }
+
     private static void SendMediaKey(byte key)
     {
         keybd_event(key, 0, 0, 0);
@@ -379,6 +429,6 @@ public partial class DashboardWindow
     [DllImport("user32")]
     private static extern void keybd_event(byte key, byte scan, uint flags, nuint extraInfo);
 
-    private sealed record Playback(string Identity, string Title, string Artist, ImageSource? Artwork,
+    private sealed record Playback(string Identity, string Title, string Artist, string Album, ImageSource? Artwork,
         bool Playing, TimeSpan Position, TimeSpan Duration);
 }

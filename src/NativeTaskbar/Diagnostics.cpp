@@ -2,6 +2,7 @@
 
 #include <ocidl.h>
 #include <xamlom.h>
+#include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 #include <winrt/base.h>
 #undef GetCurrentTime
 #include "TaskbarStyle.h"
@@ -10,6 +11,7 @@
 
 #include <atomic>
 #include <cwchar>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -18,6 +20,7 @@ namespace
 {
     namespace media = xaml::Media;
     using winrt::Windows::System::DispatcherQueue;
+    using xaml::Hosting::DesktopWindowXamlSource;
 
     struct DiagnosticString
     {
@@ -91,7 +94,9 @@ namespace
                 return S_OK;
             try
             {
-                if (type.View() == L"Taskbar.TaskbarFrame")
+                if (type.View() == L"Windows.UI.Xaml.Hosting.DesktopWindowXamlSource")
+                    RememberSource(element.Handle);
+                else if (type.View() == L"Taskbar.TaskbarFrame")
                     QueueStyle(element.Handle);
                 else if (name.View() == L"RunningIndicator")
                     QueueIndicator(element.Handle);
@@ -123,6 +128,9 @@ namespace
             auto root = media::VisualTreeHelper::GetParent(frame).try_as<controls::Grid>();
             const auto queue = DispatcherQueue::GetForCurrentThread();
             if (!root || !queue)
+                return;
+            const auto source = CurrentTaskbarSource(root);
+            if (!source)
                 return;
 
             queue.TryEnqueue([self = get_strong(), frame = winrt::make_weak(frame), root = winrt::make_weak(root)]
@@ -157,6 +165,31 @@ namespace
             });
         }
 
+        void RememberSource(InstanceHandle handle)
+        {
+            auto source = Get<DesktopWindowXamlSource>(handle);
+            if (!source)
+                return;
+            auto native = source.try_as<IDesktopWindowXamlSourceNative>();
+            HWND window = nullptr;
+            if (!native || FAILED(native->get_WindowHandle(&window)) || !window)
+                return;
+            if (GetAncestor(window, GA_ROOT) != FindWindowW(L"Shell_TrayWnd", nullptr))
+                return;
+            std::scoped_lock guard(taskbarLock);
+            primarySources[GetCurrentThreadId()] = winrt::make_weak(source);
+        }
+
+        DesktopWindowXamlSource CurrentTaskbarSource(controls::Grid const& grid)
+        {
+            std::scoped_lock guard(taskbarLock);
+            const auto it = primarySources.find(GetCurrentThreadId());
+            if (it == primarySources.end())
+                return nullptr;
+            const auto source = it->second.get();
+            return source && source.Content() == grid ? source : nullptr;
+        }
+
         void QueueIndicator(InstanceHandle handle)
         {
             auto queue = DispatcherQueue::GetForCurrentThread();
@@ -186,6 +219,7 @@ namespace
         std::atomic<bool> stopping{};
         std::mutex taskbarLock;
         DispatcherQueue taskbarQueue{nullptr};
+        std::map<DWORD, winrt::weak_ref<DesktopWindowXamlSource>> primarySources;
         std::unique_ptr<TaskbarStyle> style;
     };
 

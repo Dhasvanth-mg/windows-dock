@@ -32,13 +32,16 @@ public partial class App : Application
 
             void ShowDashboard()
             {
-                if (MainWindow is { IsVisible: true } current)
+                if (MainWindow is DashboardWindow current)
                 {
+                    if (!current.IsVisible)
+                        current.Show();
                     current.Activate();
                     return;
                 }
                 MainWindow = new DashboardWindow(controller, initialPage);
                 MainWindow.Show();
+                MainWindow.Activate();
             }
         }
 
