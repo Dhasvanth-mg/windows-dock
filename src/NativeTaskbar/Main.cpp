@@ -1,9 +1,10 @@
 #include "Connection.h"
-#include "AgentGridState.h"
+#include "DockTray.h"
 
 #include <cstdio>
 #include <cwchar>
 #include <filesystem>
+#include <memory>
 #include <shellapi.h>
 #include <thread>
 #include <winrt/base.h>
@@ -11,12 +12,7 @@
 
 namespace
 {
-    constexpr auto StopCommand = 1;
-    constexpr auto DashboardCommand = 2;
-    constexpr auto TrayMessage = WM_APP + 1;
-    constexpr UINT RestoreHotkey = 1;
     HANDLE activeStop = nullptr;
-    HANDLE activeDashboard = nullptr;
 
     void ReportFailure(const wchar_t* message)
     {
@@ -45,33 +41,6 @@ namespace
         winrt::handle ready, restored, stop, dashboard, showDashboard, agent, showAgent, agentGrid;
     };
 
-    LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
-    {
-        if (message == WM_HOTKEY && wParam == RestoreHotkey)
-            SetEvent(activeStop);
-        else if (message == TrayMessage && lParam == WM_LBUTTONUP)
-            SetEvent(activeDashboard);
-        else if (message == TrayMessage && (lParam == WM_CONTEXTMENU || lParam == WM_RBUTTONUP))
-        {
-            const auto menu = CreatePopupMenu();
-            if (menu)
-            {
-                AppendMenuW(menu, MF_STRING, DashboardCommand, L"Open dock dashboard");
-                AppendMenuW(menu, MF_STRING, StopCommand, L"Restore Windows taskbar");
-                POINT cursor{};
-                GetCursorPos(&cursor);
-                SetForegroundWindow(window);
-                const auto command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, cursor.x, cursor.y, 0, window, nullptr);
-                if (command == StopCommand)
-                    SetEvent(activeStop);
-                if (command == DashboardCommand)
-                    SetEvent(activeDashboard);
-                DestroyMenu(menu);
-            }
-        }
-        return DefWindowProcW(window, message, wParam, lParam);
-    }
-
     int Run(int argc, wchar_t** argv)
     {
         if (argc == 3 && std::wstring_view(argv[1]) == L"--restore")
@@ -89,9 +58,10 @@ namespace
             return 0;
         }
 
-        if (argc != 1)
+        const bool trayMode = argc == 2 && std::wstring_view(argv[1]) == L"--tray";
+        if (!trayMode && argc != 1)
         {
-            std::fputws(L"Usage: NativeTaskbar.exe [--restore <controller PID>]\n", stderr);
+            std::fputws(L"Usage: NativeTaskbar.exe [--tray | --restore <controller PID>]\n", stderr);
             return 1;
         }
 
@@ -100,7 +70,7 @@ namespace
         const auto ntdll = GetModuleHandleW(L"ntdll.dll");
         const auto getVersion = reinterpret_cast<LONG (WINAPI*)(OSVERSIONINFOW*)>(
             GetProcAddress(ntdll, "RtlGetVersion"));
-        if (!getVersion || getVersion(&version) != 0 || version.dwBuildNumber != TestedWindowsBuild)
+        if (!trayMode && (!getVersion || getVersion(&version) != 0 || version.dwBuildNumber != TestedWindowsBuild))
         {
             ReportFailure(L"This native dock build supports Windows 11 x64 25H2 (build 26200).");
             return 1;
@@ -128,7 +98,7 @@ namespace
             return 1;
         const auto directory = std::filesystem::path(path).parent_path();
         const auto module = directory / NATIVE_TASKBAR_DLL;
-        if (!std::filesystem::is_regular_file(module))
+        if (!trayMode && !std::filesystem::is_regular_file(module))
         {
             std::fwprintf(stderr, L"%ls must be beside this executable.\n", NATIVE_TASKBAR_DLL);
             return 1;
@@ -143,7 +113,6 @@ namespace
         const auto controllerPid = GetCurrentProcessId();
         const Session session(controllerPid);
         activeStop = session.stop.get();
-        activeDashboard = session.dashboard.get();
         SetConsoleCtrlHandler([](DWORD event) -> BOOL
         {
             if (event == CTRL_C_EVENT || event == CTRL_BREAK_EVENT || event == CTRL_CLOSE_EVENT)
@@ -154,80 +123,57 @@ namespace
             return FALSE;
         }, TRUE);
 
-        const auto instance = GetModuleHandleW(nullptr);
-        const WNDCLASSW windowClass{0, WindowProc, 0, 0, instance, nullptr, nullptr, nullptr, nullptr, L"WindowsDockNativeController"};
-        RegisterClassW(&windowClass);
-        const auto window = CreateWindowExW(0, windowClass.lpszClassName, L"Windows Dock", WS_OVERLAPPED,
-            0, 0, 0, 0, nullptr, nullptr, instance, nullptr);
-        if (!window)
+        std::unique_ptr<AgentGridState, UnmapAgentGrid> grid(trayMode
+            ? static_cast<AgentGridState*>(MapViewOfFile(session.agentGrid.get(), FILE_MAP_WRITE, 0, 0, sizeof(AgentGridState)))
+            : nullptr);
+        if (trayMode && !grid)
             winrt::throw_last_error();
-
-        const bool hotkey = RegisterHotKey(window, RestoreHotkey, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'D') != FALSE;
-        NOTIFYICONDATAW icon{};
-        icon.cbSize = sizeof(icon);
-        icon.hWnd = window;
-        icon.uID = 1;
-        icon.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-        icon.uCallbackMessage = TrayMessage;
-        icon.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
-        wcscpy_s(icon.szTip, L"Windows Dock");
-        const bool hasIcon = Shell_NotifyIconW(NIM_ADD, &icon) != FALSE;
-        struct Cleanup
-        {
-            HWND window;
-            NOTIFYICONDATAW& icon;
-            bool hasIcon, hotkey;
-            ~Cleanup()
-            {
-                if (hasIcon)
-                    Shell_NotifyIconW(NIM_DELETE, &icon);
-                if (hotkey)
-                    UnregisterHotKey(window, RestoreHotkey);
-                DestroyWindow(window);
-            }
-        } cleanup{window, icon, hasIcon, hotkey};
-        if (!hotkey && !hasIcon)
+        DockTray tray(trayMode, session.stop.get(), session.dashboard.get(), session.agent.get());
+        if (!tray.HasEntryPoint())
             return 1;
-
-        const auto xaml = LoadLibraryExW(L"Windows.UI.Xaml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (!xaml)
-            return 1;
-        const auto attach = reinterpret_cast<decltype(&InitializeXamlDiagnosticsEx)>(
-            GetProcAddress(xaml, "InitializeXamlDiagnosticsEx"));
-        if (!attach)
-            return 1;
-
+        tray.Watch(grid.get());
         const auto initialization = std::to_wstring(controllerPid);
-        bool attached = false;
-        HRESULT lastError = E_FAIL;
-        for (int index = 1; index <= 16 && !attached; ++index)
-        {
-            const auto endpoint = L"VisualDiagConnection" + std::to_wstring(index);
-            std::thread attempt([&]
-            {
-                lastError = attach(endpoint.c_str(), explorerPid, nullptr, module.c_str(),
-                    TaskbarSiteId, initialization.c_str());
-            });
-            attempt.join();
-            attached = SUCCEEDED(lastError);
-        }
 
-        const HANDLE readySignals[] = {session.ready.get(), session.restored.get(), explorer.get()};
-        if (!attached || WaitForMultipleObjects(ARRAYSIZE(readySignals), readySignals, FALSE, 4000) != WAIT_OBJECT_0)
-        {
-            SetEvent(session.stop.get());
-            wchar_t message[200];
-            swprintf_s(message, L"Native dock could not style the current taskbar (0x%08lX). "
-                L"Turn off other taskbar appearance tools and try again.", static_cast<unsigned long>(lastError));
-            ReportFailure(message);
-            return 1;
-        }
-
-        std::wprintf(L"Native dock active in Explorer %lu. Controller PID: %lu.\n", explorerPid, controllerPid);
-        if (hotkey)
-            std::fputws(L"Press Ctrl+Alt+D or use the notification area icon to restore.\n", stdout);
+        if (trayMode)
+            std::wprintf(L"Windows Dock tray mode active. Controller PID: %lu.\n", controllerPid);
         else
-            std::fputws(L"Use the notification area icon to restore.\n", stdout);
+        {
+            const auto xaml = LoadLibraryExW(L"Windows.UI.Xaml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+            if (!xaml)
+                return 1;
+            const auto attach = reinterpret_cast<decltype(&InitializeXamlDiagnosticsEx)>(
+                GetProcAddress(xaml, "InitializeXamlDiagnosticsEx"));
+            if (!attach)
+                return 1;
+
+            bool attached = false;
+            HRESULT lastError = E_FAIL;
+            for (int index = 1; index <= 16 && !attached; ++index)
+            {
+                const auto endpoint = L"VisualDiagConnection" + std::to_wstring(index);
+                std::thread attempt([&]
+                {
+                    lastError = attach(endpoint.c_str(), explorerPid, nullptr, module.c_str(),
+                        TaskbarSiteId, initialization.c_str());
+                });
+                attempt.join();
+                attached = SUCCEEDED(lastError);
+            }
+
+            const HANDLE readySignals[] = {session.ready.get(), session.restored.get(), explorer.get()};
+            if (!attached || WaitForMultipleObjects(ARRAYSIZE(readySignals), readySignals, FALSE, 4000) != WAIT_OBJECT_0)
+            {
+                SetEvent(session.stop.get());
+                wchar_t message[200];
+                swprintf_s(message, L"Native dock could not style the current taskbar (0x%08lX). "
+                    L"Turn off other taskbar appearance tools and try again.", static_cast<unsigned long>(lastError));
+                ReportFailure(message);
+                return 1;
+            }
+
+            std::wprintf(L"Native dock active in Explorer %lu. Controller PID: %lu.\n", explorerPid, controllerPid);
+        }
+        tray.Explain();
         std::fflush(stdout);
         const auto launchPanel = [&](std::wstring const& args)
         {
@@ -246,7 +192,7 @@ namespace
         {
             if (dashboardProcess && WaitForSingleObject(dashboardProcess.get(), 0) == WAIT_TIMEOUT)
                 return true;
-            dashboardProcess = launchPanel(L"--dashboard " + initialization + L" --on-demand");
+            dashboardProcess = launchPanel(L"--dashboard " + initialization + (trayMode ? L" --tray" : L" --on-demand"));
             return static_cast<bool>(dashboardProcess);
         };
         const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get(), session.agent.get()};
@@ -286,6 +232,8 @@ namespace
         }
 
         SetEvent(session.stop.get());
+        if (trayMode)
+            return 0;
         const HANDLE shutdownSignals[] = {session.restored.get(), explorer.get()};
         const auto restored = WaitForMultipleObjects(ARRAYSIZE(shutdownSignals), shutdownSignals, FALSE, 3000);
         return restored == WAIT_TIMEOUT || restored == WAIT_FAILED ? 2 : 0;

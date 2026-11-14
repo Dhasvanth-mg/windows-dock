@@ -12,6 +12,12 @@ The dashboard opens on demand and exits about 20 seconds after hiding. A smaller
 
 The dashboard includes media sessions and volume, Windows settings shortcuts, a calendar, local reminders, a focus timer, system statistics, a file shelf, a wallpaper picker, and weather. Forecasts use Open-Meteo. In the Audio tab, the lyrics button sends track metadata to LRCLIB to look up line-synced lyrics.
 
+## Use with Hitodama
+
+With Windows Dock's native styling stopped, run `NativeTaskbar.exe --tray` to keep the dashboard and coding chats available while Hitodama styles the taskbar. The Windows Dock icon in the notification area shows the four chat states. Click it or press **Ctrl+Alt+D** to open Coding chats. Right-click the icon and choose **Dashboard and widgets** for the full panel. If the icon is hidden, open the tray overflow arrow.
+
+To switch back to Windows Dock's taskbar styling, exit tray mode from its icon, turn off Hitodama's taskbar appearance, and launch `NativeTaskbar.exe` without arguments. Hitodama's assistant can run in either mode.
+
 ## Coding chats
 
 Hover over a square in the 2×2 grid beside the tray to see the chat and its status. Click the grid to open **Coding chats**. The panel brings an approval or recent reply to the front and keeps the chat list below it. **Assign slot** pins a chat, follows the latest matching chat in a project, or restores automatic selection. The grid reads local desktop metadata and turn events, so cloud-only chats may be missing.

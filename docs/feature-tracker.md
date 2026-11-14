@@ -290,3 +290,27 @@
 - Verification: Release native build and self-contained x64 publish passed. The monitor populated the live grid. Full and compact panels shared one process within an open session. The Close button hid the panel, its process exited after idle, and the native Agent event reopened it in a fresh process. Private committed memory across the controller and UI processes dropped from about 151 MiB to 31–33 MiB on this desk. The final idle sample showed 29 MiB of private resident memory across the controller and monitor. The figures exclude the in-process Explorer module.
 - Desktop state: Explorer restarted during deployment. Hitodama re-enabled its appearance after that restart and blocked native attach. Its taskbar appearance was paused, with the original rules backed up locally.
 - Remaining work: Cold opens pay the dashboard startup cost. API keys entered in the UI expire when the dashboard process exits. The running timer countdown passed the smoke test. Audible expiry while the UI is closed needs a live check. The memory figures reflect a single Windows session and can vary with activity and paging.
+
+### Additional lightweight feature ideas
+
+- Status: Shortlist ready for selection.
+- Scope: Suggest additional dock features for the owner to choose from.
+- Acceptance criteria: Give each idea a concrete use, build on existing dock behavior, and identify the strongest candidates for an on-demand implementation.
+- Outcome: Proposed an activity inbox, running-window search, project resume cards, audio presets, paste transforms, a local project scratchpad, quota reset reminders, and a file action menu. Prioritized the inbox, window search, and presets, with the latter two evaluated only on demand.
+- Remaining work: Await feature selection.
+
+### Run alongside Hitodama
+
+- Status: Built, smoke-tested, and running with Hitodama.
+- Scope: Make Windows Dock's dashboard, chat grid data, and widgets accessible while Hitodama styles Explorer's taskbar.
+- Acceptance criteria: Both applications can run together with one owner of the taskbar appearance. Windows Dock remains accessible on demand and keeps the lean idle lifecycle. Document the entry points and the tradeoff for the in-taskbar chat tiles.
+- Outcome: Added `--tray` mode to the native controller. It uses a four-cell status icon in the Windows notification area. Its click and Ctrl+Alt+D open the compact chat panel, and its menu also exposes the full dashboard and an exit command. The mode shares the same monitor and on-demand dashboard.
+- Verification: Native Release and self-contained dashboard builds passed. Started tray mode and restored Hitodama's previously paused taskbar appearance. Hitodama reported styling 23 elements. The tray controller did not load the XAML taskbar styler. Windows registered the new icon, and the tray activation and hotkey handlers opened the compact panel. The full panel opened from its controller signal, and the compact panel's Widgets button opened the installed launcher. The dashboard exited after idle and reopened on a fresh process. The controller and monitor used about 25 MiB of private resident memory in the post-close sample.
+- Remaining work: Physical tray clicks, hover visuals, and right-click menu selection still need a manual check. Tray mode displays the four states inside one notification-area icon.
+
+#### Clarify how the apps interact
+
+- Status: Answered in chat.
+- Scope: Explain how a separate assistant and a separate dock can share the same Windows desktop.
+- Acceptance criteria: Distinguish the independently running apps from the shared Explorer taskbar appearance.
+- Outcome: Each app runs independently. Their appearance modules can target the same Explorer taskbar. The tray mode provides an independent entry point for Windows Dock when Hitodama styles the taskbar.

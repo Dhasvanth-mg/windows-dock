@@ -21,6 +21,7 @@ public partial class DashboardWindow : Window
     private readonly CancellationTokenSource lifetime = new();
     private readonly int controllerPid;
     private readonly bool releaseWhenIdle;
+    private readonly bool trayMode;
     private readonly DispatcherTimer idleExit = new() { Interval = TimeSpan.FromSeconds(20) };
     private readonly SolidColorBrush subdued = Brush("#C5BCD6");
     private readonly SolidColorBrush muted = Brush("#A69BB8");
@@ -42,11 +43,13 @@ public partial class DashboardWindow : Window
 
     public DashboardWindow() : this(0, null) { }
 
-    internal DashboardWindow(int controllerPid, string? initialPage, bool deferPage = false, bool releaseWhenIdle = false)
+    internal DashboardWindow(int controllerPid, string? initialPage, bool deferPage = false, bool releaseWhenIdle = false,
+        bool trayMode = false)
     {
         InitializeComponent();
         this.controllerPid = controllerPid;
         this.releaseWhenIdle = releaseWhenIdle;
+        this.trayMode = trayMode;
         idleExit.Tick += (_, _) =>
         {
             idleExit.Stop();

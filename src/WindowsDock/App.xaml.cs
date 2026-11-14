@@ -30,9 +30,10 @@ public partial class App : Application
                 }
                 ShutdownMode = ShutdownMode.OnExplicitShutdown;
             }
-            var onDemand = e.Args.Length == 3 && e.Args[2] == "--on-demand";
+            var trayMode = e.Args.Length == 3 && e.Args[2] == "--tray";
+            var onDemand = trayMode || e.Args.Length == 3 && e.Args[2] == "--on-demand";
             var hidden = onDemand || e.Args.Length == 3 && e.Args[2] == "--hidden";
-            MainWindow = new DashboardWindow(controller, initialPage, hidden, onDemand);
+            MainWindow = new DashboardWindow(controller, initialPage, hidden, onDemand, trayMode);
             if (onDemand)
                 MainWindow.Closed += (_, _) => Shutdown();
             if (!hidden)

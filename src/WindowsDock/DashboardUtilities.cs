@@ -186,7 +186,9 @@ public partial class DashboardWindow
         var row = Columns(1.3, 1);
         var general = new StackPanel();
         general.Children.Add(CardHeading("Windows taskbar", 0xECAA, purple));
-        var layoutHelp = Text("App pins, tray icons, and auto-hide use Windows settings.", 12, subdued);
+        var layoutHelp = Text(trayMode
+            ? "Tray mode is active. Open coding chats from the Windows Dock icon or with Ctrl+Alt+D."
+            : "App pins, tray icons, and auto-hide use Windows settings.", 12, subdued);
         layoutHelp.TextWrapping = TextWrapping.Wrap;
         general.Children.Add(layoutHelp);
         var actions = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
@@ -195,7 +197,7 @@ public partial class DashboardWindow
         actions.Children.Add(windows);
         if (controllerPid > 0)
         {
-            actions.Children.Add(ActionButton("Restore taskbar appearance", () =>
+            actions.Children.Add(ActionButton(trayMode ? "Exit Windows Dock" : "Restore taskbar appearance", () =>
             {
                 if (System.Threading.EventWaitHandle.TryOpenExisting(
                     @"Local\WindowsDock.NativeTaskbar." + controllerPid + ".Stop", out var stop))

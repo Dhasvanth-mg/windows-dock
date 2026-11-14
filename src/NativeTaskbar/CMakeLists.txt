@@ -11,10 +11,10 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 add_compile_definitions(UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_compile_options(/W4 /permissive- /EHsc)
 
-add_executable(NativeTaskbar Main.cpp)
+add_executable(NativeTaskbar Main.cpp DockTray.cpp)
 target_include_directories(NativeTaskbar SYSTEM PRIVATE
     "${CMAKE_WINDOWS_KITS_10_DIR}/Include/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/cppwinrt")
-target_link_libraries(NativeTaskbar PRIVATE user32 ole32 shell32 windowsapp)
+target_link_libraries(NativeTaskbar PRIVATE user32 gdi32 ole32 shell32 windowsapp)
 add_library(NativeTaskbar.Xaml SHARED Diagnostics.cpp TaskbarStyle.cpp TaskbarAgents.cpp Diagnostics.def)
 set_target_properties(NativeTaskbar.Xaml PROPERTIES UNITY_BUILD ON)
 set(AGENT_FACE_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/../Shared/AgentFaces.txt")
