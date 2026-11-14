@@ -20,7 +20,7 @@ public partial class App : Application
             if (controller > 0)
             {
                 dashboardSession = NativeDashboardSession.Connect(controller,
-                    () => Dispatcher.BeginInvoke(() => ShowDashboard(false)),
+                    () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.ToggleDockLauncher()),
                     () => Dispatcher.BeginInvoke(() => ShowDashboard(true)),
                     () => Dispatcher.BeginInvoke(() => ShowAssistant()),
                     () => Dispatcher.InvokeAsync(() => Shutdown()));
@@ -60,10 +60,7 @@ public partial class App : Application
                 if (MainWindow is DashboardWindow current)
                 {
                     if (!current.IsVisible)
-                    {
-                        current.OpenAgentGrid();
-                        current.Show();
-                    }
+                        current.ShowDockPanelHost();
                     current.ShowAssistantPicker();
                 }
             }
@@ -96,6 +93,8 @@ internal static class DockEntryPoint
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args is ["--open"])
+            return DockTaskbar.Open();
         if (args is ["--monitor", var controller] && int.TryParse(controller, out var pid) && pid > 0)
             return DockMonitor.Run(pid);
         if (args is ["--planner-mcp"])

@@ -90,49 +90,6 @@ namespace
         return bitmap;
     }
 
-    void SetAgentPreview(controls::Button const& button, AgentGridTile const& tile, AgentMood const& mood,
-        xaml::Media::ImageSource const& art, xaml::Media::SolidColorBrush const& tint)
-    {
-        controls::ToolTip tooltip;
-        tooltip.Placement(controls::Primitives::PlacementMode::Top);
-        controls::StackPanel preview;
-        preview.Orientation(controls::Orientation::Horizontal);
-        if (art)
-        {
-            controls::Image face;
-            face.Source(art);
-            face.Width(32);
-            face.Height(24);
-            face.Margin({0, 0, 9, 0});
-            preview.Children().Append(face);
-        }
-        controls::StackPanel lines;
-        lines.MaxWidth(258);
-        controls::TextBlock title;
-        title.Text(*tile.title ? tile.title : L"Unassigned slot");
-        title.FontWeight(winrt::Windows::UI::Text::FontWeight{600});
-        title.TextWrapping(xaml::TextWrapping::Wrap);
-        lines.Children().Append(title);
-        controls::TextBlock detail;
-        const auto provider = tile.provider == 1 ? L"Claude Code" : L"Codex";
-        detail.Text(tile.provider ? std::wstring(provider) + L"  \u00B7  " + mood.label :
-            *tile.title ? L"Waiting for a matching chat" : L"Click to view chats");
-        if (tint)
-            detail.Foreground(tint);
-        lines.Children().Append(detail);
-        if (tile.provider && *tile.step)
-        {
-            controls::TextBlock step;
-            step.Text(tile.step);
-            step.FontSize(11);
-            step.TextWrapping(xaml::TextWrapping::Wrap);
-            lines.Children().Append(step);
-        }
-        preview.Children().Append(lines);
-        tooltip.Content(preview);
-        controls::ToolTipService::SetToolTip(button, tooltip);
-    }
-
     void MoveAgentPart(motion::Storyboard const& storyboard, xaml::DependencyObject const& part,
         wchar_t const* property, double start, double end, int duration, bool repeat)
     {
@@ -155,13 +112,62 @@ namespace
     }
 }
 
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+
+void TaskbarStyle::SetDashboardIcon()
+{
+    constexpr int size = 32;
+    const auto module = reinterpret_cast<HINSTANCE>(&__ImageBase);
+    const auto icon = static_cast<HICON>(LoadImageW(module, MAKEINTRESOURCEW(101), IMAGE_ICON, size, size, LR_SHARED));
+    if (!icon)
+    {
+        controls::TextBlock fallback;
+        fallback.Text(L"\u25a6");
+        dashboardButton.Content(fallback);
+        return;
+    }
+
+    BITMAPINFO info{};
+    info.bmiHeader = {sizeof(BITMAPINFOHEADER), size, -size, 1, 32};
+    void* pixels{};
+    const auto dc = CreateCompatibleDC(nullptr);
+    const auto dib = dc ? CreateDIBSection(dc, &info, DIB_RGB_COLORS, &pixels, nullptr, 0) : nullptr;
+    if (!dib)
+    {
+        if (dc)
+            DeleteDC(dc);
+        return;
+    }
+    const auto previous = SelectObject(dc, dib);
+    std::memset(pixels, 0, size * size * 4);
+    DrawIconEx(dc, 0, 0, icon, size, size, 0, nullptr, DI_NORMAL);
+    GdiFlush();
+    std::array<uint32_t, size * size> buffer;
+    std::memcpy(buffer.data(), pixels, sizeof(buffer));
+    SelectObject(dc, previous);
+    DeleteObject(dib);
+    DeleteDC(dc);
+
+    xaml::Media::Imaging::WriteableBitmap bitmap(size, size);
+    byte* target{};
+    winrt::check_hresult(bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>()->Buffer(&target));
+    std::memcpy(target, buffer.data(), sizeof(buffer));
+    bitmap.Invalidate();
+    controls::Image image;
+    image.Source(bitmap);
+    image.Width(size);
+    image.Height(size);
+    image.IsHitTestVisible(false);
+    dashboardButton.Content(image);
+}
+
 void TaskbarStyle::AddAgentGrid()
 {
     if (!agentEvent || !agentState)
         return;
 
     controls::Grid grid;
-    grid.Margin({2, 1, 2, 1});
+    grid.Margin({3, 1, 3, 1});
     grid.VerticalAlignment(xaml::VerticalAlignment::Center);
     grid.HorizontalAlignment(xaml::HorizontalAlignment::Center);
     grid.Name(L"WindowsDockCodingAgents");
@@ -169,10 +175,10 @@ void TaskbarStyle::AddAgentGrid()
     for (int index = 0; index < 2; ++index)
     {
         controls::RowDefinition row;
-        row.Height({18, xaml::GridUnitType::Pixel});
+        row.Height({20, xaml::GridUnitType::Pixel});
         grid.RowDefinitions().Append(row);
         controls::ColumnDefinition column;
-        column.Width({21, xaml::GridUnitType::Pixel});
+        column.Width({28, xaml::GridUnitType::Pixel});
         grid.ColumnDefinitions().Append(column);
     }
 
@@ -180,8 +186,8 @@ void TaskbarStyle::AddAgentGrid()
     {
         controls::Button button;
         button.Name(L"WindowsDockAgentSlot" + std::to_wstring(index + 1));
-        button.Width(20);
-        button.Height(17);
+        button.Width(26);
+        button.Height(18);
         button.MinWidth(0);
         button.MinHeight(0);
         button.Padding({0, 0, 0, 0});
@@ -196,8 +202,8 @@ void TaskbarStyle::AddAgentGrid()
         character.IsHitTestVisible(false);
         character.RenderTransform(xaml::Media::TranslateTransform());
         controls::Image face;
-        face.Width(16);
-        face.Height(12);
+        face.Width(19);
+        face.Height(14);
         face.Stretch(xaml::Media::Stretch::Fill);
         character.Children().Append(face);
         controls::TextBlock symbol;
@@ -303,8 +309,7 @@ void TaskbarStyle::RefreshAgentGrid()
         name += tile.provider ? std::wstring(mood.label) + L", " + tile.title :
             *tile.title ? tile.title : L"Unassigned";
         xaml::Automation::AutomationProperties::SetName(button, name);
-        SetAgentPreview(button, tile, mood, agentHighContrast ? nullptr : agentSprites[state],
-            agentHighContrast ? nullptr : AgentBrush(255, r, g, b));
+        xaml::Automation::AutomationProperties::SetHelpText(button, tile.step);
         previous = tile;
         if (!newFace)
             continue;

@@ -18,21 +18,34 @@ public partial class DashboardWindow
 
     private void ShowWidgets()
     {
-        var (window, content, _) = CreateDockPanel("Widgets", "", 492, 0xECAA, purple);
+        var (window, content, _) = CreateDockPanel("Widgets", "", 492, 0, AssistantInk, assistant: true,
+            portrait: DockTaskbar.IconBadge());
+        var shortcuts = new WrapPanel { Margin = new Thickness(0, 0, 0, 9) };
+        foreach (var (label, icon, open) in new (string, int, Action)[]
+        {
+            ("Coding chats", 0xE943, OpenAgentGrid),
+            ("Assistants", 0xEAB7, ShowAssistantPicker),
+            ("Dashboard", 0xE80F, OpenMainDashboard)
+        })
+        {
+            var button = MakeButton(IconLabel(label, icon, AssistantSecondary), label, open);
+            button.Margin = new Thickness(0, 0, 5, 0);
+            shortcuts.Children.Add(button);
+        }
+        content.Children.Add(shortcuts);
         var searchRow = new DockPanel();
         var keyboard = new Border
         {
-            Background = Brush("#25150E22"), BorderBrush = Brush("#46D9C3FF"), BorderThickness = new Thickness(1),
-            Padding = new Thickness(6, 2, 6, 2), CornerRadius = new CornerRadius(4), Child = Text("Ctrl+K", 10, purple, true)
+            BorderBrush = AssistantRule, BorderThickness = new Thickness(1),
+            Padding = new Thickness(6, 2, 6, 2), CornerRadius = new CornerRadius(4), Child = Text("Ctrl+K", 10, AssistantSecondary)
         };
         DockPanel.SetDock(keyboard, Dock.Right);
         searchRow.Children.Add(keyboard);
-        searchRow.Children.Add(IconLabel("Search apps and actions", 0xE721, purple));
+        searchRow.Children.Add(IconLabel("Search apps and actions", 0xE721, AssistantSecondary));
         var search = MakeButton(searchRow, "Search apps and actions", ShowCommandPalette);
+        ToolTipService.SetIsEnabled(search, false);
         search.HorizontalAlignment = HorizontalAlignment.Stretch;
         search.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        search.Background = Brush("#202C2341");
-        search.BorderBrush = Brush("#40CAB4FF");
         search.Margin = new Thickness(0, 0, 0, 10);
         content.Children.Add(search);
         var tiles = new StackPanel();
@@ -57,7 +70,7 @@ public partial class DashboardWindow
                     return;
                 if (title != null)
                 {
-                    var heading = Text(title, 11, subdued, true);
+                    var heading = Text(title, 11, AssistantSecondary, true);
                     heading.Margin = new Thickness(1, 1, 0, 5);
                     tiles.Children.Add(heading);
                 }
@@ -74,6 +87,7 @@ public partial class DashboardWindow
                         column = 0;
                     }
                     var button = WidgetTile(item, showArrow: false);
+                    ToolTipService.SetIsEnabled(button, false);
                     var star = IconButton(isFavorite ? 0xE735 : 0xE734,
                         (isFavorite ? "Remove favorite " : "Favorite ") + item.Label, () =>
                         {
@@ -84,7 +98,9 @@ public partial class DashboardWindow
                             if (currentPage == DashboardPage.Home)
                                 RenderHomeFavorites();
                         });
-                    star.Foreground = isFavorite ? amber : subdued;
+                    star.Foreground = isFavorite ? amber : AssistantSecondary;
+                    ((TextBlock)star.Content).Foreground = star.Foreground;
+                    ToolTipService.SetIsEnabled(star, false);
                     star.Margin = new Thickness(0, 0, 4, 0);
                     var tile = new Grid();
                     tile.Children.Add(button);
@@ -155,14 +171,12 @@ public partial class DashboardWindow
         line.Children.Add(badge);
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         labels.Children.Add(Text(widget.Label, 12, strong: true));
-        var detail = Text(widget.Detail, 10.5, subdued);
+        var detail = Text(widget.Detail, 11, AssistantSecondary);
         detail.Margin = new Thickness(0, 2, 0, 0);
         labels.Children.Add(detail);
         line.Children.Add(labels);
         var button = MakeButton(line, widget.Label, widget.Action);
         button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        button.Background = AgentArt.Wash(widget.Color, widget.Wide ? (byte)23 : (byte)12);
-        button.BorderBrush = AgentArt.Wash(widget.Color, widget.Wide ? (byte)55 : (byte)35);
         button.Padding = new Thickness(8, 5, 9, 5);
         return button;
     }
@@ -170,6 +184,7 @@ public partial class DashboardWindow
     private void OpenWidgetPage(DashboardPage page)
     {
         agentPanel?.Close();
+        SetDashboardSurface(true);
         if (compactAgents)
         {
             compactAgents = false;

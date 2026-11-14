@@ -47,6 +47,7 @@ private:
     void FitApps();
     void AddChrome();
     void AddDashboardButton();
+    void SetDashboardIcon();
     void AddAgentGrid();
     void RefreshAgentGrid();
     void StyleTray(xaml::FrameworkElement const& tray);

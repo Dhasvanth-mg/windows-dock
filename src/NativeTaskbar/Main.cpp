@@ -1,10 +1,12 @@
 #include "Connection.h"
 #include "DockTray.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cwchar>
 #include <filesystem>
 #include <memory>
+#include <iterator>
 #include <shellapi.h>
 #include <thread>
 #include <winrt/base.h>
@@ -33,15 +35,51 @@ namespace
               showAgent(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowAgent").c_str())),
               assistant(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"Assistant").c_str())),
               showAssistant(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowAssistant").c_str())),
+              panelVisible(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"PanelVisible").c_str())),
+              visibilityChanged(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"PanelVisibilityChanged").c_str())),
               agentGrid(CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(AgentGridState),
                   SessionName(pid, L"AgentGrid").c_str()))
         {
             if (!ready || !restored || !stop || !dashboard || !showDashboard || !agent || !showAgent ||
-                !assistant || !showAssistant || !agentGrid)
+                !assistant || !showAssistant || !panelVisible || !visibilityChanged || !agentGrid)
                 winrt::throw_last_error();
         }
 
         winrt::handle ready, restored, stop, dashboard, showDashboard, agent, showAgent, assistant, showAssistant, agentGrid;
+        winrt::handle panelVisible, visibilityChanged;
+    };
+
+    class TaskbarVisibility
+    {
+    public:
+        ~TaskbarVisibility() { Hold(false); }
+
+        void Hold(bool visible)
+        {
+            APPBARDATA bar{sizeof(APPBARDATA)};
+            bar.hWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+            if (!bar.hWnd)
+                return;
+            const auto state = SHAppBarMessage(ABM_GETSTATE, &bar);
+            if (visible && !held && (state & ABS_AUTOHIDE))
+            {
+                bar.lParam = state & ~ABS_AUTOHIDE;
+                SHAppBarMessage(ABM_SETSTATE, &bar);
+                held = !(SHAppBarMessage(ABM_GETSTATE, &bar) & ABS_AUTOHIDE);
+            }
+            else if (!visible && held)
+            {
+                held = false;
+                if (!(state & ABS_AUTOHIDE))
+                {
+                    bar.lParam = state | ABS_AUTOHIDE;
+                    SHAppBarMessage(ABM_SETSTATE, &bar);
+                }
+            }
+        }
+
+    private:
+        bool held{};
     };
 
     int Run(int argc, wchar_t** argv)
@@ -61,10 +99,11 @@ namespace
             return 0;
         }
 
-        const bool trayMode = argc == 2 && std::wstring_view(argv[1]) == L"--tray";
+        const bool openOnStart = argc == 3 && std::wstring_view(argv[2]) == L"--open";
+        const bool trayMode = (argc == 2 || openOnStart) && std::wstring_view(argv[1]) == L"--tray";
         if (!trayMode && argc != 1)
         {
-            std::fputws(L"Usage: NativeTaskbar.exe [--tray | --restore <controller PID>]\n", stderr);
+            std::fputws(L"Usage: NativeTaskbar.exe [--tray [--open] | --restore <controller PID>]\n", stderr);
             return 1;
         }
 
@@ -195,20 +234,31 @@ namespace
         {
             if (dashboardProcess && WaitForSingleObject(dashboardProcess.get(), 0) == WAIT_TIMEOUT)
                 return true;
+            ResetEvent(session.panelVisible.get());
             dashboardProcess = launchPanel(L"--dashboard " + initialization + (trayMode ? L" --tray" : L" --on-demand"));
             return static_cast<bool>(dashboardProcess);
         };
+        if (openOnStart)
+            SetEvent(session.dashboard.get());
+        TaskbarVisibility visibility;
         const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get(), session.agent.get(),
-            session.assistant.get()};
+            session.assistant.get(), session.visibilityChanged.get()};
         const HANDLE panels[] = {session.showDashboard.get(), session.showAgent.get(), session.showAssistant.get()};
         for (;;)
         {
-            const HANDLE waitFor[] = {signals[0], signals[1], signals[2], signals[3], signals[4], monitor.get()};
-            const DWORD count = monitor ? ARRAYSIZE(waitFor) : ARRAYSIZE(signals);
+            HANDLE waitFor[ARRAYSIZE(signals) + 2];
+            std::copy(std::begin(signals), std::end(signals), waitFor);
+            DWORD count = ARRAYSIZE(signals);
+            const auto monitorIndex = monitor ? count++ : MAXDWORD;
+            const auto dashboardIndex = dashboardProcess ? count++ : MAXDWORD;
+            if (monitor)
+                waitFor[monitorIndex] = monitor.get();
+            if (dashboardProcess)
+                waitFor[dashboardIndex] = dashboardProcess.get();
             const auto result = MsgWaitForMultipleObjects(count, waitFor, FALSE, monitor ? INFINITE : 6000, QS_ALLINPUT);
             if (result == WAIT_OBJECT_0 || result == WAIT_OBJECT_0 + 1 || result == WAIT_FAILED)
                 break;
-            if (monitor && result == WAIT_OBJECT_0 + ARRAYSIZE(signals))
+            if (result == monitorIndex)
             {
                 monitor.close();
                 continue;
@@ -218,7 +268,19 @@ namespace
                 monitor = launchPanel(L"--monitor " + initialization);
                 monitorRetry = GetTickCount64() + 6000;
             }
-            if (result >= WAIT_OBJECT_0 + 2 && result < WAIT_OBJECT_0 + ARRAYSIZE(signals))
+            if (result == dashboardIndex)
+            {
+                dashboardProcess.close();
+                ResetEvent(session.panelVisible.get());
+                visibility.Hold(false);
+                continue;
+            }
+            if (result == ARRAYSIZE(signals) - 1)
+            {
+                visibility.Hold(dashboardProcess && WaitForSingleObject(session.panelVisible.get(), 0) == WAIT_OBJECT_0);
+                continue;
+            }
+            if (result >= WAIT_OBJECT_0 + 2 && result < WAIT_OBJECT_0 + 2 + ARRAYSIZE(panels))
             {
                 if (ensureDashboard())
                 {

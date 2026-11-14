@@ -488,15 +488,21 @@ public partial class DashboardWindow
         Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null, bool assistant = false)
     {
         agentPanel?.Close();
+        if (controllerPid > 0)
+            SetDashboardSurface(false);
         var returnFocus = FocusManager.GetFocusedElement(this) as FrameworkElement;
         var panel = new StackPanel();
         var header = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
         var close = IconButton(0xE711, "Close " + title.ToLowerInvariant(), () => agentPanel?.Close());
+        if (assistant)
+            ((TextBlock)close.Content).Foreground = AssistantInk;
         DockPanel.SetDock(close, Dock.Right);
         header.Children.Add(close);
         if (widget || backAction != null)
         {
             var back = IconButton(0xE76B, backLabel, backAction ?? ShowWidgets);
+            if (assistant)
+                ((TextBlock)back.Content).Foreground = AssistantInk;
             back.Margin = new Thickness(0, 0, 4, 0);
             header.Children.Add(back);
         }
@@ -522,7 +528,8 @@ public partial class DashboardWindow
         var window = new Window
         {
             Owner = this, Title = title, Width = Math.Min(width, screen.WorkingArea.Width / dpi.DpiScaleX - 24),
-            MaxHeight = screen.Bounds.Height / dpi.DpiScaleY - 80, SizeToContent = SizeToContent.Height,
+            MaxHeight = Math.Max(160, (DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - screen.Bounds.Top) /
+                dpi.DpiScaleY - 12), SizeToContent = SizeToContent.Height,
             WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent,
             Foreground = assistant ? AssistantInk : Foreground, FontFamily = FontFamily, ResizeMode = ResizeMode.NoResize, Topmost = true,
             ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, UseLayoutRounding = true
@@ -549,6 +556,17 @@ public partial class DashboardWindow
         agentPanel = window;
         window.Loaded += (_, _) => Position();
         window.SizeChanged += (_, _) => Position();
+        window.DpiChanged += (_, _) => window.Dispatcher.BeginInvoke(() => Position());
+        window.SourceInitialized += (_, _) =>
+        {
+            if (PresentationSource.FromVisual(window) is HwndSource source)
+                source.AddHook((nint _, int message, nint _, nint _, ref bool _) =>
+                {
+                    if (message is 0x001A or 0x007E)
+                        window.Dispatcher.BeginInvoke(() => { if (window.IsVisible) Position(); });
+                    return 0;
+                });
+        };
         window.PreviewKeyDown += (_, args) =>
         {
             if (args.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
@@ -575,6 +593,12 @@ public partial class DashboardWindow
             lifetime.Dispose();
             agentPanel = null;
             modalOpen = false;
+            if (controllerPid > 0 && !closed)
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (agentPanel == null && IsVisible && Opacity == 0)
+                        Hide();
+                }, System.Windows.Threading.DispatcherPriority.Background);
             if (returnFocus != null && !closed)
                 Dispatcher.BeginInvoke(() =>
                 {
@@ -604,7 +628,8 @@ public partial class DashboardWindow
             var area = TaskbarScreen().Bounds;
             var scale = VisualTreeHelper.GetDpi(window);
             var x = area.Left + (area.Width - window.ActualWidth * scale.DpiScaleX) / 2;
-            var y = Math.Max(area.Top, area.Bottom - (window.ActualHeight + 58) * scale.DpiScaleY);
+            var y = Math.Max(area.Top, DockTaskbar.AnchorTop(area, scale.DpiScaleY) -
+                (window.ActualHeight + 6) * scale.DpiScaleY);
             MoveWindowWithoutActivation(hwnd.Handle, (int)x, (int)y);
         }
     }

@@ -164,26 +164,18 @@ void TaskbarStyle::AddDashboardButton()
 {
     dashboardButton = controls::Button();
     dashboardButton.Name(L"WindowsDockDashboard");
-    dashboardButton.Width(34);
-    dashboardButton.Height(30);
+    dashboardButton.Width(40);
+    dashboardButton.Height(36);
     dashboardButton.Margin({7, 0, 4, 1});
     dashboardButton.Padding({0, 0, 0, 0});
-    dashboardButton.Background(Solid(33, 196, 174, 255));
-    dashboardButton.BorderBrush(Solid(52, 196, 174, 255));
-    dashboardButton.BorderThickness({1, 1, 1, 1});
+    dashboardButton.Background(Solid(0, 0, 0, 0));
+    dashboardButton.BorderThickness({0, 0, 0, 0});
     dashboardButton.CornerRadius({9, 9, 9, 9});
     dashboardButton.HorizontalAlignment(xaml::HorizontalAlignment::Center);
     dashboardButton.VerticalAlignment(xaml::VerticalAlignment::Center);
     dashboardButton.RequestedTheme(xaml::ElementTheme::Dark);
-    xaml::Automation::AutomationProperties::SetName(dashboardButton, L"Dock dashboard");
-    controls::ToolTipService::SetToolTip(dashboardButton, winrt::box_value(L"Dock dashboard"));
-
-    controls::TextBlock icon;
-    icon.Text(L"\u2726");
-    icon.FontSize(16);
-    icon.FontFamily(media::FontFamily(L"Segoe UI Symbol"));
-    icon.Foreground(Solid(255, 220, 204, 255));
-    dashboardButton.Content(icon);
+    xaml::Automation::AutomationProperties::SetName(dashboardButton, L"Open Windows Dock");
+    SetDashboardIcon();
     dashboardButton.Click([event = dashboard](auto&&, auto&&) { SetEvent(event); });
     dockControls = controls::Grid();
     dockControls.VerticalAlignment(xaml::VerticalAlignment::Center);

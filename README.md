@@ -1,12 +1,12 @@
 # Windows Dock
 
-Windows Dock styles Explorer's taskbar in place on Windows 11 x64 25H2 (build 26200). It centers the native app list, tray, and clock on one dark glass surface. The grid button opens a dashboard from the same screen edge. Native app switching, jump lists, window previews, Start, notifications, and Quick Settings remain Explorer features.
+Windows Dock styles Explorer's taskbar in place on Windows 11 x64 25H2 (build 26200). It centers the native app list, tray, and clock on one frosted glass surface. The Windows Dock button opens Widgets and the adjoining 2×2 grid shows live coding chat states. Native app switching, jump lists, window previews, Start, notifications, and Quick Settings remain Explorer features.
 
 ## Run the native dock
 
-Keep the contents of the native publish directory together and run NativeTaskbar.exe. Click the star beside the 2×2 chat grid to open the dashboard. Ctrl+Alt+D, the Windows Dock notification-area menu, and the dashboard's Settings page can restore the normal appearance. The console launcher also accepts `--restore <controller PID>`.
+Keep the contents of the native publish directory together and run NativeTaskbar.exe. Click the silver-and-amber Windows Dock icon on the taskbar to open Widgets. Use its top row to open Coding chats, Assistants, or the full Dashboard. Click the taskbar icon again to close Widgets. Use the Windows Dock notification-area menu, the dashboard's Settings page, or `--restore <controller PID>` to restore the normal appearance.
 
-Use only one taskbar appearance tool at a time. The native controller exits if it cannot find the expected taskbar layout. Explorer stays in charge of taskbar auto-hide and screen space. If Explorer restarts, run the controller again.
+Use one taskbar appearance module at a time. The native controller exits if it cannot find the expected taskbar layout. Panels open just above the taskbar. Windows Dock holds auto-hide off while a panel is open and restores the previous setting when the panel closes. If Explorer restarts, run the controller again.
 
 The dashboard opens on demand and exits about 20 seconds after hiding. A smaller background process keeps coding chat status and active focus timers current. An API key typed into the dashboard lasts until that process exits. Use the Windows environment variables below if you want the key available on subsequent opens.
 
@@ -14,7 +14,7 @@ The dashboard includes media sessions and volume, Windows settings shortcuts, a 
 
 ## Use with Hitodama
 
-With Windows Dock's native styling stopped, run `NativeTaskbar.exe --tray` to keep the dashboard and coding chats available while Hitodama styles the taskbar. The Windows Dock icon in the notification area shows the four chat states. Click it or press **Ctrl+Alt+D** to open Coding chats. Right-click the icon and choose **Dashboard and widgets** for the full panel. If the icon is hidden, open the tray overflow arrow.
+With Windows Dock's native styling stopped, run `NativeTaskbar.exe --tray` to keep the dashboard and coding chats available while Hitodama styles the taskbar. For a normal Windows taskbar pin in this mode, create a shortcut to `WindowsDock.exe --open` and pin it through Windows. That command opens Widgets and starts the companion controller if needed. **Ctrl+Alt+D** opens Coding chats in either mode.
 
 In either mode, **Ctrl+Alt+A** or **Open assistant** in the tray menu opens the 2×2 assistant picker. Use **1–4** to open a character, or search for their name with **Ctrl+K**. On battery, the controller sends Windows notifications at 25%, 20%, 15%, 10%, and 5%. Reconnecting power resets the alert sequence.
 
@@ -22,7 +22,7 @@ To switch back to Windows Dock's taskbar styling, exit tray mode from its icon, 
 
 ## Coding chats
 
-Hover over a square in the 2×2 grid beside the tray to see the chat and its status. Click the grid to open **Coding chats**. The panel brings an approval or recent reply to the front and keeps the chat list below it. **Assign slot** pins a chat, follows the latest matching chat in a project, or restores automatic selection. The grid reads local desktop metadata and turn events, so cloud-only chats may be missing.
+The four faces in the 2×2 taskbar grid change as chats work, finish, or need attention. Click a face to open **Coding chats**. The panel brings an approval or recent reply to the front and keeps the chat list below it. **Assign slot** pins a chat, follows the latest matching chat in a project, or restores automatic selection. The grid reads local desktop metadata and turn events, so cloud-only chats may be missing.
 
 Under **Connections and defaults**, enable the provider hooks for live updates. Turn on **Allow or deny individual requests here** before enabling the hooks if you want the dock to handle one-time tool approvals. Codex requires you to review the new hooks in **Settings → Hooks**. Start or resume a Claude Code session for the new settings to take effect. Each supported request shows its tool, working directory, and arguments. After 30 seconds the dock yields to the provider's own approval flow. The dock stores status metadata locally and removes the approval payload when the request ends.
 

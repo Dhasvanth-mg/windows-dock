@@ -226,6 +226,7 @@ public partial class DashboardWindow
     internal void OpenAgentGrid()
     {
         agentPanel?.Close();
+        SetDashboardSurface(true);
         compactAgents = true;
         agentSetup = false;
         showAgentList = true;

@@ -105,12 +105,10 @@ DockTray::~DockTray()
 
 void DockTray::Explain() const
 {
-    if (trayMode)
-        std::fputws(hasHotkey ? L"Press Ctrl+Alt+D or use the Windows Dock tray icon to open coding chats.\n"
-            : L"Use the Windows Dock tray icon to open coding chats.\n", stdout);
-    else
-        std::fputws(hasHotkey ? L"Press Ctrl+Alt+D or use the notification area icon to restore.\n"
-            : L"Use the notification area icon to restore.\n", stdout);
+    if (hasHotkey)
+        std::fputws(L"Press Ctrl+Alt+D to open coding chats.\n", stdout);
+    if (!trayMode)
+        std::fputws(L"Click the Windows Dock button on the taskbar to open widgets.\n", stdout);
     if (hasAssistantHotkey)
         std::fputws(L"Press Ctrl+Alt+A to open the assistant.\n", stdout);
 }
@@ -229,7 +227,7 @@ LRESULT CALLBACK DockTray::WindowProc(HWND window, UINT message, WPARAM wParam, 
 LRESULT DockTray::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
     if (message == WM_HOTKEY && wParam == DockHotkey)
-        SetEvent(trayMode ? chats : stop);
+        SetEvent(chats);
     else if (message == WM_HOTKEY && wParam == AssistantHotkey)
         SetEvent(assistant);
     else if (message == WM_TIMER && wParam == StatusTimer && grid)

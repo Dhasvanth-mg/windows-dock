@@ -86,12 +86,14 @@ public partial class DashboardWindow : Window
         {
             if (!IsVisible)
             {
+                ReportDockVisibility(false);
                 ticker.Stop();
                 if (releaseWhenIdle)
                     idleExit.Start();
                 return;
             }
             idleExit.Stop();
+            ReportDockVisibility(true);
             lastReveal = Environment.TickCount64;
             UpdateDashboard();
             if (currentPage is DashboardPage.Weather or DashboardPage.Home)
@@ -136,13 +138,14 @@ public partial class DashboardWindow : Window
         PreviewMouseDown += (_, _) => agentPanel?.Close();
         Deactivated += (_, _) => Dispatcher.BeginInvoke(() =>
         {
-            if (!closed && IsVisible && !IsActive && !modalOpen && Mouse.Captured == null &&
+            if (controllerPid == 0 && !closed && IsVisible && !IsActive && !modalOpen && Mouse.Captured == null &&
                 Environment.TickCount64 - lastReveal > 200)
                 Dismiss();
         });
         Closed += (_, _) =>
         {
             closed = true;
+            ReportDockVisibility(false);
             ticker.Stop();
             agentTicker.Stop();
             idleExit.Stop();
@@ -176,6 +179,36 @@ public partial class DashboardWindow : Window
             Hide();
         else
             Close();
+    }
+
+    internal void ShowDockPanelHost()
+    {
+        SetDashboardSurface(false);
+        if (!IsVisible)
+            Show();
+    }
+
+    internal void ToggleDockLauncher()
+    {
+        if (agentPanel is { Title: "Widgets", IsVisible: true })
+        {
+            Dismiss();
+            return;
+        }
+        ShowDockPanelHost();
+        ShowWidgets();
+    }
+
+    private void SetDashboardSurface(bool visible)
+    {
+        Opacity = visible ? 1 : 0;
+        IsHitTestVisible = visible;
+    }
+
+    private void ReportDockVisibility(bool visible)
+    {
+        if (controllerPid > 0)
+            DockTaskbar.ReportVisibility(controllerPid, visible);
     }
 
     private void AddTab(DashboardPage page, int icon, string label)
@@ -246,7 +279,8 @@ public partial class DashboardWindow : Window
         var screen = TaskbarScreen();
         var dpi = VisualTreeHelper.GetDpi(this);
         Width = Math.Min(compactAgents ? 506 : 1060, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
-        MaxHeight = Math.Max(200, screen.Bounds.Height / dpi.DpiScaleY - 64);
+        MaxHeight = Math.Max(200, (DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - screen.Bounds.Top) /
+            dpi.DpiScaleY - 12);
         DashboardHeader.Visibility = compactAgents ? Visibility.Collapsed : Visibility.Visible;
         HeaderClock.Visibility = Width < 580 ? Visibility.Collapsed : Visibility.Visible;
     }
@@ -264,7 +298,7 @@ public partial class DashboardWindow : Window
             var width = ActualWidth * dpi.DpiScaleX;
             var height = ActualHeight * dpi.DpiScaleY;
             var x = screen.Bounds.Left + (screen.Bounds.Width - width) / 2;
-            var bottom = screen.Bounds.Bottom - 51 * dpi.DpiScaleY;
+            var bottom = DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - 6 * dpi.DpiScaleY;
             MoveWindowWithoutActivation(source.Handle, (int)x, (int)Math.Max(screen.Bounds.Top, bottom - height));
         }
         finally { positioning = false; }
@@ -273,6 +307,7 @@ public partial class DashboardWindow : Window
     internal void OpenMainDashboard()
     {
         agentPanel?.Close();
+        SetDashboardSurface(true);
         if (!compactAgents && pageInitialized)
             return;
         compactAgents = false;

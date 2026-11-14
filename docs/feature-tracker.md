@@ -393,3 +393,21 @@
 - Outcome: Reran the requested skill and reviewed Astryx’s dark surfaces and interaction states. The picker uses a single black surface with neutral rules, plain shortcut numbers, and color in the portraits. Assistant chats and tools use the same black surface and neutral inputs, buttons, reply cards, and focus states. No change was made to native acrylic styling or Hitodama settings.
 - Verification: Release build, x64 publish, and Windows smoke checks passed. The harness checked opaque black picker and chat surfaces, neutral provider controls, and quick-action behavior. Inspected the picker, chat, and connection screenshots. The installed tray build exposed all four numbered chats and quick actions and opened Lark’s chat. The native taskbar binary hash and Hitodama processes matched before and after installation.
 - Remaining work: Alternate display scaling and high-contrast mode were not exercised live.
+
+#### Taskbar launcher and docked panels
+
+- Status: Built, verified, and running in native dock mode.
+- Scope: Make the dock accessible directly from the taskbar with a new icon. Replace hover-driven access and overlapping panels with a click-driven flow tied to taskbar visibility.
+- Acceptance criteria: The taskbar launcher opens the dock without the hidden-icons menu, the taskbar stays visible while the panel is in use, and panel navigation stays in one visible surface. Preserve the frosted taskbar styling and verify the launch and close behavior on Windows.
+- Outcome: The taskbar launcher uses a multiresolution silver-and-amber grid icon. It opens the black Widgets panel with direct access to Coding chats, Assistants, and Dashboard. Navigating into a panel hides the underlying dashboard surface. The taskbar stays visible while the dock is open and auto-hide resumes on close. Companion mode can open the launcher via `WindowsDock.exe --open` for a standard Windows taskbar shortcut.
+- Verification: The native Release build, x64 publish, and Windows widget smoke checks passed. In the installed native mode, UI Automation found the launcher and live taskbar grid, activated both, and verified that Widgets sits six pixels above the measured taskbar. Auto-hide changed from on to off while Widgets was open and returned to on after close. Hitodama's taskbar appearance was paused so the native dock could own the glass styling. Its app remained running, and the previous appearance rules were backed up locally.
+- Remaining work: A permanent pin in companion mode is a separate Windows shell action. It was not used for the installed native widget.
+
+##### Double-height taskbar and live grid
+
+- Status: Live grid built and verified. Double-height resize remains open.
+- Scope: Double the current taskbar height and place the live 2×2 chat widget on the main taskbar.
+- Acceptance criteria: The frosted bar and its reserved desktop space grow together. The grid displays live states and opens chats on click. Existing shell controls remain usable.
+- Outcome: The wider 2×2 status grid lives in Explorer's main taskbar beside the new launcher. Its four faces still follow live chat states and accept direct clicks. The taskbar uses the native acrylic material.
+- Verification: Windows exposed the live state of the first slot and opened Coding chats from a grid click. The tested Windows build held both the shell window and reserved taskbar height at 48 pixels after the resize probes.
+- Remaining work: Validate an Explorer sizing path that moves the shell window, XAML layout, and reserved desktop area together before shipping 96 pixels. Verify app overflow, shell flyouts, scaling, and auto-hide with the taller geometry.
