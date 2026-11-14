@@ -484,7 +484,8 @@ public partial class DashboardWindow
     }
 
     private (Window Window, StackPanel Content, CancellationToken Cancellation) CreateDockPanel(
-        string title, string subtitle, double width, int icon, SolidColorBrush tint, bool widget = false)
+        string title, string subtitle, double width, int icon, SolidColorBrush tint, bool widget = false,
+        Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null)
     {
         agentPanel?.Close();
         var returnFocus = FocusManager.GetFocusedElement(this) as FrameworkElement;
@@ -493,14 +494,14 @@ public partial class DashboardWindow
         var close = IconButton(0xE711, "Close " + title.ToLowerInvariant(), () => agentPanel?.Close());
         DockPanel.SetDock(close, Dock.Right);
         header.Children.Add(close);
-        if (widget)
+        if (widget || backAction != null)
         {
-            var back = IconButton(0xE76B, "Back to widgets", ShowWidgets);
+            var back = IconButton(0xE76B, backLabel, backAction ?? ShowWidgets);
             back.Margin = new Thickness(0, 0, 4, 0);
             header.Children.Add(back);
         }
         var heading = new DockPanel { VerticalAlignment = VerticalAlignment.Center };
-        var badge = GlyphBadge(icon, tint, 33);
+        var badge = portrait ?? GlyphBadge(icon, tint, 33);
         badge.Margin = new Thickness(0, 0, 9, 0);
         heading.Children.Add(badge);
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };

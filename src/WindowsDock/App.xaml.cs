@@ -64,7 +64,7 @@ public partial class App : Application
                         current.OpenAgentGrid();
                         current.Show();
                     }
-                    current.ShowAssistantWidget();
+                    current.ShowAssistantPicker();
                 }
             }
         }
@@ -98,6 +98,8 @@ internal static class DockEntryPoint
     {
         if (args is ["--monitor", var controller] && int.TryParse(controller, out var pid) && pid > 0)
             return DockMonitor.Run(pid);
+        if (args is ["--planner-mcp"])
+            return PlannerMcp.Run();
         if (args is ["--agent-status", _] or ["--agent-status", _, "--approval"])
         {
             try { AgentSessions.Receive(args[1], Console.In, Console.Out, args.Length == 3); }

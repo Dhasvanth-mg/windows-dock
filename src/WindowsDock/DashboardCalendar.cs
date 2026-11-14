@@ -357,5 +357,4 @@ public partial class DashboardWindow
         }
     }
 
-    private sealed record Reminder(string Title, DateTime Date);
 }

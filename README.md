@@ -16,7 +16,7 @@ The dashboard includes media sessions and volume, Windows settings shortcuts, a 
 
 With Windows Dock's native styling stopped, run `NativeTaskbar.exe --tray` to keep the dashboard and coding chats available while Hitodama styles the taskbar. The Windows Dock icon in the notification area shows the four chat states. Click it or press **Ctrl+Alt+D** to open Coding chats. Right-click the icon and choose **Dashboard and widgets** for the full panel. If the icon is hidden, open the tray overflow arrow.
 
-In either mode, **Ctrl+Alt+A** or **Open assistant** in the tray menu opens the compact assistant. On battery, the controller sends Windows notifications at 25%, 20%, 15%, 10%, and 5%. Reconnecting power resets the alert sequence.
+In either mode, **Ctrl+Alt+A** or **Open assistant** in the tray menu opens the 2×2 assistant picker. Use **1–4** to open a character, or search for their name with **Ctrl+K**. On battery, the controller sends Windows notifications at 25%, 20%, 15%, 10%, and 5%. Reconnecting power resets the alert sequence.
 
 To switch back to Windows Dock's taskbar styling, exit tray mode from its icon, turn off Hitodama's taskbar appearance, and launch `NativeTaskbar.exe` without arguments. Hitodama's assistant can run in either mode.
 
@@ -46,7 +46,16 @@ Choose **Widgets** from the dashboard or the compact Coding chats panel. Star a 
 - **Downloads** shows recent files and partial browser downloads from the Downloads folder, alongside Windows background transfers. Browser progress is limited to what the partial files expose.
 - **Focus timer** runs locally. **Windows Focus** opens the system controls for a focus session with Do Not Disturb.
 - **Notifications** reads recent Windows alerts when access is allowed. Select alerts and review the draft before sending it to Gemini or Groq.
-- **Assistant** has separate conversations for Research, Housekeeping, Coding, and Casual chat. Choose **ChatGPT plan** and continue in your browser to authorize eligible plan usage. **Claude API** uses a Claude Console key. Gemini, Grok, and Groq use their own API keys. Configure them in the panel or with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or `GROQ_API_KEY`. On a usage error, you can switch to Gemini or Grok and resend the draft. Each send shares the current role's recent conversation with the selected provider.
+- **Assistant** opens Vega, Miso, Patch, and Fizz. Choose **ChatGPT plan** and continue in your browser to authorize eligible plan usage. **Claude API** uses a Claude Console key. Gemini, Grok, and Groq use their own API keys. Configure them in the panel or with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or `GROQ_API_KEY`. On a usage error, you can switch to Gemini or Grok and resend the draft. Each send shares the current character's recent conversation with the selected provider.
+
+### Assistant connections
+
+- **Vega** researches claims and comparisons with Exa web search.
+- **Miso** helps plan your day with a local MCP connection to dock reminders and the imported calendar. Calendar join links stay out of the result.
+- **Patch** debugs and reviews code with Microsoft Learn. Set `GITHUB_MCP_TOKEN` to a token allowed to read your pull requests, then enable the read-only GitHub PR reader. Enter a PR as `owner/repository#123`.
+- **Fizz** is for conversation and brainstorming.
+
+Open **MCP connections** inside a character's chat. **Fetch context** runs the selected read and shows a preview. **Attach to draft** adds the selected result to your next explicit send. The dock manages these connections and the model receives only the result you attach. Close the panel to cancel an in-progress read.
 
 In **Weather**, choose **Use my location** for automatic forecasts, or search for a city. The automatic option requests Windows location access and sends rounded coordinates to Open-Meteo when refreshing the forecast.
 

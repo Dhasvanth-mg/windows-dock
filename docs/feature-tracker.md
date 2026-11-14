@@ -340,3 +340,20 @@
 - Acceptance criteria: Use the official ChatGPT plan grant and keep Claude Console billing separate from Claude Pro.
 - Outcome: Official documentation confirms plan usage through Sign in with ChatGPT for eligible accounts. Anthropic directs third-party apps to Claude Console API keys and does not permit reuse of Claude Pro credentials.
 - Remaining work: The owner's browser consent and a live response will verify plan eligibility on this installation.
+
+### Named assistants and role-specific MCP connections
+
+- Status: Built and running in tray mode. Three MCP connections verified live.
+- Scope: Give the four dock assistants distinct voices and useful, independently configurable MCP connections.
+- Acceptance criteria: Each assistant has its own name, style, and starter prompts. MCP tools are discoverable and callable from the selected assistant only. Show the user which connections are available and keep casual chat tool-free by default.
+- Outcome: Vega uses a skeptical research voice and Exa web search. Miso uses a practical organizing voice and privately reads dock reminders and the imported calendar through a local, read-only MCP server. Patch uses a direct debugging voice and can query Microsoft Learn and the optional read-only GitHub PR server. Fizz stays conversational with no connections. Connection settings are per role. Each result can be previewed, attached to a draft, and removed before sending to the selected model.
+- Verification: The Windows Release build and x64 publish passed. Live MCP discovery and calls succeeded on Exa, Microsoft Learn, and the local planner. The WPF smoke harness verified no tools for Fizz, separate drafts, the planner preview and attachment path, direct search by persona name, and all twelve launcher routes. The installed tray build opened Patch and its MCP connection selector while Hitodama reported active styling.
+- Remaining work: GitHub PR access requires a user-supplied `GITHUB_MCP_TOKEN` and a live PR check. A model response using attached context needs a signed-in plan or configured provider key. This flow uses user-initiated reads and reviewable attachments.
+
+#### Quick personality grid
+
+- Status: Built, verified, and running in tray mode.
+- Scope: Add a compact 2×2 assistant picker with distinct character art and a fast route into each role.
+- Acceptance criteria: All four assistants are identifiable by name and appearance. Selecting a tile opens that role directly and preserves its draft. The grid works from the existing assistant shortcut and tray mode.
+- Outcome: Ctrl+Alt+A, the tray Assistant entry, and the Assistant widget open the centered 2×2 picker. Each character has original pixel art, its own color, and a one-click route into its chat. The picker supports keys 1 through 4, arrow navigation, and Esc.
+- Verification: Inspected the Windows picker and chat renders. The installed shortcut opened all four tiles, and selecting Patch opened its chat. The smoke harness checked separate drafts as it switched between characters and reopened the picker.

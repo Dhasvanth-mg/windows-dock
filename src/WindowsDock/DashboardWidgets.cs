@@ -137,7 +137,7 @@ public partial class DashboardWindow
         new("Downloads", "Files and transfers", "queue transfers files", 0xE896, accent, ShowDownloadWidget, "downloads"),
         new("Focus timer", "Sessions and breaks", "timer break do not disturb", 0xE916, green, ShowFocusWidget, "focus"),
         new("Notifications", "Review and summarize alerts", "alerts summary digest", 0xEA8F, pink, ShowNotificationWidget, "notifications"),
-        new("Assistant", "Choose a role and chat", "AI model provider message", 0xEAB7, purple, ShowAssistantWidget, "assistant"),
+        new("Assistant", "Vega, Miso, Patch, and Fizz", "AI model provider message research coding casual", 0xEAB7, purple, ShowAssistantPicker, "assistant"),
         new("Activity inbox", "Replies, approvals, and limits", "unread status finished quota", 0xEA8F, pink, ShowActivityInbox, "activity")
     ];
 
@@ -207,6 +207,13 @@ public partial class DashboardWindow
             options.Add(new(label, "Dashboard", "dock page", 0xECAA, purple, () => OpenWidgetPage(page)));
         }
         options.Add(new("Token usage", "Coding chats", "quota tokens reset Claude Codex", 0xE9D9, accent, ShowAgentUsage));
+        for (var index = 0; index < AssistantPersonas.All.Length; index++)
+        {
+            var slot = index;
+            var persona = AssistantPersonas.All[slot];
+            options.Add(new(persona.Name, persona.Role, $"assistant {persona.Role}", 0xEAB7,
+                PersonaTint(persona), () => OpenAssistantConversation(slot)));
+        }
         foreach (var chat in RankedSessions(pendingApprovals).Take(40))
         {
             var provider = ProviderName(chat.Provider);
