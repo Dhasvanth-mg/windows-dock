@@ -246,3 +246,12 @@
 - Scope: Complete the queued native dock, coding chat, weather, and widget work, then publish a tested Windows build.
 - Acceptance criteria: Build and launch the native dock, smoke-test new UI flows, record remaining provider constraints, and push the commits.
 - Outcome: Release C++ and .NET builds passed. The native controller and dashboard loaded, and repeated native signals switched between the compact chat list and full dashboard. The installed build uses the existing native publish directory.
+
+### Playful dock and panel refresh
+
+- Status: Built and running locally. Release builds and panel smoke tests passed.
+- Scope: Give the dock and its panels a more playful visual identity, with expressive agent tiles and a more distinctive widget launcher.
+- Acceptance criteria: Preserve the compact 2×2 grid and native tray behavior. Make common actions easy to spot and keep status readable through shapes, labels, and reduced-motion behavior.
+- Outcome: Added original pixel faces and state-specific motion to the agent grid, with static alternatives for reduced motion and high contrast. The chat panel now highlights the selected chat, its status, and its actions. The widget launcher groups actions into labeled tiles under a search field. The native dock and panels share a plum and lavender palette.
+- Verification: The Release native and self-contained dashboard builds passed. Nine WPF panels opened and rendered, and the chat and widget previews were inspected. Explorer loaded the refreshed module, the four grid slots received live chat data, and native dock signals opened both centered panel sizes and switched back to the compact chat view.
+- Remaining work: Inspect the native hover animation and high-contrast appearance on the physical desktop.

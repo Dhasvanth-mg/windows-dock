@@ -30,7 +30,7 @@ namespace
         brush.StartPoint({0, 0});
         brush.EndPoint({0, 1});
         for (const auto [position, color] : std::initializer_list<std::pair<double, Color>>{
-            {0.0, {84, 255, 255, 255}}, {0.42, {31, 255, 255, 255}}, {1.0, {54, 255, 255, 255}}})
+            {0.0, {105, 207, 188, 252}}, {0.46, {33, 163, 147, 208}}, {1.0, {64, 174, 200, 240}}})
         {
             media::GradientStop stop;
             stop.Offset(position);
@@ -131,16 +131,16 @@ void TaskbarStyle::AddChrome()
     chrome = controls::Border();
     chrome.Name(L"WindowsDockGlass");
     chrome.IsHitTestVisible(false);
-    chrome.CornerRadius({16, 16, 16, 16});
+    chrome.CornerRadius({18, 18, 18, 18});
     chrome.Margin({0, 2, 0, 4});
     chrome.BorderThickness({1, 1, 1, 1});
     chrome.BorderBrush(Rim());
     media::AcrylicBrush glass;
     glass.BackgroundSource(media::AcrylicBackgroundSource::Backdrop);
-    glass.TintColor(Color{255, 10, 11, 13});
+    glass.TintColor(Color{255, 18, 15, 27});
     glass.TintOpacity(0.83);
     glass.TintLuminosityOpacity(0.10);
-    glass.FallbackColor(Color{246, 14, 15, 17});
+    glass.FallbackColor(Color{246, 22, 19, 32});
     chrome.Background(glass);
 
     Grid::SetColumn(chrome, 1);
@@ -154,7 +154,7 @@ void TaskbarStyle::AddChrome()
     divider.HorizontalAlignment(xaml::HorizontalAlignment::Left);
     divider.VerticalAlignment(xaml::VerticalAlignment::Center);
     divider.Margin({1, 0, 0, 0});
-    divider.Background(Solid(50, 255, 255, 255));
+    divider.Background(Solid(57, 191, 169, 245));
     divider.IsHitTestVisible(false);
     Grid::SetColumn(divider, 2);
     root.Children().Append(divider);
@@ -168,20 +168,21 @@ void TaskbarStyle::AddDashboardButton()
     dashboardButton.Height(30);
     dashboardButton.Margin({7, 0, 4, 1});
     dashboardButton.Padding({0, 0, 0, 0});
-    dashboardButton.Background(Solid(29, 255, 255, 255));
-    dashboardButton.BorderThickness({0, 0, 0, 0});
-    dashboardButton.CornerRadius({8, 8, 8, 8});
+    dashboardButton.Background(Solid(33, 196, 174, 255));
+    dashboardButton.BorderBrush(Solid(52, 196, 174, 255));
+    dashboardButton.BorderThickness({1, 1, 1, 1});
+    dashboardButton.CornerRadius({9, 9, 9, 9});
     dashboardButton.HorizontalAlignment(xaml::HorizontalAlignment::Center);
     dashboardButton.VerticalAlignment(xaml::VerticalAlignment::Center);
     dashboardButton.RequestedTheme(xaml::ElementTheme::Dark);
     xaml::Automation::AutomationProperties::SetName(dashboardButton, L"Dock dashboard");
     controls::ToolTipService::SetToolTip(dashboardButton, winrt::box_value(L"Dock dashboard"));
 
-    controls::FontIcon icon;
-    icon.FontFamily(media::FontFamily(L"Segoe Fluent Icons"));
-    icon.Glyph(L"\uE80A");
-    icon.FontSize(14);
-    icon.Foreground(Solid(242, 255, 255, 255));
+    controls::TextBlock icon;
+    icon.Text(L"\u2726");
+    icon.FontSize(16);
+    icon.FontFamily(media::FontFamily(L"Segoe UI Symbol"));
+    icon.Foreground(Solid(255, 220, 204, 255));
     dashboardButton.Content(icon);
     dashboardButton.Click([event = dashboard](auto&&, auto&&) { SetEvent(event); });
     dockControls = controls::Grid();
@@ -302,7 +303,8 @@ void TaskbarStyle::FitApps()
     {
         const auto tray = trayFrame.get();
         const auto trayWidth = tray ? tray.ActualWidth() : 0;
-        const auto maxWidth = std::max(120.0, root.ActualWidth() - trayWidth - (agentState ? 128.0 : 88.0));
+        const auto controlsWidth = std::max(dockControls.ActualWidth(), agentTray ? 95.0 : 45.0);
+        const auto maxWidth = std::max(120.0, root.ActualWidth() - trayWidth - controlsWidth - 38.0);
         if (apps.MaxWidth() != maxWidth)
             Set(apps, FrameworkElement::MaxWidthProperty(), maxWidth);
     }

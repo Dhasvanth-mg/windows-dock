@@ -15,51 +15,105 @@ public partial class DashboardWindow
 
     private void ShowWidgets()
     {
-        var (window, content, _) = CreateAgentPanel("Widgets", "", 466);
-        var search = WidgetButton("Search apps and actions", 0xE721, ShowCommandPalette);
-        search.HorizontalAlignment = HorizontalAlignment.Stretch;
-        search.Margin = new Thickness(0, 0, 0, 9);
-        content.Children.Add(search);
-        var items = new System.Windows.Controls.Primitives.UniformGrid { Columns = 2 };
-        foreach (var (label, _, icon, action) in WidgetActions(window))
+        var (window, content, _) = CreateAgentPanel("Widgets", "", 492);
+        var searchRow = new DockPanel();
+        var keyboard = new Border
         {
-            var button = WidgetButton(label, icon, action);
-            button.HorizontalAlignment = HorizontalAlignment.Stretch;
-            button.MinHeight = 34;
-            button.Margin = new Thickness(2, 0, 2, 5);
+            Background = Brush("#25150E22"), BorderBrush = Brush("#46D9C3FF"), BorderThickness = new Thickness(1),
+            Padding = new Thickness(6, 2, 6, 2), CornerRadius = new CornerRadius(4), Child = Text("Ctrl+K", 10, purple, true)
+        };
+        DockPanel.SetDock(keyboard, Dock.Right);
+        searchRow.Children.Add(keyboard);
+        searchRow.Children.Add(IconLabel("Search apps and actions", 0xE721, purple));
+        var search = MakeButton(searchRow, "Search apps and actions", ShowCommandPalette);
+        search.HorizontalAlignment = HorizontalAlignment.Stretch;
+        search.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        search.Background = Brush("#202C2341");
+        search.BorderBrush = Brush("#40CAB4FF");
+        search.Margin = new Thickness(0, 0, 0, 10);
+        content.Children.Add(search);
+        var items = new Grid();
+        items.ColumnDefinitions.Add(new ColumnDefinition());
+        items.ColumnDefinitions.Add(new ColumnDefinition());
+        var row = 0;
+        var column = 0;
+        foreach (var widget in WidgetActions(window))
+        {
+            if (widget.Wide && column != 0)
+            {
+                row++;
+                column = 0;
+            }
+            if (column == 0)
+                items.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var button = WidgetTile(widget);
+            Grid.SetRow(button, row);
+            Grid.SetColumn(button, column);
+            Grid.SetColumnSpan(button, widget.Wide ? 2 : 1);
+            button.Margin = widget.Wide ? new Thickness(0, 0, 0, 6) :
+                column == 0 ? new Thickness(0, 0, 3, 6) : new Thickness(3, 0, 0, 6);
             items.Children.Add(button);
+            if (widget.Wide || column == 1)
+            {
+                row++;
+                column = 0;
+            }
+            else
+                column++;
         }
         content.Children.Add(items);
+        window.PreviewKeyDown += (_, args) =>
+        {
+            if (args.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                args.Handled = true;
+                ShowCommandPalette();
+            }
+        };
         window.Show();
     }
 
-    private (string Label, string Keywords, int Icon, Action Action)[] WidgetActions(Window? from = null) =>
+    private WidgetAction[] WidgetActions(Window? from = null) =>
     [
-        ("Audio switchboard", "music media volume speakers headphones", 0xE767, () => OpenWidgetPage(DashboardPage.Media, from)),
-        ("Meetings", "calendar schedule join", 0xE787, ShowMeetingWidget),
-        ("Clipboard and files", "shelf snippets paste screenshots", 0xE77F, ShowClipboardWidget),
-        ("GitHub checks", "CI pull requests review build", 0xE73E, ShowGitHubWidget),
-        ("Workspace shortcuts", "projects launch folder editor", 0xE8B7, ShowWorkspaceWidget),
-        ("Downloads", "queue transfers files", 0xE896, ShowDownloadWidget),
-        ("Focus timer", "timer break do not disturb", 0xE916, () => OpenWidgetPage(DashboardPage.Calendar, from)),
-        ("Notifications", "alerts summary digest", 0xE7F4, ShowNotificationWidget)
+        new("Audio switchboard", "Outputs, app mixer, and playback", "music media volume speakers headphones",
+            0xE767, purple, () => OpenWidgetPage(DashboardPage.Media, from), Wide: true),
+        new("Meetings", "Upcoming calls", "calendar schedule join", 0xE787, accent, ShowMeetingWidget),
+        new("Clipboard and files", "Pinned and recent items", "shelf snippets paste screenshots", 0xE77F, green, ShowClipboardWidget),
+        new("GitHub checks", "Builds and reviews", "CI pull requests review build", 0xE73E, purple, ShowGitHubWidget),
+        new("Workspace shortcuts", "Open a project setup", "projects launch folder editor", 0xE8B7, amber, ShowWorkspaceWidget),
+        new("Downloads", "Files and transfers", "queue transfers files", 0xE896, accent, ShowDownloadWidget),
+        new("Focus timer", "Sessions and breaks", "timer break do not disturb", 0xE916, green,
+            () => OpenWidgetPage(DashboardPage.Calendar, from)),
+        new("Notifications", "Review alerts and summarize them", "alerts summary digest", 0xEA8F, Brush("#F4A6D4"), ShowNotificationWidget, Wide: true)
     ];
 
-    private Button WidgetButton(string label, int icon, Action action)
+    private Button WidgetTile(WidgetAction widget)
     {
-        var line = new DockPanel { HorizontalAlignment = HorizontalAlignment.Stretch };
-        var symbol = Text(char.ConvertFromUtf32(icon), 13, accent);
-        symbol.FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets");
-        symbol.Width = 25;
-        symbol.VerticalAlignment = VerticalAlignment.Center;
-        line.Children.Add(symbol);
-        var name = Text(label, 12, strong: true);
-        name.VerticalAlignment = VerticalAlignment.Center;
-        line.Children.Add(name);
-        var button = MakeButton(line, label, action);
+        var line = new DockPanel();
+        if (widget.Wide)
+        {
+            var arrow = DockGlyph(0xE76C, 12, widget.Color);
+            DockPanel.SetDock(arrow, Dock.Right);
+            line.Children.Add(arrow);
+        }
+        var icon = DockGlyph(widget.Icon, 15, widget.Color);
+        icon.HorizontalAlignment = HorizontalAlignment.Center;
+        line.Children.Add(new Border
+        {
+            Width = 31, Height = 31, CornerRadius = new CornerRadius(9), Margin = new Thickness(0, 0, 8, 0),
+            Background = AgentArt.Wash(widget.Color, 32), Child = icon, VerticalAlignment = VerticalAlignment.Center
+        });
+        var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        labels.Children.Add(Text(widget.Label, 12, strong: true));
+        var detail = Text(widget.Detail, 10.5, subdued);
+        detail.Margin = new Thickness(0, 2, 0, 0);
+        labels.Children.Add(detail);
+        line.Children.Add(labels);
+        var button = MakeButton(line, widget.Label, widget.Action);
         button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        button.Background = Brush("#10FFFFFF");
-        button.BorderBrush = Brush("#16FFFFFF");
+        button.Background = AgentArt.Wash(widget.Color, widget.Wide ? (byte)23 : (byte)12);
+        button.BorderBrush = AgentArt.Wash(widget.Color, widget.Wide ? (byte)55 : (byte)35);
+        button.Padding = new Thickness(8, 5, 9, 5);
         return button;
     }
 
@@ -67,7 +121,10 @@ public partial class DashboardWindow
     {
         from?.Close();
         if (compactAgents)
-            OpenMainDashboard();
+        {
+            compactAgents = false;
+            ConfigureWidth();
+        }
         if (page == DashboardPage.Calendar)
             showReminders = false;
         if (page == DashboardPage.Media)
@@ -139,6 +196,9 @@ public partial class DashboardWindow
                 list.Children.Add(Text("No matches.", 11, subdued));
         }
     }
+
+    private sealed record WidgetAction(string Label, string Detail, string Keywords, int Icon,
+        SolidColorBrush Color, Action Action, bool Wide = false);
 
     private static IEnumerable<(string Label, string Path)> InstalledAppShortcuts()
     {

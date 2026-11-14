@@ -1,20 +1,26 @@
 #include "Connection.h"
+#include "AgentFaces.h"
+#include <robuffer.h>
 #include <winrt/base.h>
 #undef GetCurrentTime
 #include "TaskbarStyle.h"
 
-#include <winrt/Windows.UI.ViewManagement.h>
+#include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Media.Imaging.h>
+#include <array>
+#include <charconv>
 #include <cstring>
 #include <cwchar>
 #include <iterator>
+#include <sstream>
 
 namespace
 {
     namespace motion = xaml::Media::Animation;
     enum AgentVisual : int32_t
     {
-        Recent, Ready, Working, Approval, Finished, Failed, Interrupted, QuotaReached
+        Recent, Ready, Working, Approval, Finished, Failed, Interrupted, QuotaReached, Unassigned
     };
 
     xaml::Media::SolidColorBrush AgentBrush(uint8_t a, uint8_t r, uint8_t g, uint8_t b)
@@ -22,28 +28,130 @@ namespace
         return xaml::Media::SolidColorBrush(winrt::Windows::UI::Color{a, r, g, b});
     }
 
-    struct AgentLook
+    struct AgentMood
     {
         const wchar_t* label;
-        const wchar_t* face;
-        uint8_t r, g, b;
+        const wchar_t* symbol;
     };
 
-    AgentLook TileLook(AgentGridTile const& tile)
+    constexpr AgentMood agentMoods[] =
     {
-        if (!tile.provider)
-            return {L"Unassigned", L"\u00B7", 116, 123, 139};
-        switch (tile.state)
+        {L"Recent", L"\u00B7\u00B7"}, {L"Ready", L"\u25CB"}, {L"Working", L"\u2022\u2022"},
+        {L"Needs approval", L"!"}, {L"Reply ready", L"\u2713"}, {L"Failed", L"\u00D7"},
+        {L"Interrupted", L"\u2016"}, {L"Limit reached", L"\u2212"}, {L"Unassigned", L"+"}
+    };
+
+    struct Sprite
+    {
+        uint32_t color{0xCAB4FF};
+        std::array<std::string, 12> rows{};
+    };
+
+    auto LoadSprites()
+    {
+        constexpr std::array<std::string_view, 9> names{
+            "Recent", "Ready", "Working", "Attention", "Finished", "Failed", "Interrupted", "QuotaReached", "Unassigned"
+        };
+        std::array<Sprite, names.size()> sprites;
+        std::istringstream source{std::string(AgentFaceArt)};
+        std::string name, color;
+        for (size_t i = 0; i < names.size(); ++i)
         {
-        case Ready: return {L"Ready", L"\u2022\u2022", 190, 179, 249};
-        case Working: return {L"Working", L"\u2022\u2022", 119, 190, 255};
-        case Approval: return {L"Needs approval", L"!", 255, 195, 111};
-        case Finished: return {L"Reply ready", L"\u2713", 121, 226, 182};
-        case Failed: return {L"Failed", L"\u00D7", 255, 132, 149};
-        case Interrupted: return {L"Interrupted", L"\u2212", 167, 175, 195};
-        case QuotaReached: return {L"Limit reached", L"\u2212", 255, 126, 155};
-        default: return {L"Recent", L"\u2022\u2022", 172, 183, 206};
+            auto& sprite = sprites[i];
+            source >> name >> color;
+            const auto parsed = std::from_chars(color.data(), color.data() + color.size(), sprite.color, 16);
+            if (name != names[i] || parsed.ec != std::errc{} || parsed.ptr != color.data() + color.size())
+                winrt::throw_hresult(E_INVALIDARG);
+            for (auto& row : sprite.rows)
+                if (!(source >> row) || row.size() != 16)
+                    winrt::throw_hresult(E_INVALIDARG);
         }
+        return sprites;
+    }
+
+    xaml::Media::ImageSource MakeAgentSprite(Sprite const& sprite, int scale)
+    {
+        const int width = 16 * scale;
+        xaml::Media::Imaging::WriteableBitmap bitmap(width, 12 * scale);
+        byte* buffer{};
+        winrt::check_hresult(bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>()->Buffer(&buffer));
+        const auto tint = 0xFF000000u | sprite.color;
+        auto pixels = reinterpret_cast<uint32_t*>(buffer);
+        for (int y = 0; y < 12 * scale; ++y)
+        {
+            for (int x = 0; x < width; ++x)
+            {
+                const char pixel = sprite.rows[y / scale][x / scale];
+                pixels[y * width + x] = pixel == '#' ? tint : pixel == 'o' ? 0xFF201C2E :
+                    pixel == '+' ? 0xFFFFF1D9 : 0;
+            }
+        }
+        bitmap.Invalidate();
+        return bitmap;
+    }
+
+    void SetAgentPreview(controls::Button const& button, AgentGridTile const& tile, AgentMood const& mood,
+        xaml::Media::ImageSource const& art, xaml::Media::SolidColorBrush const& tint)
+    {
+        controls::ToolTip tooltip;
+        tooltip.Placement(controls::Primitives::PlacementMode::Top);
+        controls::StackPanel preview;
+        preview.Orientation(controls::Orientation::Horizontal);
+        if (art)
+        {
+            controls::Image face;
+            face.Source(art);
+            face.Width(32);
+            face.Height(24);
+            face.Margin({0, 0, 9, 0});
+            preview.Children().Append(face);
+        }
+        controls::StackPanel lines;
+        lines.MaxWidth(258);
+        controls::TextBlock title;
+        title.Text(*tile.title ? tile.title : L"Unassigned slot");
+        title.FontWeight(winrt::Windows::UI::Text::FontWeight{600});
+        title.TextWrapping(xaml::TextWrapping::Wrap);
+        lines.Children().Append(title);
+        controls::TextBlock detail;
+        const auto provider = tile.provider == 1 ? L"Claude Code" : L"Codex";
+        detail.Text(tile.provider ? std::wstring(provider) + L"  \u00B7  " + mood.label :
+            *tile.title ? L"Waiting for a matching chat" : L"Click to view chats");
+        if (tint)
+            detail.Foreground(tint);
+        lines.Children().Append(detail);
+        if (tile.provider && *tile.step)
+        {
+            controls::TextBlock step;
+            step.Text(tile.step);
+            step.FontSize(11);
+            step.TextWrapping(xaml::TextWrapping::Wrap);
+            lines.Children().Append(step);
+        }
+        preview.Children().Append(lines);
+        tooltip.Content(preview);
+        controls::ToolTipService::SetToolTip(button, tooltip);
+    }
+
+    void MoveAgentPart(motion::Storyboard const& storyboard, xaml::DependencyObject const& part,
+        wchar_t const* property, double start, double end, int duration, bool repeat)
+    {
+        motion::DoubleAnimation animation;
+        animation.From(start);
+        animation.To(end);
+        animation.Duration({std::chrono::milliseconds(duration), xaml::DurationType::TimeSpan});
+        animation.AutoReverse(repeat);
+        if (repeat)
+            animation.RepeatBehavior({0, {}, motion::RepeatBehaviorType::Forever});
+        else
+        {
+            motion::QuadraticEase ease;
+            ease.EasingMode(motion::EasingMode::EaseOut);
+            animation.EasingFunction(ease);
+        }
+        motion::Storyboard::SetTarget(animation, part);
+        motion::Storyboard::SetTargetProperty(animation, property);
+        storyboard.Children().Append(animation);
     }
 }
 
@@ -53,7 +161,7 @@ void TaskbarStyle::AddAgentGrid()
         return;
 
     controls::Grid grid;
-    grid.Margin({0, 0, 6, 1});
+    grid.Margin({2, 1, 2, 1});
     grid.VerticalAlignment(xaml::VerticalAlignment::Center);
     grid.HorizontalAlignment(xaml::HorizontalAlignment::Center);
     grid.Name(L"WindowsDockCodingAgents");
@@ -61,10 +169,10 @@ void TaskbarStyle::AddAgentGrid()
     for (int index = 0; index < 2; ++index)
     {
         controls::RowDefinition row;
-        row.Height({16, xaml::GridUnitType::Pixel});
+        row.Height({18, xaml::GridUnitType::Pixel});
         grid.RowDefinitions().Append(row);
         controls::ColumnDefinition column;
-        column.Width({19, xaml::GridUnitType::Pixel});
+        column.Width({21, xaml::GridUnitType::Pixel});
         grid.ColumnDefinitions().Append(column);
     }
 
@@ -72,24 +180,32 @@ void TaskbarStyle::AddAgentGrid()
     {
         controls::Button button;
         button.Name(L"WindowsDockAgentSlot" + std::to_wstring(index + 1));
-        button.Width(17);
-        button.Height(15);
+        button.Width(20);
+        button.Height(17);
         button.MinWidth(0);
         button.MinHeight(0);
         button.Padding({0, 0, 0, 0});
         button.BorderThickness({0, 0, 0, 0});
-        button.CornerRadius({4, 4, 4, 4});
+        button.CornerRadius({5, 5, 5, 5});
         button.HorizontalAlignment(xaml::HorizontalAlignment::Center);
         button.VerticalAlignment(xaml::VerticalAlignment::Center);
         button.HorizontalContentAlignment(xaml::HorizontalAlignment::Center);
         button.VerticalContentAlignment(xaml::VerticalAlignment::Center);
         button.RequestedTheme(xaml::ElementTheme::Dark);
-        controls::TextBlock face;
-        face.FontFamily(xaml::Media::FontFamily(L"Segoe UI Variable Text"));
-        face.FontSize(10);
-        face.IsHitTestVisible(false);
-        face.VerticalAlignment(xaml::VerticalAlignment::Center);
-        button.Content(face);
+        controls::Grid character;
+        character.IsHitTestVisible(false);
+        character.RenderTransform(xaml::Media::TranslateTransform());
+        controls::Image face;
+        face.Width(16);
+        face.Height(12);
+        face.Stretch(xaml::Media::Stretch::Fill);
+        character.Children().Append(face);
+        controls::TextBlock symbol;
+        symbol.FontSize(11);
+        symbol.HorizontalAlignment(xaml::HorizontalAlignment::Center);
+        symbol.VerticalAlignment(xaml::VerticalAlignment::Center);
+        character.Children().Append(symbol);
+        button.Content(character);
         controls::Grid::SetRow(button, index / 2);
         controls::Grid::SetColumn(button, index % 2);
         button.Click([this, index](auto&&, auto&&)
@@ -105,10 +221,17 @@ void TaskbarStyle::AddAgentGrid()
         });
         grid.Children().Append(button);
         agentButtons[index] = button;
+        agentCharacters[index] = character;
         agentFaces[index] = face;
+        agentSymbols[index] = symbol;
     }
-    controls::Grid::SetColumn(grid, 1);
-    dockControls.Children().Append(grid);
+    agentTray = controls::Border();
+    agentTray.BorderThickness({1, 1, 1, 1});
+    agentTray.CornerRadius({10, 10, 10, 10});
+    agentTray.Margin({0, 0, 6, 1});
+    agentTray.Child(grid);
+    controls::Grid::SetColumn(agentTray, 1);
+    dockControls.Children().Append(agentTray);
     RefreshAgentGrid();
 
     agentTimer = xaml::DispatcherTimer();
@@ -122,70 +245,115 @@ void TaskbarStyle::AddAgentGrid()
 
 void TaskbarStyle::RefreshAgentGrid()
 {
+    static const auto sprites = LoadSprites();
+    const auto now = GetTickCount64();
+    if (!agentAppearanceChecked || now - agentAppearanceChecked >= 2500)
+    {
+        agentAppearanceChecked = now;
+        HIGHCONTRASTW contrast{sizeof(contrast), 0, nullptr};
+        BOOL animations = TRUE;
+        const auto highContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
+            (contrast.dwFlags & HCF_HIGHCONTRASTON);
+        SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0);
+        const auto motion = !highContrast && animations;
+        agentAppearanceDirty |= agentHighContrast != highContrast || agentMotion != motion;
+        agentHighContrast = highContrast;
+        agentMotion = motion;
+    }
     const auto revision = InterlockedCompareExchange(&agentState->revision, 0, 0);
-    if ((revision & 1) || revision == agentRevision)
+    if (revision & 1)
+        return;
+    if (revision == agentRevision && !agentAppearanceDirty)
         return;
     AgentGridTile next[4];
     std::memcpy(next, agentState->tiles, sizeof(next));
     if (revision != InterlockedCompareExchange(&agentState->revision, 0, 0))
         return;
-    const auto animate = winrt::Windows::UI::ViewManagement::UISettings().AnimationsEnabled();
+    if (agentAppearanceDirty)
+    {
+        agentTray.Background(agentHighContrast ? nullptr : AgentBrush(124, 21, 18, 34));
+        agentTray.BorderBrush(agentHighContrast ? nullptr : AgentBrush(67, 191, 169, 245));
+    }
+    const auto normalText = GetSysColor(COLOR_WINDOWTEXT);
     for (int index = 0; index < 4; ++index)
     {
         auto& tile = next[index];
         tile.id[std::size(tile.id) - 1] = L'\0';
         tile.title[std::size(tile.title) - 1] = L'\0';
         tile.step[std::size(tile.step) - 1] = L'\0';
-        if (agentRevision >= 0 && std::memcmp(&tile, &visibleTiles[index], sizeof(tile)) == 0)
+        auto& previous = visibleTiles[index];
+        if (!agentAppearanceDirty && agentRevision >= 0 && std::memcmp(&tile, &previous, sizeof(tile)) == 0)
             continue;
-        visibleTiles[index] = tile;
-        const auto look = TileLook(tile);
+        const auto state = !tile.provider ? Unassigned :
+            tile.state >= Recent && tile.state <= QuotaReached ? static_cast<AgentVisual>(tile.state) : Recent;
+        const auto& mood = agentMoods[state];
+        const auto& sprite = sprites[state];
+        const auto r = static_cast<uint8_t>(sprite.color >> 16);
+        const auto g = static_cast<uint8_t>(sprite.color >> 8);
+        const auto b = static_cast<uint8_t>(sprite.color);
         const auto button = agentButtons[index];
         const auto face = agentFaces[index];
-        const auto provider = tile.provider == 1 ? L"Claude Code" : L"Codex";
+        const auto character = agentCharacters[index];
+        const auto symbol = agentSymbols[index];
+        if (!agentHighContrast && !agentSprites[state])
+            agentSprites[state] = MakeAgentSprite(sprite, 2);
+        const bool newFace = agentAppearanceDirty || agentRevision < 0 || tile.provider != previous.provider ||
+            tile.state != previous.state || std::wcscmp(tile.id, previous.id) != 0;
         std::wstring name = L"Agent slot " + std::to_wstring(index + 1) + L": ";
-        std::wstring tooltip;
-        if (tile.provider)
+        name += tile.provider ? std::wstring(mood.label) + L", " + tile.title :
+            *tile.title ? tile.title : L"Unassigned";
+        xaml::Automation::AutomationProperties::SetName(button, name);
+        SetAgentPreview(button, tile, mood, agentHighContrast ? nullptr : agentSprites[state],
+            agentHighContrast ? nullptr : AgentBrush(255, r, g, b));
+        previous = tile;
+        if (!newFace)
+            continue;
+        if (agentHighContrast)
         {
-            name += std::wstring(look.label) + L", " + tile.title;
-            tooltip = std::wstring(provider) + L"  \u00B7  " + look.label + L"\n" + tile.title;
-            if (*tile.step)
-                tooltip += L"\n" + std::wstring(tile.step);
+            button.ClearValue(controls::Control::BackgroundProperty());
+            symbol.Foreground(AgentBrush(255, GetRValue(normalText), GetGValue(normalText), GetBValue(normalText)));
         }
         else
         {
-            name += *tile.title ? tile.title : L"Unassigned";
-            tooltip = *tile.title ? std::wstring(tile.title) + L"\nWaiting for a matching chat" : L"Coding chats\nClick to assign this slot";
+            button.Background(AgentBrush(tile.provider ? 38 : 22, r, g, b));
+            face.Source(agentSprites[state]);
         }
-        xaml::Automation::AutomationProperties::SetName(button, name);
-        controls::ToolTipService::SetToolTip(button, winrt::box_value(tooltip));
-        const auto alpha = static_cast<uint8_t>(tile.provider ? 52 : 23);
-        button.Background(AgentBrush(alpha, look.r, look.g, look.b));
-        face.Foreground(AgentBrush(255, look.r, look.g, look.b));
-        face.Text(look.face);
+        symbol.Text(mood.symbol);
+        symbol.Visibility(agentHighContrast ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
+        face.Visibility(agentHighContrast ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
         if (agentAnimations[index])
         {
             agentAnimations[index].Stop();
             agentAnimations[index] = nullptr;
         }
-        if (animate && (tile.state == Working || tile.state == Approval || tile.state == QuotaReached || tile.state == Finished))
+        if (agentMotion && tile.provider)
         {
             motion::Storyboard storyboard;
-            motion::DoubleAnimation pulse;
-            pulse.From(tile.state == Finished ? 0.42 : tile.state == QuotaReached ? 0.62 : 0.48);
-            pulse.To(1.0);
-            const auto duration = tile.state == Finished ? 300 : tile.state == Approval ? 470 :
-                tile.state == QuotaReached ? 1050 : 760;
-            pulse.Duration(xaml::Duration{std::chrono::milliseconds(duration), xaml::DurationType::TimeSpan});
-            pulse.AutoReverse(tile.state != Finished);
-            if (tile.state != Finished)
-                pulse.RepeatBehavior({0, {}, motion::RepeatBehaviorType::Forever});
-            motion::Storyboard::SetTarget(pulse, face);
-            motion::Storyboard::SetTargetProperty(pulse, L"Opacity");
-            storyboard.Children().Append(pulse);
-            storyboard.Begin();
-            agentAnimations[index] = storyboard;
+            switch (state)
+            {
+            case Working:
+                MoveAgentPart(storyboard, character, L"(UIElement.RenderTransform).(TranslateTransform.Y)", 0, -1.2, 650, true);
+                break;
+            case Approval:
+                MoveAgentPart(storyboard, character, L"(UIElement.RenderTransform).(TranslateTransform.X)", -0.6, 0.6, 420, true);
+                break;
+            case Finished:
+                MoveAgentPart(storyboard, character, L"(UIElement.RenderTransform).(TranslateTransform.Y)", -2, 0, 320, false);
+                break;
+            case QuotaReached: MoveAgentPart(storyboard, character, L"Opacity", 0.68, 1, 1100, true); break;
+            default: break;
+            }
+            if (storyboard.Children().Size() != 0)
+            {
+                try
+                {
+                    storyboard.Begin();
+                    agentAnimations[index] = storyboard;
+                }
+                catch (winrt::hresult_error const&) {}
+            }
         }
     }
     agentRevision = revision;
+    agentAppearanceDirty = false;
 }

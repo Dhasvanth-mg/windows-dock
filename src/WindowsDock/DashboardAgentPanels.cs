@@ -483,12 +483,12 @@ public partial class DashboardWindow
     {
         agentPanel?.Close();
         var panel = new StackPanel();
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
         var close = IconButton(0xE711, "Close " + title.ToLowerInvariant(), () => agentPanel?.Close());
         DockPanel.SetDock(close, Dock.Right);
         header.Children.Add(close);
         var heading = new StackPanel();
-        heading.Children.Add(Text(title, 17, strong: true));
+        heading.Children.Add(Text(title, 20, strong: true));
         if (!string.IsNullOrEmpty(subtitle))
             heading.Children.Add(Text(subtitle, 11, subdued));
         header.Children.Add(heading);
@@ -510,10 +510,10 @@ public partial class DashboardWindow
         });
         var scroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         var card = Card(scroll);
-        card.CornerRadius = new CornerRadius(17);
-        card.Background = Brush("#FC17191E");
-        card.BorderBrush = Brush("#45FFFFFF");
-        card.Padding = new Thickness(14);
+        card.CornerRadius = new CornerRadius(21);
+        card.Background = new LinearGradientBrush(Color.FromRgb(37, 28, 53), Color.FromRgb(23, 21, 35), 55);
+        card.BorderBrush = Brush("#7CC6B0F7");
+        card.Padding = new Thickness(15);
         window.Content = card;
 
         var lifetime = new CancellationTokenSource();
@@ -537,7 +537,7 @@ public partial class DashboardWindow
             agentPanel = null;
             modalOpen = false;
         };
-        if (SystemParameters.ClientAreaAnimation)
+        if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
         {
             var offset = new TranslateTransform();
             card.RenderTransform = offset;

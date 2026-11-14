@@ -30,10 +30,12 @@ public partial class DashboardWindow
     {
         var layout = new StackPanel { Margin = new Thickness(5, 3, 5, 2) };
         var toolbar = new DockPanel { Margin = new Thickness(1, 0, 1, 9) };
-        var close = IconButton(0xE711, "Close coding chats", Dismiss);
-        DockPanel.SetDock(close, Dock.Right);
         if (compactAgents)
+        {
+            var close = IconButton(0xE711, "Close coding chats", Dismiss);
+            DockPanel.SetDock(close, Dock.Right);
             toolbar.Children.Add(close);
+        }
         var setup = IconButton(0xE713, agentSetup ? "Back to chats" : "Connections and defaults", () =>
         {
             agentSetup = !agentSetup;
@@ -47,12 +49,12 @@ public partial class DashboardWindow
         toolbar.Children.Add(usage);
         if (compactAgents)
         {
-            var widgets = IconButton(0xECAA, "Widgets", ShowWidgets);
+            var widgets = WidgetLauncherButton();
             DockPanel.SetDock(widgets, Dock.Right);
             widgets.Margin = new Thickness(0, 0, 5, 0);
             toolbar.Children.Add(widgets);
         }
-        var heading = Text(agentSetup ? "Connections" : "Coding chats", 17, strong: true);
+        var heading = Text(agentSetup ? "Connections" : "Coding chats", 20, strong: true);
         heading.VerticalAlignment = VerticalAlignment.Center;
         toolbar.Children.Add(heading);
         layout.Children.Add(toolbar);
@@ -71,6 +73,8 @@ public partial class DashboardWindow
             return layout;
         }
 
+        var activity = new WrapPanel { Margin = new Thickness(0, 0, 0, 8), Visibility = Visibility.Collapsed };
+        layout.Children.Add(activity);
         var detail = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch };
         layout.Children.Add(detail);
         var filters = new WrapPanel { Margin = new Thickness(0, 8, 0, 4) };
@@ -103,8 +107,11 @@ public partial class DashboardWindow
             Content = cards, MaxHeight = 194, VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         });
         AgentSession[]? shown = null;
-        AgentApproval[]? shownApprovals = null;
-        (AgentProvider Provider, string Id)? detailKey = null;
+        AgentApproval? detailApproval = null;
+        AgentSession? detailSession = null;
+        (AgentProvider Provider, string Id)? selectedRow = null;
+        var listDrawn = false;
+        (int Working, int Waiting, int Replies, int Limited)? lastActivity = null;
         updatePage = () =>
         {
             sentApprovals.RemoveWhere(id => !pendingApprovals.Any(request => request.Id == id));
@@ -112,29 +119,48 @@ public partial class DashboardWindow
             var approval = pendingApprovals.Where(request => !sentApprovals.Contains(request.Id)).ToArray();
             var ordered = RankedSessions(approval);
             var focused = selectedAgent is { } key
-                ? ordered.FirstOrDefault(session => session.Provider == key.Provider && session.Id == key.Id)
+                ? ordered.FirstOrDefault(session => session.Provider == key.Provider && session.Id == key.Id) ?? ordered.FirstOrDefault()
                 : ordered.FirstOrDefault();
             var visible = ordered.Where(session => !agentFilter.HasValue || session.Provider == agentFilter).ToArray();
             notice.Text = agentMessage;
             notice.Visibility = string.IsNullOrEmpty(agentMessage) ? Visibility.Collapsed : Visibility.Visible;
-            var focusKey = focused == null ? ((AgentProvider, string)?)null : (focused.Provider, focused.Id);
-            if (shown != null && shown.SequenceEqual(visible) && shownApprovals != null &&
-                shownApprovals.SequenceEqual(approval) && detailKey == focusKey)
-                return;
-            shown = visible;
-            shownApprovals = approval;
-            detailKey = focusKey;
+            var now = DateTimeOffset.UtcNow;
+            var counts = (Working: ordered.Count(session => session.State == AgentState.Working),
+                Waiting: ordered.Count(session => session.State == AgentState.Attention),
+                Replies: ordered.Count(session => session.State == AgentState.Finished && now - session.Updated < TimeSpan.FromMinutes(3)),
+                Limited: ordered.Count(session => session.State == AgentState.QuotaReached));
+            if (counts != lastActivity)
+            {
+                lastActivity = counts;
+                activity.Children.Clear();
+                AddActivity(counts.Waiting, "need approval", AgentState.Attention);
+                AddActivity(counts.Working, "working", AgentState.Working);
+                AddActivity(counts.Replies, counts.Replies == 1 ? "reply ready" : "replies ready", AgentState.Finished);
+                AddActivity(counts.Limited, "at limit", AgentState.QuotaReached);
+                activity.Visibility = activity.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+            }
             var focusedApproval = approval.FirstOrDefault(item => focused != null &&
                 item.Provider == focused.Provider && item.SessionId == focused.Id);
-            detail.Content = focused == null
-                ? Card(Text("No local coding chats yet.", 13, subdued))
-                : AgentDetail(focused, focusedApproval);
+            if (detail.Content == null || detailSession != focused || detailApproval != focusedApproval)
+            {
+                detailSession = focused;
+                detailApproval = focusedApproval;
+                detail.Content = focused == null
+                    ? Card(Text("No local coding chats yet.", 13, subdued))
+                    : AgentDetail(focused, focusedApproval);
+            }
+            var focus = focused == null ? ((AgentProvider, string)?)null : (focused.Provider, focused.Id);
+            if (listDrawn == showAgentList && selectedRow == focus && shown != null && shown.SequenceEqual(visible))
+                return;
+            listDrawn = showAgentList;
+            selectedRow = focus;
+            shown = visible;
             cards.Children.Clear();
             if (!showAgentList)
                 return;
             foreach (var session in visible)
             {
-                var row = AgentRow(session, focusKey == (session.Provider, session.Id));
+                var row = AgentRow(session, focus == (session.Provider, session.Id));
                 row.Margin = new Thickness(0, 0, 0, 4);
                 cards.Children.Add(row);
             }
@@ -142,6 +168,31 @@ public partial class DashboardWindow
                 cards.Children.Add(Text("No chats for this provider.", 12, subdued));
         };
         return layout;
+
+        void AddActivity(int count, string label, AgentState state)
+        {
+            if (count == 0)
+                return;
+            var tint = AgentArt.Tint(state);
+            var button = ActionButton($"{count} {label}", () =>
+            {
+                var match = RankedSessions(pendingApprovals.Where(request => !sentApprovals.Contains(request.Id)).ToArray())
+                    .FirstOrDefault(session => session.State == state);
+                if (match == null)
+                    return;
+                selectedAgent = (match.Provider, match.Id);
+                showAgentList = true;
+                agentFilter = null;
+                RefreshAgentPage();
+            });
+            button.Background = AgentArt.Wash(tint, 26);
+            button.BorderBrush = AgentArt.Wash(tint, 57);
+            button.Foreground = tint;
+            button.FontSize = 11;
+            button.Padding = new Thickness(9, 4, 9, 4);
+            button.Margin = new Thickness(0, 0, 5, 3);
+            activity.Children.Add(button);
+        }
     }
 
     private async Task RefreshAgentsAsync()
@@ -196,7 +247,7 @@ public partial class DashboardWindow
 
     private void RevealAgentPage()
     {
-        if (IsVisible && SystemParameters.ClientAreaAnimation)
+        if (IsVisible && SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             revealOffset.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(13, 0,
                 TimeSpan.FromMilliseconds(175)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
     }
@@ -230,22 +281,28 @@ public partial class DashboardWindow
 
     private Button AgentRow(AgentSession session, bool selected)
     {
-        var line = new Grid { Width = Math.Max(210, Math.Min(424, Width - 76)) };
-        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var title = Text(session.Title, 12);
-        line.Children.Add(title);
+        var line = new DockPanel();
         var (label, color) = StateBadge(session.State);
-        var state = Text(label, 10, color);
-        state.Margin = new Thickness(12, 0, 0, 0);
-        Grid.SetColumn(state, 1);
+        var state = Text(label, 10.5, color, true);
+        state.Margin = new Thickness(8, 0, 0, 0);
+        state.VerticalAlignment = VerticalAlignment.Center;
+        DockPanel.SetDock(state, Dock.Right);
         line.Children.Add(state);
+        var face = AgentAvatar(session.State, small: true);
+        face.Margin = new Thickness(0, 0, 8, 0);
+        line.Children.Add(face);
+        var title = Text(session.Title, 12, strong: selected);
+        title.VerticalAlignment = VerticalAlignment.Center;
+        line.Children.Add(title);
         var button = MakeButton(line, session.Title + ", " + label, () =>
         {
             selectedAgent = (session.Provider, session.Id);
             RefreshAgentPage();
         });
-        button.Background = selected ? Brush("#24FFFFFF") : Brush("#10FFFFFF");
+        button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        button.Padding = new Thickness(8, 4, 10, 4);
+        button.Background = selected ? AgentArt.Wash(color, 32) : Brush("#0BFFFFFF");
+        button.BorderBrush = selected ? AgentArt.Wash(color, 72) : Brush("#12C7B3F4");
         button.ToolTip = AgentTooltip(session);
         return button;
     }
@@ -253,23 +310,30 @@ public partial class DashboardWindow
     private Border AgentDetail(AgentSession session, AgentApproval? approval)
     {
         var panel = new StackPanel();
-        var hero = new DockPanel { Margin = new Thickness(0, 0, 0, 9) };
+        var hero = new DockPanel { Margin = new Thickness(0, 0, 0, 3) };
         var face = AgentAvatar(session.State);
-        face.Margin = new Thickness(0, 0, 10, 0);
+        face.Margin = new Thickness(0, 0, 13, 0);
         hero.Children.Add(face);
         var description = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        var title = Text(session.Title, 15, strong: true);
+        var title = Text(session.Title, 17, strong: true);
         title.ToolTip = session.Title;
         description.Children.Add(title);
         var (label, color) = StateBadge(session.State);
-        description.Children.Add(Text(ProviderName(session.Provider) + "  ·  " + label, 11, color));
+        var status = Text(ProviderName(session.Provider) + "  ·  " + label, 11, color, true);
+        status.Margin = new Thickness(0, 3, 0, 0);
+        description.Children.Add(status);
         hero.Children.Add(description);
         panel.Children.Add(hero);
-        var info = string.Join("  ·  ", new[] { session.Project, session.Step, session.Model, session.Effort }
+        var step = string.Equals(session.Step, label, StringComparison.OrdinalIgnoreCase) ? null : session.Step;
+        var info = string.Join("  ·  ", new[] { session.Project, step, session.Model, session.Effort }
             .Where(value => !string.IsNullOrWhiteSpace(value)));
         var details = Text(info, 11, subdued);
         details.ToolTip = AgentTooltip(session);
-        panel.Children.Add(details);
+        if (info.Length > 0)
+        {
+            details.Margin = new Thickness(0, 3, 0, 0);
+            panel.Children.Add(details);
+        }
 
         if (approval != null)
         {
@@ -287,18 +351,28 @@ public partial class DashboardWindow
             panel.Children.Add(preview);
             _ = LoadReplyPreviewAsync(session, preview);
         }
-        var actions = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-        AddAction(approval == null ? "Summarize reply" : "Last reply", () => ShowReplySummary(session));
-        AddAction("Open chat", () => OpenAgent(session));
+        var actions = new WrapPanel { Margin = new Thickness(0, 11, 0, 0) };
+        AddAction(approval == null ? "Summarize reply" : "Last reply", 0xEAB7, () => ShowReplySummary(session),
+            approval == null && session.State == AgentState.Finished);
+        AddAction("Open chat", 0xE8A7, () => OpenAgent(session));
         if (session.State == AgentState.QuotaReached)
-            AddAction("Token usage", ShowAgentUsage);
-        AddAction("Assign slot", () => ShowAgentAssignments(session));
+            AddAction("Token usage", 0xE9D9, ShowAgentUsage, true);
+        AddAction("Assign slot", 0xE718, () => ShowAgentAssignments(session));
         panel.Children.Add(actions);
-        return Card(panel);
+        var card = Card(panel);
+        card.Padding = new Thickness(13);
+        card.CornerRadius = new CornerRadius(16);
+        card.BorderBrush = AgentArt.Wash(color, 53);
+        var tint = color.Color;
+        card.Background = new LinearGradientBrush(Color.FromRgb((byte)(25 + tint.R / 10),
+            (byte)(21 + tint.G / 10), (byte)(36 + tint.B / 10)), Color.FromRgb(30, 26, 44), 55);
+        return card;
 
-        void AddAction(string text, Action action)
+        void AddAction(string text, int icon, Action action, bool primary = false)
         {
-            var button = ActionButton(text, action);
+            var button = MakeButton(IconLabel(text, icon, primary ? color : subdued), text, action);
+            button.Background = primary ? AgentArt.Wash(color, 40) : Brush("#13FFFFFF");
+            button.BorderBrush = primary ? AgentArt.Wash(color, 76) : Brush("#17FFFFFF");
             button.Margin = new Thickness(0, 0, 5, 3);
             actions.Children.Add(button);
         }
@@ -310,34 +384,66 @@ public partial class DashboardWindow
         session.Step, session.Model, session.Effort, session.Updated.ToLocalTime().ToString("g")
     }.Where(value => !string.IsNullOrWhiteSpace(value)));
 
-    private Border AgentAvatar(AgentState state)
+    private Border AgentAvatar(AgentState state, bool small = false)
     {
         var (_, color) = StateBadge(state);
-        var glyph = state switch
-        {
-            AgentState.Attention => "!", AgentState.Finished => "✓",
-            AgentState.Failed => "×", AgentState.QuotaReached or AgentState.Interrupted => "–", _ => "••"
-        };
-        var face = Text(glyph, 17, color, true);
-        face.HorizontalAlignment = HorizontalAlignment.Center;
-        face.VerticalAlignment = VerticalAlignment.Center;
+        var size = small ? 23 : 61;
         var badge = new Border
         {
-            Width = 42, Height = 39, CornerRadius = new CornerRadius(12),
-            Background = Brush("#16FFFFFF"), BorderBrush = color, BorderThickness = new Thickness(1), Child = face
+            Width = size, Height = small ? 22 : 51, CornerRadius = new CornerRadius(small ? 6 : 13),
+            Background = AgentArt.Wash(color, small ? (byte)27 : (byte)31),
+            BorderBrush = AgentArt.Wash(color, small ? (byte)43 : (byte)75),
+            BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center
         };
-        if (SystemParameters.ClientAreaAnimation && state is AgentState.Working or AgentState.Attention or
-            AgentState.QuotaReached or AgentState.Finished)
+        if (SystemParameters.HighContrast)
         {
-            badge.Loaded += (_, _) => face.BeginAnimation(OpacityProperty, new DoubleAnimation(0.35, 1,
-                TimeSpan.FromMilliseconds(state == AgentState.Finished ? 280 : 790))
+            badge.Background = SystemColors.WindowBrush;
+            badge.BorderBrush = SystemColors.WindowTextBrush;
+            var symbol = Text(state switch
             {
-                AutoReverse = state != AgentState.Finished,
-                RepeatBehavior = state == AgentState.Finished ? new RepeatBehavior(1) : RepeatBehavior.Forever
-            });
-            badge.Unloaded += (_, _) => face.BeginAnimation(OpacityProperty, null);
+                AgentState.Attention => "!", AgentState.Finished => "✓", AgentState.Failed => "×",
+                AgentState.QuotaReached => "–", AgentState.Interrupted => "Ⅱ", _ => "••"
+            }, small ? 10 : 18, SystemColors.WindowTextBrush, true);
+            symbol.HorizontalAlignment = HorizontalAlignment.Center;
+            symbol.VerticalAlignment = VerticalAlignment.Center;
+            badge.Child = symbol;
+            return badge;
+        }
+        var offset = new TranslateTransform();
+        var face = new Image
+        {
+            Source = AgentArt.Face(state), Width = small ? 16 : 48, Height = small ? 12 : 36,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            RenderTransform = offset, IsHitTestVisible = false
+        };
+        RenderOptions.SetBitmapScalingMode(face, BitmapScalingMode.NearestNeighbor);
+        badge.Child = face;
+        if (!small)
+        {
+            badge.IsVisibleChanged += (_, _) =>
+            {
+                offset.BeginAnimation(TranslateTransform.XProperty, null);
+                offset.BeginAnimation(TranslateTransform.YProperty, null);
+                face.BeginAnimation(OpacityProperty, null);
+                if (!badge.IsVisible || !SystemParameters.ClientAreaAnimation || SystemParameters.HighContrast)
+                    return;
+                switch (state)
+                {
+                    case AgentState.Working: offset.BeginAnimation(TranslateTransform.YProperty, Motion(0, -3, 700, true)); break;
+                    case AgentState.Attention: offset.BeginAnimation(TranslateTransform.XProperty, Motion(-2, 2, 475, true)); break;
+                    case AgentState.Finished: offset.BeginAnimation(TranslateTransform.YProperty, Motion(-5, 0, 355, false)); break;
+                    case AgentState.QuotaReached: face.BeginAnimation(OpacityProperty, Motion(0.69, 1, 1100, true)); break;
+                }
+            };
         }
         return badge;
+
+        static DoubleAnimation Motion(double from, double to, int duration, bool repeat) => new(from, to, TimeSpan.FromMilliseconds(duration))
+        {
+            AutoReverse = repeat,
+            RepeatBehavior = repeat ? RepeatBehavior.Forever : new RepeatBehavior(1),
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+        };
     }
 
     private Border ApprovalCard(AgentApproval request)
@@ -350,15 +456,15 @@ public partial class DashboardWindow
             directory.ToolTip = request.WorkingDirectory;
             panel.Children.Add(directory);
         }
-        var details = new TextBox
-        {
-            IsReadOnly = true, Text = request.Details, TextWrapping = TextWrapping.Wrap,
-            MaxHeight = 122, FontSize = 11, FontFamily = new FontFamily("Consolas"),
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Background = Brush("#28000000"),
-            Foreground = Foreground, BorderThickness = new Thickness(0), Padding = new Thickness(7),
-            Margin = new Thickness(0, 6, 0, 6)
-        };
-        AutomationProperties.SetName(details, "Approval details");
+        var details = Field("Approval details", 0);
+        details.IsReadOnly = true;
+        details.Text = request.Details;
+        details.TextWrapping = TextWrapping.Wrap;
+        details.MaxHeight = 122;
+        details.FontSize = 11;
+        details.FontFamily = new FontFamily("Consolas");
+        details.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        details.Margin = new Thickness(0, 6, 0, 6);
         panel.Children.Add(details);
         var actions = new StackPanel { Orientation = Orientation.Horizontal };
         var allow = ActionButton("Allow once", () => _ = Decide(true));
@@ -482,15 +588,15 @@ public partial class DashboardWindow
 
     private static string ProviderName(AgentProvider provider) => provider == AgentProvider.Claude ? "Claude Code" : "Codex";
 
-    private (string Label, Brush Color) StateBadge(AgentState state) => state switch
+    private static (string Label, SolidColorBrush Color) StateBadge(AgentState state) => (state switch
     {
-        AgentState.Working => ("Working", accent),
-        AgentState.Attention => ("Needs approval", amber),
-        AgentState.Finished => ("Reply ready", green),
-        AgentState.Failed => ("Failed", Brush("#FF858B")),
-        AgentState.Interrupted => ("Interrupted", subdued),
-        AgentState.Ready => ("Ready", purple),
-        AgentState.QuotaReached => ("Limit reached", Brush("#FF7E9B")),
-        _ => ("Recent", muted)
-    };
+        AgentState.Working => "Working",
+        AgentState.Attention => "Needs approval",
+        AgentState.Finished => "Reply ready",
+        AgentState.Failed => "Failed",
+        AgentState.Interrupted => "Interrupted",
+        AgentState.Ready => "Ready",
+        AgentState.QuotaReached => "Limit reached",
+        _ => "Recent"
+    }, AgentArt.Tint(state));
 }

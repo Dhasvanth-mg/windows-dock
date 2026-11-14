@@ -5,20 +5,19 @@
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True"
         Background="Transparent" ShowInTaskbar="False" Topmost="True"
         WindowStartupLocation="Manual" UseLayoutRounding="True" ShowActivated="True"
-        FontFamily="Segoe UI Variable Text, Segoe UI" Foreground="#F5F5F7">
+        FontFamily="Segoe UI Variable Text, Segoe UI" Foreground="#F8F3FF">
     <Window.Resources>
         <ResourceDictionary>
         <ResourceDictionary.MergedDictionaries>
             <ResourceDictionary Source="DashboardControls.xaml"/>
         </ResourceDictionary.MergedDictionaries>
-        <SolidColorBrush x:Key="TextPrimary" Color="#F5F5F7"/>
-        <SolidColorBrush x:Key="TextSecondary" Color="#B1B3BC"/>
-        <SolidColorBrush x:Key="TextMuted" Color="#898D99"/>
-        <SolidColorBrush x:Key="Accent" Color="#6BB1FF"/>
+        <SolidColorBrush x:Key="TextPrimary" Color="#F8F3FF"/>
+        <SolidColorBrush x:Key="TextSecondary" Color="#C5BCD6"/>
+        <SolidColorBrush x:Key="TextMuted" Color="#A69BB8"/>
         <Style x:Key="Chip" TargetType="Button">
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="Background" Value="#24FFFFFF"/>
-            <Setter Property="BorderBrush" Value="#10FFFFFF"/>
+            <Setter Property="Background" Value="#1BCDB6F9"/>
+            <Setter Property="BorderBrush" Value="#22D9C6FF"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10,6"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
@@ -28,17 +27,21 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9"
                                 Padding="{TemplateBinding Padding}">
-                            <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                            <Grid>
+                                <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                <Border x:Name="Hover" Background="#16DCCAFF" CornerRadius="7" Margin="-2"
+                                        Opacity="0" IsHitTestVisible="False"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Surface" Property="Background" Value="#38FFFFFF"/>
+                                <Setter TargetName="Hover" Property="Opacity" Value="1"/>
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Surface" Property="BorderBrush" Value="#9CBBFF"/>
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="#E2CBFF"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Surface" Property="Opacity" Value="0.7"/>
@@ -53,8 +56,8 @@
         </Style>
         <Style x:Key="Field" TargetType="TextBox">
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="Background" Value="#21FFFFFF"/>
-            <Setter Property="BorderBrush" Value="#24FFFFFF"/>
+            <Setter Property="Background" Value="#22110D1B"/>
+            <Setter Property="BorderBrush" Value="#40C6AEF5"/>
             <Setter Property="Padding" Value="8,5"/>
             <Setter Property="CaretBrush" Value="White"/>
             <Setter Property="Template">
@@ -70,7 +73,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="FieldSurface" Property="BorderBrush" Value="#83B8FF"/>
+                                <Setter TargetName="FieldSurface" Property="BorderBrush" Value="#CDB4FF"/>
                             </Trigger>
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
@@ -140,18 +143,19 @@
         </Style>
         </ResourceDictionary>
     </Window.Resources>
-    <Border x:Name="Shell" CornerRadius="19" BorderThickness="1" Padding="10,7,10,10">
+    <Border x:Name="Shell" CornerRadius="22" BorderThickness="1" Padding="10,8,10,10">
         <Border.Background>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Color="#F90D0E10" Offset="0"/>
-                <GradientStop Color="#FC07080A" Offset="1"/>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#FF211A30" Offset="0"/>
+                <GradientStop Color="#FF171320" Offset="0.52"/>
+                <GradientStop Color="#FF13131F" Offset="1"/>
             </LinearGradientBrush>
         </Border.Background>
         <Border.BorderBrush>
             <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Color="#65FFFFFF" Offset="0"/>
-                <GradientStop Color="#23FFFFFF" Offset="0.55"/>
-                <GradientStop Color="#47FFFFFF" Offset="1"/>
+                <GradientStop Color="#98CEB3FF" Offset="0"/>
+                <GradientStop Color="#36BBA7E3" Offset="0.55"/>
+                <GradientStop Color="#66A0B4DD" Offset="1"/>
             </LinearGradientBrush>
         </Border.BorderBrush>
         <Grid x:Name="PanelLayout">
@@ -161,11 +165,15 @@
             </Grid.RowDefinitions>
             <Grid x:Name="DashboardHeader" Margin="1,0,1,4">
                 <StackPanel x:Name="PrimaryTabs" Orientation="Horizontal" VerticalAlignment="Center"/>
-                <StackPanel x:Name="HeaderClock" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock x:Name="HeaderTime" FontSize="12" FontWeight="SemiBold"/>
-                    <Border Width="3" Height="3" CornerRadius="2" Background="#788492" Margin="8,0" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="HeaderDate" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
-                </StackPanel>
+                <Border x:Name="HeaderClock" Background="#21C8AFF9" BorderBrush="#33C8AFF9"
+                        BorderThickness="1" Padding="9,3" CornerRadius="8"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="HeaderTime" FontSize="12" FontWeight="SemiBold"/>
+                        <Border Width="3" Height="3" CornerRadius="2" Background="#CAB4FF" Margin="8,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="HeaderDate" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
                 <StackPanel x:Name="SecondaryTabs" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"/>
             </Grid>
             <ContentControl Grid.Row="1" x:Name="PageHost" HorizontalContentAlignment="Stretch"/>

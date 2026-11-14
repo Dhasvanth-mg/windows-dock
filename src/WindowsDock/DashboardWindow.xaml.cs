@@ -20,12 +20,12 @@ public partial class DashboardWindow : Window
     private readonly DispatcherTimer agentTicker = new() { Interval = TimeSpan.FromSeconds(6) };
     private readonly CancellationTokenSource lifetime = new();
     private readonly int controllerPid;
-    private readonly SolidColorBrush subdued = Brush("#B1B3BC");
-    private readonly SolidColorBrush muted = Brush("#898D99");
-    private readonly SolidColorBrush accent = Brush("#6BB1FF");
-    private readonly SolidColorBrush green = Brush("#58DA9B");
-    private readonly SolidColorBrush purple = Brush("#A593FF");
-    private readonly SolidColorBrush amber = Brush("#FFBA57");
+    private readonly SolidColorBrush subdued = Brush("#C5BCD6");
+    private readonly SolidColorBrush muted = Brush("#A69BB8");
+    private readonly SolidColorBrush accent = Brush("#9CC9FF");
+    private readonly SolidColorBrush green = Brush("#A1EDC5");
+    private readonly SolidColorBrush purple = Brush("#CAB4FF");
+    private readonly SolidColorBrush amber = Brush("#FFD187");
     private readonly TranslateTransform revealOffset = new();
     private DashboardPage currentPage;
     private Action? updatePage;
@@ -56,7 +56,7 @@ public partial class DashboardWindow : Window
         AddTab(SecondaryTabs, DashboardPage.Wallpapers, 0xE91B, "Wallpapers");
         AddTab(SecondaryTabs, DashboardPage.Power, 0xE7E8, "Power");
         AddTab(SecondaryTabs, DashboardPage.Settings, 0xE713, "Dashboard settings");
-        SecondaryTabs.Children.Add(IconButton(0xECAA, "Widgets", ShowWidgets));
+        SecondaryTabs.Children.Add(WidgetLauncherButton());
         SecondaryTabs.Children.Add(IconButton(0xE711, "Close dashboard", Dismiss));
 
         Shell.RenderTransform = revealOffset;
@@ -78,7 +78,7 @@ public partial class DashboardWindow : Window
                 _ = RefreshSavedWeatherAsync();
             ticker.Start();
             PositionAtTaskbar();
-            if (SystemParameters.ClientAreaAnimation)
+            if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
                 var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
                 revealOffset.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(17, 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
@@ -157,8 +157,9 @@ public partial class DashboardWindow : Window
         updatePage = null;
         foreach (var (key, button) in tabs)
         {
-            button.Background = key == page ? Brush("#38FFFFFF") : Brushes.Transparent;
-            button.Foreground = key == page ? Brushes.White : subdued;
+            button.Background = key == page ? Brush("#32C5A8FF") : Brushes.Transparent;
+            button.BorderBrush = key == page ? Brush("#56C5A8FF") : Brushes.Transparent;
+            button.Foreground = key == page ? purple : subdued;
         }
 
         PageHost.Content = page switch
@@ -244,9 +245,9 @@ public partial class DashboardWindow : Window
 
     private Border Card(UIElement child) => new()
     {
-        Background = new LinearGradientBrush(Color.FromRgb(34, 35, 39), Color.FromRgb(23, 24, 27), 90),
-        BorderBrush = Brush("#14FFFFFF"), BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(13), Padding = new Thickness(12), Child = child,
+        Background = new LinearGradientBrush(Color.FromRgb(41, 35, 54), Color.FromRgb(29, 25, 40), 90),
+        BorderBrush = Brush("#28D4BDFE"), BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(15), Padding = new Thickness(12), Child = child,
         ClipToBounds = true
     };
 
@@ -269,11 +270,7 @@ public partial class DashboardWindow : Window
 
     private Button IconButton(int icon, string label, Action? action = null)
     {
-        var glyph = new TextBlock
-        {
-            Text = char.ConvertFromUtf32(icon), FontSize = 13,
-            FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets")
-        };
+        var glyph = DockGlyph(icon, 13);
         var button = MakeButton(glyph, label, action);
         button.Padding = new Thickness(0);
         button.Width = 28;
@@ -282,6 +279,38 @@ public partial class DashboardWindow : Window
         button.BorderBrush = Brushes.Transparent;
         button.Margin = new Thickness(1, 0, 1, 0);
         return button;
+    }
+
+    private Button WidgetLauncherButton()
+    {
+        var button = MakeButton(IconLabel("Widgets", 0xECAA, purple), "Widgets", ShowWidgets);
+        button.Background = Brush("#22CAB4FF");
+        button.BorderBrush = Brush("#45CAB4FF");
+        button.Padding = new Thickness(8, 4, 8, 4);
+        button.Margin = new Thickness(3, 0, 3, 0);
+        return button;
+    }
+
+    private static TextBlock DockGlyph(int icon, double size, Brush? color = null)
+    {
+        var glyph = new TextBlock
+        {
+            Text = char.ConvertFromUtf32(icon), FontSize = size, VerticalAlignment = VerticalAlignment.Center,
+            FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets")
+        };
+        if (color != null)
+            glyph.Foreground = color;
+        return glyph;
+    }
+
+    private static StackPanel IconLabel(string label, int icon, Brush color)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        var glyph = DockGlyph(icon, 12, color);
+        glyph.Margin = new Thickness(0, 0, 6, 0);
+        row.Children.Add(glyph);
+        row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+        return row;
     }
 
     private Button MakeButton(object content, string name, Action? action)
