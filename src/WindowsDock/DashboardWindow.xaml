@@ -21,6 +21,8 @@
             <Setter Property="BorderBrush" Value="#10FFFFFF"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -28,7 +30,8 @@
                         <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8"
                                 Padding="{TemplateBinding Padding}">
-                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">

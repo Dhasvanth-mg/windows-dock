@@ -45,6 +45,13 @@ public partial class DashboardWindow
         DockPanel.SetDock(usage, Dock.Right);
         usage.Margin = new Thickness(0, 0, 6, 0);
         toolbar.Children.Add(usage);
+        if (compactAgents)
+        {
+            var widgets = IconButton(0xECAA, "Widgets", ShowWidgets);
+            DockPanel.SetDock(widgets, Dock.Right);
+            widgets.Margin = new Thickness(0, 0, 5, 0);
+            toolbar.Children.Add(widgets);
+        }
         var heading = Text(agentSetup ? "Connections" : "Coding chats", 17, strong: true);
         heading.VerticalAlignment = VerticalAlignment.Center;
         toolbar.Children.Add(heading);
@@ -276,6 +283,7 @@ public partial class DashboardWindow
             preview.MaxHeight = 48;
             preview.TextWrapping = TextWrapping.Wrap;
             preview.Margin = new Thickness(0, 7, 0, 0);
+            preview.Visibility = Visibility.Collapsed;
             panel.Children.Add(preview);
             _ = LoadReplyPreviewAsync(session, preview);
         }

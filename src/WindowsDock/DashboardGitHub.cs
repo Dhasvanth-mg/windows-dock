@@ -60,20 +60,46 @@ public partial class DashboardWindow
             results.Children.Clear();
             try
             {
-                var output = await WidgetCommand.ReadAsync(gh,
+                var pullRequests = WidgetCommand.ReadAsync(gh,
                     ["pr", "status", "-R", "github.com/" + value, "--json", "number,title,url,isDraft,reviewDecision,statusCheckRollup"],
                     cancellation);
+                var workflowRuns = WidgetCommand.ReadAsync(gh,
+                    ["run", "list", "-R", "github.com/" + value, "--limit", "6", "--json",
+                        "displayTitle,name,headBranch,status,conclusion,url"], cancellation);
+                await System.Threading.Tasks.Task.WhenAll(pullRequests, workflowRuns);
+                var output = await pullRequests;
+                var workflows = await workflowRuns;
                 if (cancellation.IsCancellationRequested)
                     return;
-                if (output == null)
+                if (output == null && workflows == null)
                 {
                     status.Text = "GitHub CLI could not read this repository. Check its sign-in and access.";
                     return;
                 }
-                using var doc = JsonDocument.Parse(output);
+                using var doc = JsonDocument.Parse(output ?? "{}");
                 var count = Add("Review requested", "needsReview") + Add("Your pull requests", "createdBy");
-                status.Text = count == 0 ? "No open pull requests of yours or review requests in this repository." :
+                status.Text = output == null ? "Pull requests are unavailable for this repository." :
+                    count == 0 ? "No open pull requests of yours or review requests in this repository." :
                     $"{count} pull request{(count == 1 ? "" : "s")}";
+                if (workflows != null)
+                {
+                    using var workflowDocument = JsonDocument.Parse(workflows);
+                    if (workflowDocument.RootElement.ValueKind == JsonValueKind.Array &&
+                        workflowDocument.RootElement.GetArrayLength() > 0)
+                    {
+                        var heading = Text("Recent workflow runs", 11, subdued, true);
+                        heading.Margin = new Thickness(0, 7, 0, 1);
+                        results.Children.Add(heading);
+                        foreach (var run in workflowDocument.RootElement.EnumerateArray())
+                        {
+                            var title = AgentSessions.String(run, "displayTitle") ?? AgentSessions.String(run, "name") ?? "Workflow";
+                            var state = AgentSessions.String(run, "status");
+                            var detail = state == "completed" ? AgentSessions.String(run, "conclusion") ?? state : state;
+                            AddLink(run, title, string.Join(" · ", new[] { AgentSessions.String(run, "headBranch"), detail?.Replace('_', ' ') }
+                                .Where(part => !string.IsNullOrWhiteSpace(part))));
+                        }
+                    }
+                }
                 WriteJson("github-repository.json", value);
 
                 int Add(string name, string key)
@@ -86,24 +112,30 @@ public partial class DashboardWindow
                     results.Children.Add(heading);
                     foreach (var request in requests.EnumerateArray().Take(10))
                     {
-                        var url = AgentSessions.String(request, "url");
-                        if (!Uri.TryCreate(url, UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps ||
-                            address.Host != "github.com")
-                            continue;
                         var title = AgentSessions.String(request, "title") ?? "Pull request";
                         var description = $"#{AgentSessions.Count(request, "number")} · {title}";
-                        var body = new StackPanel();
-                        var nameText = Text(description, 12, strong: true);
-                        nameText.MaxWidth = 392;
-                        body.Children.Add(nameText);
-                        body.Children.Add(Text(CheckStatus(request), 10, subdued));
-                        var button = MakeButton(body, description, () => OpenTarget(address.AbsoluteUri));
-                        button.ToolTip = description;
-                        button.Margin = new Thickness(0, 3, 0, 0);
-                        button.HorizontalAlignment = HorizontalAlignment.Left;
-                        results.Children.Add(button);
+                        AddLink(request, description, CheckStatus(request));
                     }
                     return requests.GetArrayLength();
+                }
+
+                void AddLink(JsonElement entry, string title, string detail)
+                {
+                    var url = AgentSessions.String(entry, "url");
+                    if (!Uri.TryCreate(url, UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps ||
+                        address.Host != "github.com" || address.UserInfo.Length != 0)
+                        return;
+                    var body = new StackPanel();
+                    var name = Text(title, 12, strong: true);
+                    name.MaxWidth = 392;
+                    body.Children.Add(name);
+                    body.Children.Add(Text(detail, 10, subdued));
+                    var button = MakeButton(body, title, () => OpenTarget(address.AbsoluteUri));
+                    button.ToolTip = title;
+                    button.Margin = new Thickness(0, 3, 0, 0);
+                    button.HorizontalAlignment = HorizontalAlignment.Stretch;
+                    button.HorizontalContentAlignment = HorizontalAlignment.Left;
+                    results.Children.Add(button);
                 }
             }
             catch (OperationCanceledException) { }

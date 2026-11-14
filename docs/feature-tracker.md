@@ -213,7 +213,7 @@
 - Scope: Show a quick preview when hovering over a tile. Open an all-chat menu from the grid, surface pending approvals and fresh replies, and provide a direct open action and saved chat or project assignments.
 - Acceptance criteria: Hover shows the tile's chat and status, click keeps all chats accessible and highlights an urgent or recently finished chat, and slot assignments survive a restart.
 - Outcome: Each tile exposes a hover preview. The slide-up list prioritizes a pending approval or recent reply, includes a direct chat action, and can save a chat or project assignment per slot.
-- Verification: The slot assignment, reply summary, and usage windows opened. The main and compact dashboard views reopened through the native event. A fixture confirmed that pinned chat and project slots retain their assigned positions.
+- Verification: The slot assignment, reply summary, and usage windows opened. The main and compact dashboard views reopened through the native event. A fixture confirmed that pinned chat and project slots retain their assigned positions. An off-screen WPF render verified the compact layout with sample sessions.
 - Remaining work: Physical hover, deep-link handling in each provider, and persistence after a user changes a slot on the installed build remain to be checked.
 
 ### Automatic weather location and styled controls
@@ -237,7 +237,7 @@
 - Scope: Add the audio switchboard, meeting card, clipboard and file shelf, GitHub checks and reviews, workspace shortcuts, download queue, focus controls, command palette, and notification summaries. Suggest more widgets separately.
 - Acceptance criteria: Every enabled widget has a usable dock entry, operates on real local or connected data, and identifies any Windows or service limitations. Notification text leaves the device only when the user sends it for summarization.
 - Outcome: The Widgets launcher and Ctrl+K palette provide entry to the switchboard, meetings, clipboard and files, GitHub checks, workspace shortcuts, downloads, focus, and notifications. The digest reuses the editable Gemini/Groq summary popup.
-- Verification: Nine WPF panels opened and laid out. Recurring calendar import and meeting links passed with a fixture. Audio endpoints enumerated and an isolated process successfully changed and cleared its app route. Windows allowed clipboard and notification reads. The signed-in GitHub CLI returned this repository's current empty PR and review lists.
+- Verification: Nine WPF panels opened and laid out. An off-screen render verified the widget launcher. Recurring calendar import and meeting links passed with a fixture. Audio endpoints enumerated and an isolated process successfully changed and cleared its app route. Windows allowed clipboard and notification reads. The signed-in GitHub CLI returned this repository's empty PR, review, and Actions lists. The Windows transfer queue also responded with an empty result.
 - Remaining work: Verify a physical output switch between devices, notification summaries with a real API key, and actual review and transfer rows. Meetings currently use a local calendar export. Browser transfer details come from partial files, and system Do Not Disturb is controlled through Windows Focus.
 
 ### Continue implementation and verification
@@ -245,4 +245,4 @@
 - Status: Native build published locally and restarted. Scoped limitations are recorded above.
 - Scope: Complete the queued native dock, coding chat, weather, and widget work, then publish a tested Windows build.
 - Acceptance criteria: Build and launch the native dock, smoke-test new UI flows, record remaining provider constraints, and push the commits.
-- Outcome: Release C++ and .NET builds passed. The final native controller and dashboard loaded, and repeated native signals switched between the compact chat list and full dashboard.
+- Outcome: Release C++ and .NET builds passed. The native controller and dashboard loaded, and repeated native signals switched between the compact chat list and full dashboard. The installed build uses the existing native publish directory.

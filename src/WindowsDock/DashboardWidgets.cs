@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.Win32;
 
 namespace WindowsDock;
@@ -15,14 +16,14 @@ public partial class DashboardWindow
     private void ShowWidgets()
     {
         var (window, content, _) = CreateAgentPanel("Widgets", "", 466);
-        var search = ActionButton("Search apps and actions", ShowCommandPalette);
+        var search = WidgetButton("Search apps and actions", 0xE721, ShowCommandPalette);
         search.HorizontalAlignment = HorizontalAlignment.Stretch;
         search.Margin = new Thickness(0, 0, 0, 9);
         content.Children.Add(search);
         var items = new System.Windows.Controls.Primitives.UniformGrid { Columns = 2 };
-        foreach (var (label, _, action) in WidgetActions(window))
+        foreach (var (label, _, icon, action) in WidgetActions(window))
         {
-            var button = ActionButton(label, action);
+            var button = WidgetButton(label, icon, action);
             button.HorizontalAlignment = HorizontalAlignment.Stretch;
             button.MinHeight = 34;
             button.Margin = new Thickness(2, 0, 2, 5);
@@ -32,17 +33,35 @@ public partial class DashboardWindow
         window.Show();
     }
 
-    private (string Label, string Keywords, Action Action)[] WidgetActions(Window? from = null) =>
+    private (string Label, string Keywords, int Icon, Action Action)[] WidgetActions(Window? from = null) =>
     [
-        ("Audio switchboard", "music media volume speakers headphones", () => OpenWidgetPage(DashboardPage.Media, from)),
-        ("Meetings", "calendar schedule join", ShowMeetingWidget),
-        ("Clipboard and files", "shelf snippets paste screenshots", ShowClipboardWidget),
-        ("GitHub checks", "CI pull requests review build", ShowGitHubWidget),
-        ("Workspace shortcuts", "projects launch folder editor", ShowWorkspaceWidget),
-        ("Downloads", "queue transfers files", ShowDownloadWidget),
-        ("Focus timer", "timer break do not disturb", () => OpenWidgetPage(DashboardPage.Calendar, from)),
-        ("Notifications", "alerts summary digest", ShowNotificationWidget)
+        ("Audio switchboard", "music media volume speakers headphones", 0xE767, () => OpenWidgetPage(DashboardPage.Media, from)),
+        ("Meetings", "calendar schedule join", 0xE787, ShowMeetingWidget),
+        ("Clipboard and files", "shelf snippets paste screenshots", 0xE77F, ShowClipboardWidget),
+        ("GitHub checks", "CI pull requests review build", 0xE73E, ShowGitHubWidget),
+        ("Workspace shortcuts", "projects launch folder editor", 0xE8B7, ShowWorkspaceWidget),
+        ("Downloads", "queue transfers files", 0xE896, ShowDownloadWidget),
+        ("Focus timer", "timer break do not disturb", 0xE916, () => OpenWidgetPage(DashboardPage.Calendar, from)),
+        ("Notifications", "alerts summary digest", 0xE7F4, ShowNotificationWidget)
     ];
+
+    private Button WidgetButton(string label, int icon, Action action)
+    {
+        var line = new DockPanel { HorizontalAlignment = HorizontalAlignment.Stretch };
+        var symbol = Text(char.ConvertFromUtf32(icon), 13, accent);
+        symbol.FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets");
+        symbol.Width = 25;
+        symbol.VerticalAlignment = VerticalAlignment.Center;
+        line.Children.Add(symbol);
+        var name = Text(label, 12, strong: true);
+        name.VerticalAlignment = VerticalAlignment.Center;
+        line.Children.Add(name);
+        var button = MakeButton(line, label, action);
+        button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        button.Background = Brush("#10FFFFFF");
+        button.BorderBrush = Brush("#16FFFFFF");
+        return button;
+    }
 
     private void OpenWidgetPage(DashboardPage page, Window? from = null)
     {
@@ -65,7 +84,8 @@ public partial class DashboardWindow
         content.Children.Add(search);
         var list = new StackPanel();
         content.Children.Add(list);
-        var options = new List<(string Label, string Keywords, Action Action)>(WidgetActions(window));
+        var options = new List<(string Label, string Keywords, Action Action)>(
+            WidgetActions(window).Select(item => (item.Label, item.Keywords, item.Action)));
         foreach (var (label, target) in new[]
         {
             ("Bluetooth settings", "ms-settings:bluetooth"), ("Wi-Fi settings", "ms-settings:network-wifi"),

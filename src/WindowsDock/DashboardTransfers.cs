@@ -49,7 +49,10 @@ public partial class DashboardWindow
                 if (files.Length == 0 && jobs.Length == 0)
                     status.Text = "No recent downloads or background transfers.";
                 foreach (var job in jobs)
-                    AddRow(job.Name, job.Status, null, folder);
+                {
+                    var completed = job.Destination != null && File.Exists(job.Destination) ? job.Destination : null;
+                    AddRow(job.Name, job.Status, completed, job.Destination == null ? folder : Path.GetDirectoryName(job.Destination) ?? folder);
+                }
                 foreach (var file in files)
                 {
                     var partial = file.Extension is ".crdownload" or ".part" or ".download";
@@ -97,7 +100,12 @@ public partial class DashboardWindow
             var powershell = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
             var output = await WidgetCommand.ReadAsync(powershell,
                 ["-NoProfile", "-NonInteractive", "-Command",
-                "@(Get-BitsTransfer -ErrorAction Stop | Where-Object TransferType -eq 'Download' | Select-Object -First 15 DisplayName,JobState,BytesTransferred,BytesTotal) | ConvertTo-Json -Compress"],
+                """
+                Get-BitsTransfer -ErrorAction Stop | Where-Object TransferType -eq 'Download' |
+                Select-Object -First 15 DisplayName,JobState,BytesTransferred,BytesTotal,
+                  @{Name='Destination';Expression={ $_.FileList | Select-Object -First 1 -ExpandProperty LocalName }} |
+                ConvertTo-Json -Compress
+                """],
                 cancellation);
             if (string.IsNullOrWhiteSpace(output))
                 return [];
@@ -115,7 +123,9 @@ public partial class DashboardWindow
                         6 or 7 => "Transferred", 8 => "Canceled", _ => "Windows transfer"
                     });
                     var size = total is > 0 ? $"{Math.Clamp(100d * bytes / total.Value, 0, 100):0}% · {FormatBytes(bytes)} / {FormatBytes(total.Value)}" : FormatBytes(bytes);
-                    return new Transfer(AgentSessions.String(job, "DisplayName") ?? "Background download", state + " · " + size);
+                    var destination = AgentSessions.String(job, "Destination");
+                    return new Transfer(AgentSessions.String(job, "DisplayName") ?? "Background download", state + " · " + size,
+                        destination != null && Path.IsPathFullyQualified(destination) ? destination : null);
                 }).ToArray();
             }
             catch (JsonException) { return []; }
@@ -143,5 +153,5 @@ public partial class DashboardWindow
     [DllImport("shell32", ExactSpelling = true)]
     private static extern int SHGetKnownFolderPath(in Guid id, uint flags, nint token, out nint path);
 
-    private sealed record Transfer(string Name, string Status);
+    private sealed record Transfer(string Name, string Status, string? Destination);
 }

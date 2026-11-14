@@ -24,12 +24,12 @@ Under **Connections and defaults**, enable the provider hooks for live updates. 
 
 ## Widgets
 
-Open the dashboard with the larger grid button, then choose **Widgets** on the right. Press **Ctrl+K** while the dashboard is open to search installed desktop shortcuts, workspaces, and dock actions.
+Choose **Widgets** from the dashboard or the compact Coding chats panel. Press **Ctrl+K** while either panel is open to search installed desktop shortcuts, workspaces, and dock actions.
 
 - **Audio switchboard** changes the active output device and offers per-app volume and output routing. Some apps apply a new route when they reopen their audio stream.
 - **Meetings** reads a local `.ics` export and offers Join and Copy link for supported meeting providers.
 - **Clipboard and files** shows Windows clipboard history when it is enabled. Pin text, images, or files and drag them into other apps.
-- **GitHub checks** reads your PRs and review requests through the signed-in GitHub CLI. Enter a repository as `owner/repo`.
+- **GitHub checks** reads your PRs, review requests, and recent Actions runs through the signed-in GitHub CLI. Enter a repository as `owner/repo`.
 - **Workspace shortcuts** group a folder, websites, and local app shortcuts into a single action.
 - **Downloads** shows recent files and partial browser downloads from the Downloads folder, alongside Windows background transfers. Browser progress is limited to what the partial files expose.
 - **Focus timer** runs locally. **Windows Focus** opens the system controls for a focus session with Do Not Disturb.
