@@ -41,7 +41,8 @@ internal static class DockTaskbar
         var window = FindWindowW("WindowsDockNativeController", null);
         if (window == 0 || GetWindowThreadProcessId(window, out var pid) == 0)
             return false;
-        if (!EventWaitHandle.TryOpenExisting(AgentGrid.SessionObject(pid, "Dashboard"), out var launch))
+        if (!EventWaitHandle.TryOpenExisting(AgentGrid.SessionObject(pid, "OpenLauncher"), out var launch) &&
+            !EventWaitHandle.TryOpenExisting(AgentGrid.SessionObject(pid, "Dashboard"), out launch))
             return false;
         using (launch)
         {

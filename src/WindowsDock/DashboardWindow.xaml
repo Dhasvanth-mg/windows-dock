@@ -200,6 +200,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <StackPanel x:Name="DashboardHeader" Margin="4,3,4,8">
                 <DockPanel Height="35" Margin="0,0,0,8">
@@ -227,6 +228,8 @@
             <ScrollViewer x:Name="PageScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto">
                 <ContentControl x:Name="PageHost" HorizontalContentAlignment="Stretch"/>
             </ScrollViewer>
+            <ContentControl x:Name="DockNavigationHost" Grid.Row="2" HorizontalContentAlignment="Stretch"
+                            Visibility="Collapsed"/>
         </Grid>
     </Border>
 </Window>

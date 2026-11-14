@@ -195,6 +195,16 @@ public partial class DashboardWindow : Window
             Dismiss();
             return;
         }
+        OpenDockLauncher();
+    }
+
+    internal void OpenDockLauncher()
+    {
+        if (agentPanel is { Title: "Widgets", IsVisible: true } launcher)
+        {
+            launcher.Activate();
+            return;
+        }
         ShowDockPanelHost();
         ShowWidgets();
     }
@@ -282,6 +292,9 @@ public partial class DashboardWindow : Window
         MaxHeight = Math.Max(200, (DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - screen.Bounds.Top) /
             dpi.DpiScaleY - 12);
         DashboardHeader.Visibility = compactAgents ? Visibility.Collapsed : Visibility.Visible;
+        if (compactAgents)
+            DockNavigationHost.Content ??= DockNavigation(this, DockSection.Chats);
+        DockNavigationHost.Visibility = compactAgents ? Visibility.Visible : Visibility.Collapsed;
         HeaderClock.Visibility = Width < 580 ? Visibility.Collapsed : Visibility.Visible;
     }
 

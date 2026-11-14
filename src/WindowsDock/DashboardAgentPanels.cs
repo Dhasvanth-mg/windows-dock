@@ -485,7 +485,8 @@ public partial class DashboardWindow
 
     private (Window Window, StackPanel Content, CancellationToken Cancellation) CreateDockPanel(
         string title, string subtitle, double width, int icon, SolidColorBrush tint, bool widget = false,
-        Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null, bool assistant = false)
+        Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null, bool assistant = false,
+        DockSection? section = null)
     {
         agentPanel?.Close();
         if (controllerPid > 0)
@@ -520,6 +521,7 @@ public partial class DashboardWindow
         heading.Children.Add(labels);
         header.Children.Add(heading);
         var frame = new DockPanel();
+        Action? backRoute = backAction ?? (widget ? (Action)ShowWidgets : null);
         DockPanel.SetDock(header, Dock.Top);
         frame.Children.Add(header);
 
@@ -540,6 +542,19 @@ public partial class DashboardWindow
         });
         if (assistant)
             ApplyAssistantResources(window);
+        var footer = section is { } selected ? DockNavigation(window, selected) : DockGrip(window, swipe =>
+        {
+            if (swipe == DockSwipe.Right && backRoute != null)
+            {
+                nextDockSlide = -1;
+                try { backRoute(); }
+                finally { nextDockSlide = 0; }
+            }
+            else if (swipe == DockSwipe.Down)
+                window.Close();
+        }, null, false);
+        DockPanel.SetDock(footer, Dock.Bottom);
+        frame.Children.Add(footer);
         frame.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         var card = Card(frame);
         card.CornerRadius = new CornerRadius(21);
@@ -606,19 +621,10 @@ public partial class DashboardWindow
                         returnFocus.Focus();
                 }, System.Windows.Threading.DispatcherPriority.Input);
         };
-        if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
-        {
-            var offset = new TranslateTransform();
-            card.RenderTransform = offset;
-            window.Loaded += (_, _) => offset.BeginAnimation(TranslateTransform.YProperty,
-                new System.Windows.Media.Animation.DoubleAnimation(12, 0, TimeSpan.FromMilliseconds(165))
-                {
-                    EasingFunction = new System.Windows.Media.Animation.CubicEase
-                    {
-                        EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut
-                    }
-                });
-        }
+        var direction = nextDockSlide;
+        var offset = new TranslateTransform();
+        card.RenderTransform = offset;
+        window.Loaded += (_, _) => SlideDockSurface(offset, direction, 12);
         return (window, panel, cancellation);
 
         void Position()

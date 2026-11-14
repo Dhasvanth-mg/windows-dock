@@ -6,8 +6,11 @@
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.ViewManagement.h>
+#include <winrt/Windows.Devices.Input.h>
+#include <winrt/Windows.UI.Input.h>
 #include <algorithm>
 #include <cmath>
 
@@ -43,6 +46,7 @@ namespace
 
 TaskbarStyle::TaskbarStyle(Grid const& root, winrt::handle const& dashboard, DWORD controllerPid)
     : root(root), dashboard(dashboard.get()),
+      launcherEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"OpenLauncher").c_str())),
       agentEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Agent").c_str())),
       agentMapping(OpenFileMappingW(FILE_MAP_WRITE, FALSE, SessionName(controllerPid, L"AgentGrid").c_str())),
       agentState(agentMapping ? static_cast<AgentGridState*>(MapViewOfFile(agentMapping.get(), FILE_MAP_WRITE,
@@ -175,8 +179,59 @@ void TaskbarStyle::AddDashboardButton()
     dashboardButton.VerticalAlignment(xaml::VerticalAlignment::Center);
     dashboardButton.RequestedTheme(xaml::ElementTheme::Dark);
     xaml::Automation::AutomationProperties::SetName(dashboardButton, L"Open Windows Dock");
+    xaml::Automation::AutomationProperties::SetHelpText(dashboardButton, L"Click or pull up to show Widgets");
     SetDashboardIcon();
     dashboardButton.Click([event = dashboard](auto&&, auto&&) { SetEvent(event); });
+    if (launcherEvent)
+    {
+        using xaml::Input::PointerEventHandler;
+        using xaml::Input::PointerRoutedEventArgs;
+        using winrt::Windows::Devices::Input::PointerDeviceType;
+        struct PullState
+        {
+            winrt::handle signal;
+            uint32_t pointer{};
+            winrt::Windows::Foundation::Point start{};
+        };
+        const auto pullState = std::make_shared<PullState>(PullState{std::move(launcherEvent)});
+        dashboardButton.AddHandler(xaml::UIElement::PointerPressedEvent(), winrt::box_value(PointerEventHandler(
+            [pullState](auto const& sender, PointerRoutedEventArgs const& args)
+            {
+                const auto point = args.GetCurrentPoint(sender.template as<controls::Button>());
+                if (pullState->pointer || (args.Pointer().PointerDeviceType() == PointerDeviceType::Mouse &&
+                    !point.Properties().IsLeftButtonPressed()))
+                    return;
+                pullState->pointer = point.PointerId();
+                pullState->start = point.Position();
+            })), true);
+        dashboardButton.AddHandler(xaml::UIElement::PointerMovedEvent(), winrt::box_value(PointerEventHandler(
+            [pullState](auto const& sender, PointerRoutedEventArgs const& args)
+            {
+                const auto button = sender.template as<controls::Button>();
+                const auto point = args.GetCurrentPoint(button);
+                const auto pointer = args.Pointer();
+                const bool pressed = pointer.PointerDeviceType() == PointerDeviceType::Mouse
+                    ? point.Properties().IsLeftButtonPressed() : point.IsInContact();
+                if (!pullState->pointer || point.PointerId() != pullState->pointer || !pressed)
+                    return;
+                const auto position = point.Position();
+                const auto pull = pullState->start.Y - position.Y;
+                if (pull < 24 || pull < std::abs(position.X - pullState->start.X) * 1.35)
+                    return;
+                pullState->pointer = 0;
+                args.Handled(true);
+                button.ReleasePointerCapture(pointer);
+                SetEvent(pullState->signal.get());
+            })), true);
+        const auto reset = winrt::box_value(PointerEventHandler([pullState](auto&&, PointerRoutedEventArgs const& args)
+        {
+            if (args.Pointer().PointerId() == pullState->pointer)
+                pullState->pointer = 0;
+        }));
+        dashboardButton.AddHandler(xaml::UIElement::PointerReleasedEvent(), reset, true);
+        dashboardButton.AddHandler(xaml::UIElement::PointerCanceledEvent(), reset, true);
+        dashboardButton.AddHandler(xaml::UIElement::PointerCaptureLostEvent(), reset, true);
+    }
     dockControls = controls::Grid();
     dockControls.VerticalAlignment(xaml::VerticalAlignment::Center);
     for (int index = 0; index < 2; ++index)

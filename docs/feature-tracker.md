@@ -411,3 +411,12 @@
 - Outcome: The wider 2×2 status grid lives in Explorer's main taskbar beside the new launcher. Its four faces still follow live chat states and accept direct clicks. The taskbar uses the native acrylic material.
 - Verification: Windows exposed the live state of the first slot and opened Coding chats from a grid click. The tested Windows build held both the shell window and reserved taskbar height at 48 pixels after the resize probes.
 - Remaining work: Validate an Explorer sizing path that moves the shell window, XAML layout, and reserved desktop area together before shipping 96 pixels. Verify app overflow, shell flyouts, scaling, and auto-hide with the taller geometry.
+
+#### Gesture navigation
+
+- Status: Built and installed in native mode. Gesture thresholds, horizontal wheel routing, and click navigation verified.
+- Scope: Use Hitodama's compact, taskbar-first interaction as a reference for gesture navigation.
+- Acceptance criteria: Gestures start on a clear, dedicated target and mirror the same actions available by click or keyboard. Scrolling, text selection, and normal Windows taskbar input retain their existing behavior. Navigation stays in one visible panel.
+- Outcome: The native taskbar icon accepts an upward pull to open Widgets. Widgets, Coding chats, and Assistants share a bottom section switcher. The handle accepts mouse and touch swipes and horizontal wheel input for section changes. Dragging down dismisses the panel. In panels with a Back button, dragging right follows the same route. Section changes use a directional transition and respect the Windows animation preference.
+- Verification: Release, x64 publish, Windows smoke, and screenshot review passed. The gesture fixture checked axis thresholds, small and diagonal rejection, horizontal wheel routing and accumulation on the handle, clicks between sections, and all twelve launcher routes. The native module loaded in Explorer and the installed launcher started from its open command.
+- Remaining work: Live pointer and hardware touch tests could not be completed. Computer Use received access denied from GetCursorPos and the available capture showed the display idle screen. Verify an upward pull on the Explorer button and physical touch and touchpad input on an unlocked desktop.

@@ -19,20 +19,7 @@ public partial class DashboardWindow
     private void ShowWidgets()
     {
         var (window, content, _) = CreateDockPanel("Widgets", "", 492, 0, AssistantInk, assistant: true,
-            portrait: DockTaskbar.IconBadge());
-        var shortcuts = new WrapPanel { Margin = new Thickness(0, 0, 0, 9) };
-        foreach (var (label, icon, open) in new (string, int, Action)[]
-        {
-            ("Coding chats", 0xE943, OpenAgentGrid),
-            ("Assistants", 0xEAB7, ShowAssistantPicker),
-            ("Dashboard", 0xE80F, OpenMainDashboard)
-        })
-        {
-            var button = MakeButton(IconLabel(label, icon, AssistantSecondary), label, open);
-            button.Margin = new Thickness(0, 0, 5, 0);
-            shortcuts.Children.Add(button);
-        }
-        content.Children.Add(shortcuts);
+            portrait: DockTaskbar.IconBadge(), section: DockSection.Widgets);
         var searchRow = new DockPanel();
         var keyboard = new Border
         {
@@ -48,6 +35,10 @@ public partial class DashboardWindow
         search.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         search.Margin = new Thickness(0, 0, 0, 10);
         content.Children.Add(search);
+        var dashboard = MakeButton(IconLabel("Dashboard", 0xE80F, AssistantSecondary), "Dashboard", OpenMainDashboard);
+        dashboard.HorizontalAlignment = HorizontalAlignment.Left;
+        dashboard.Margin = new Thickness(0, 0, 9, 9);
+        content.Children.Add(dashboard);
         var tiles = new StackPanel();
         content.Children.Add(tiles);
         var widgets = WidgetActions();

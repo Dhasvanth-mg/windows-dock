@@ -50,13 +50,6 @@ public partial class DashboardWindow
         var inbox = IconButton(0xEA8F, "Activity inbox", ShowActivityInbox);
         DockPanel.SetDock(inbox, Dock.Right);
         toolbar.Children.Add(inbox);
-        if (compactAgents)
-        {
-            var widgets = WidgetLauncherButton();
-            DockPanel.SetDock(widgets, Dock.Right);
-            widgets.Margin = new Thickness(0, 0, 5, 0);
-            toolbar.Children.Add(widgets);
-        }
         var heading = Text(agentSetup ? "Connections" : "Coding chats", 20, strong: true);
         heading.VerticalAlignment = VerticalAlignment.Center;
         toolbar.Children.Add(heading);
@@ -251,9 +244,8 @@ public partial class DashboardWindow
 
     private void RevealAgentPage()
     {
-        if (IsVisible && SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
-            revealOffset.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(13, 0,
-                TimeSpan.FromMilliseconds(175)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+        if (IsVisible)
+            SlideDockSurface(revealOffset, nextDockSlide, 13);
     }
 
     private AgentSession[] RankedSessions(AgentApproval[] approvals) =>

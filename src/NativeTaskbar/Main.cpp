@@ -35,18 +35,20 @@ namespace
               showAgent(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowAgent").c_str())),
               assistant(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"Assistant").c_str())),
               showAssistant(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowAssistant").c_str())),
+              openLauncher(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"OpenLauncher").c_str())),
+              showLauncher(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowLauncher").c_str())),
               panelVisible(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"PanelVisible").c_str())),
               visibilityChanged(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"PanelVisibilityChanged").c_str())),
               agentGrid(CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(AgentGridState),
                   SessionName(pid, L"AgentGrid").c_str()))
         {
             if (!ready || !restored || !stop || !dashboard || !showDashboard || !agent || !showAgent ||
-                !assistant || !showAssistant || !panelVisible || !visibilityChanged || !agentGrid)
+                !assistant || !showAssistant || !openLauncher || !showLauncher || !panelVisible || !visibilityChanged || !agentGrid)
                 winrt::throw_last_error();
         }
 
         winrt::handle ready, restored, stop, dashboard, showDashboard, agent, showAgent, assistant, showAssistant, agentGrid;
-        winrt::handle panelVisible, visibilityChanged;
+        winrt::handle openLauncher, showLauncher, panelVisible, visibilityChanged;
     };
 
     class TaskbarVisibility
@@ -239,11 +241,12 @@ namespace
             return static_cast<bool>(dashboardProcess);
         };
         if (openOnStart)
-            SetEvent(session.dashboard.get());
+            SetEvent(session.openLauncher.get());
         TaskbarVisibility visibility;
         const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get(), session.agent.get(),
-            session.assistant.get(), session.visibilityChanged.get()};
-        const HANDLE panels[] = {session.showDashboard.get(), session.showAgent.get(), session.showAssistant.get()};
+            session.assistant.get(), session.openLauncher.get(), session.visibilityChanged.get()};
+        const HANDLE panels[] = {session.showDashboard.get(), session.showAgent.get(), session.showAssistant.get(),
+            session.showLauncher.get()};
         for (;;)
         {
             HANDLE waitFor[ARRAYSIZE(signals) + 2];

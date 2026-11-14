@@ -4,7 +4,9 @@ Windows Dock styles Explorer's taskbar in place on Windows 11 x64 25H2 (build 26
 
 ## Run the native dock
 
-Keep the contents of the native publish directory together and run NativeTaskbar.exe. Click the silver-and-amber Windows Dock icon on the taskbar to open Widgets. Use its top row to open Coding chats, Assistants, or the full Dashboard. Click the taskbar icon again to close Widgets. Use the Windows Dock notification-area menu, the dashboard's Settings page, or `--restore <controller PID>` to restore the normal appearance.
+Keep the contents of the native publish directory together and run NativeTaskbar.exe. Click or pull up on the silver-and-amber Windows Dock icon to open Widgets. Click the icon again to close Widgets. Use the Windows Dock notification-area menu, the dashboard's Settings page, or `--restore <controller PID>` to restore the normal appearance.
+
+At the bottom of Widgets, Coding chats, and Assistants, click a section or drag the handle sideways to switch. A horizontal scroll over that handle also switches sections. Drag down to close the panel. On a tool or conversation with a Back button, drag the handle right to go back. The full Dashboard opens from Widgets.
 
 Use one taskbar appearance module at a time. The native controller exits if it cannot find the expected taskbar layout. Panels open just above the taskbar. Windows Dock holds auto-hide off while a panel is open and restores the previous setting when the panel closes. If Explorer restarts, run the controller again.
 

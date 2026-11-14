@@ -43,7 +43,8 @@ public partial class DashboardWindow
             picker.Activate();
             return;
         }
-        var (window, content, _) = CreateDockPanel("Assistants", "", 366, 0, AssistantRule, widget: true, assistant: true);
+        var (window, content, _) = CreateDockPanel("Assistants", "", 366, 0, AssistantRule, assistant: true,
+            section: DockSection.Assistants);
         var grid = Columns(1, 1);
         grid.ColumnDefinitions.Insert(1, new ColumnDefinition { Width = new GridLength(1) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
