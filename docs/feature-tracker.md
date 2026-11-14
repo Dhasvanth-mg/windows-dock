@@ -366,3 +366,12 @@
 - Outcome: Lark researches like a field reporter, Fern helps make a busy day manageable, Bolt starts by reproducing a failure, and Orbit picks up conversational tangents. The compact picker uses original vector portraits, and each character offers two editable draft starters. The role IDs and MCP mappings stayed the same.
 - Verification: The Release build and x64 publish passed. Inspected the Windows render and verified all four names, starter behavior, draft switching, MCP routing, and planner context attachment in the smoke harness. Live MCP discovery and calls passed for Exa, Microsoft Learn, and the local planner. The installed tray opened the refreshed picker and Bolt’s chat while Hitodama remained running.
 - Remaining work: The revised prompts still need live response evaluation with a configured provider. This refresh verified prompt setup and local behavior without sending an assistant message.
+
+#### Quick actions and reusable assistant context
+
+- Status: Built, verified, and running in tray mode.
+- Scope: Add character-specific actions within reach of the 2×2 picker and make assistant replies easier to reuse.
+- Acceptance criteria: Each character offers a useful shortcut that preserves existing drafts. Context is gathered by explicit actions and can be reviewed before any model send. The picker remains compact and usable by keyboard.
+- Outcome: Lark previews Exa results from an explicit search. Fern previews today or seven days from the Dock Planner. Bolt can attach a reviewed excerpt of pasted logs and Orbit’s Idea jar adds a starter without overwriting the current draft. Assistant replies expose a copy button. All four shortcuts sit under their character tiles.
+- Verification: Release build and x64 publish passed. Windows smoke checks exercised draft preservation, both live planner ranges, stale-preview invalidation, the log size limit and attachment preview, Idea jar insertion, and presence of the copy action on a fixture reply. Exa and Microsoft Learn MCP calls passed. UI Automation opened all four actions in the installed tray app, and Hitodama remained running.
+- Remaining work: Live model replies using the new attachments and clipboard output from Copy reply were not exercised in this run.

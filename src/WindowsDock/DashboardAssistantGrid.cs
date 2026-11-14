@@ -35,7 +35,17 @@ public partial class DashboardWindow
             tile.Padding = new Thickness(9, 8, 9, 8);
             tile.ToolTip = persona.Bio;
             System.Windows.Automation.AutomationProperties.SetHelpText(tile, persona.Bio);
-            Put(grid, tile, index / 2, index % 2);
+            var actionLabel = AssistantQuickLabel(persona);
+            var tools = MakeButton(IconLabel(actionLabel, 0xE76C, tint), actionLabel, () => OpenAssistantQuickAction(slot));
+            tools.HorizontalContentAlignment = HorizontalAlignment.Left;
+            tools.Padding = new Thickness(8, 4, 8, 4);
+            tools.Margin = new Thickness(0, 2, 0, 0);
+            tools.Background = Brushes.Transparent;
+            tools.BorderBrush = Brushes.Transparent;
+            var cell = new StackPanel();
+            cell.Children.Add(tile);
+            cell.Children.Add(tools);
+            Put(grid, cell, index / 2, index % 2);
             buttons.Add(tile);
         }
         KeyboardNavigation.SetDirectionalNavigation(grid, KeyboardNavigationMode.Contained);

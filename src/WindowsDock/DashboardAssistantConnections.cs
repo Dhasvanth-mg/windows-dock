@@ -9,10 +9,11 @@ namespace WindowsDock;
 
 public partial class DashboardWindow
 {
-    private void ShowAssistantConnections(AssistantPersona persona)
+    private void ShowAssistantConnections(AssistantPersona persona, bool quick = false)
     {
         var tint = PersonaTint(persona);
-        var (window, content, cancellation) = CreateDockPanel("MCP connections", persona.Label, 458, 0xE8A7, tint,
+        var title = quick ? AssistantQuickLabel(persona) : "MCP connections";
+        var (window, content, cancellation) = CreateDockPanel(title, persona.Label, 458, 0xE8A7, tint,
             backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}");
         var connections = AssistantConnections.For(persona.Id);
         var chat = assistantConversations[assistantRole];
@@ -31,11 +32,16 @@ public partial class DashboardWindow
         var query = Field("Connection query", 500);
         query.Margin = new Thickness(0, 0, 0, 6);
         content.Children.Add(query);
+        var ranges = new ComboBox { ItemsSource = new[] { "Today", "7 days including today" }, SelectedIndex = quick ? 0 : 1,
+            Margin = new Thickness(0, 0, 0, 6) };
+        AutomationProperties.SetName(ranges, "Schedule range");
+        content.Children.Add(ranges);
         var actions = new WrapPanel();
-        var fetch = AccentButton("Fetch context", 0xE721, tint);
+        var fetch = AccentButton(quick ? (persona.Id == "research" ? "Search" : "Read schedule") : "Fetch context",
+            0xE721, tint);
         fetch.Margin = new Thickness(0, 0, 5, 4);
         actions.Children.Add(fetch);
-        var attach = ActionButton("Attach to draft");
+        var attach = ActionButton(chat.Context == null ? "Attach to draft" : "Replace attached context");
         actions.Children.Add(attach);
         content.Children.Add(actions);
         var status = Text("", 11, subdued);
@@ -50,18 +56,15 @@ public partial class DashboardWindow
         preview.Margin = new Thickness(0, 6, 0, 0);
         preview.Visibility = Visibility.Collapsed;
         content.Children.Add(preview);
-        AssistantMcpResult? result = null;
+        AssistantContext? result = null;
         var changing = false;
         var busy = false;
         choices.SelectionChanged += (_, _) => ShowConnection();
-        query.TextChanged += (_, _) =>
-        {
-            ClearResult();
-            status.Text = "";
-            UpdateActions();
-        };
+        query.TextChanged += (_, _) => ClearQueryResult();
+        ranges.SelectionChanged += (_, _) => ClearQueryResult();
         allow.Checked += (_, _) => SaveAllowed(true);
         allow.Unchecked += (_, _) => SaveAllowed(false);
+
         fetch.Click += async (_, _) =>
         {
             if (choices.SelectedItem is not AssistantConnection connection || !fetch.IsEnabled)
@@ -70,9 +73,10 @@ public partial class DashboardWindow
             busy = true;
             UpdateActions();
             status.Text = $"Reading from {connection.Label}…";
-            AssistantMcpResult? fetched = null;
+            AssistantContext? fetched = null;
             string? failure = null;
-            try { fetched = await AssistantConnections.FetchAsync(persona.Id, connection.Id, query.Text, cancellation); }
+            var input = connection.Id == "planner" && ranges.SelectedIndex == 0 ? "today" : query.Text;
+            try { fetched = await AssistantConnections.FetchAsync(persona.Id, connection.Id, input, cancellation); }
             catch (ArgumentException error) { failure = error.Message; }
             catch (OperationCanceledException) when (!cancellation.IsCancellationRequested) { failure = "The connection timed out."; }
             catch (OperationCanceledException) { }
@@ -103,9 +107,17 @@ public partial class DashboardWindow
             if (result == null)
                 return;
             chat.Context = result;
+            if (quick && string.IsNullOrWhiteSpace(chat.Draft))
+                chat.Draft = persona.Id == "research"
+                    ? $"Help me answer this using the attached search results. Which sources are strongest?\n\n{query.Text.Trim()}"
+                    : ranges.SelectedIndex == 0
+                        ? "Help me plan today using the attached schedule. What should come first?"
+                        : "Look at the next seven days. Which days need breathing room or prep time?";
             ShowAssistantWidget();
         };
         ShowConnection();
+        if (quick)
+            window.Loaded += (_, _) => (query.Visibility == Visibility.Visible ? (Control)query : ranges).Focus();
         window.Show();
 
         void ShowConnection()
@@ -119,6 +131,7 @@ public partial class DashboardWindow
             query.Text = "";
             query.Tag = connection.Id == "github" ? "owner/repository#123" : "Search terms";
             query.Visibility = connection.Endpoint == null ? Visibility.Collapsed : Visibility.Visible;
+            ranges.Visibility = connection.Id == "planner" ? Visibility.Visible : Visibility.Collapsed;
             status.Text = AssistantConnections.IsAvailable(connection) ? "" : "Set GITHUB_MCP_TOKEN to enable this connection.";
             ClearResult();
             UpdateActions();
@@ -141,7 +154,12 @@ public partial class DashboardWindow
                 if (!value)
                 {
                     if (chat.Context?.Source == connection.Label)
+                    {
                         chat.Context = null;
+                        attach.Content = "Attach to draft";
+                        AutomationProperties.SetName(attach, "Attach to draft");
+                        attach.ToolTip = "Attach to draft";
+                    }
                     ClearResult();
                 }
             }
@@ -162,12 +180,19 @@ public partial class DashboardWindow
             preview.Visibility = Visibility.Collapsed;
         }
 
+        void ClearQueryResult()
+        {
+            ClearResult();
+            status.Text = "";
+            UpdateActions();
+        }
+
         void UpdateActions()
         {
             if (choices.SelectedItem is not AssistantConnection connection)
                 return;
             var available = AssistantConnections.IsAvailable(connection);
-            choices.IsEnabled = query.IsEnabled = !busy;
+            choices.IsEnabled = query.IsEnabled = ranges.IsEnabled = !busy;
             allow.IsEnabled = !busy && available;
             fetch.IsEnabled = !busy && available && enabled.Contains(connection.Id) &&
                 (connection.Endpoint == null || !string.IsNullOrWhiteSpace(query.Text));

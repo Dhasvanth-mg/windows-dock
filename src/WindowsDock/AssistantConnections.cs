@@ -13,11 +13,13 @@ namespace WindowsDock;
 internal sealed record AssistantConnection(string Id, string Label, string Description, Uri? Endpoint, string Tool,
     string? TokenVariable = null);
 
-internal sealed record AssistantMcpResult(string Source, string Text);
+internal sealed record AssistantContext(string Source, string Text)
+{
+    internal const int TextLimit = 8_000;
+}
 
 internal static partial class AssistantConnections
 {
-    private const int ResultLimit = 8_000;
     private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false });
     private static readonly AssistantConnection Exa = new("exa", "Exa web search", "Sends the search terms to Exa.",
         new("https://mcp.exa.ai/mcp?tools=web_search_exa"), "web_search_exa");
@@ -48,7 +50,7 @@ internal static partial class AssistantConnections
     internal static Dictionary<string, object?> Arguments(AssistantConnection connection, string query)
     {
         if (connection.Id == Planner.Id)
-            return new() { ["days"] = 7 };
+            return new() { ["days"] = query == "today" ? 1 : 7 };
         if (connection.Id == GitHub.Id)
         {
             var reference = PullRequestReference().Match(query.Trim());
@@ -65,7 +67,7 @@ internal static partial class AssistantConnections
         return new() { ["query"] = query.Trim() };
     }
 
-    internal static async Task<AssistantMcpResult> FetchAsync(string personaId, string connectionId, string query,
+    internal static async Task<AssistantContext> FetchAsync(string personaId, string connectionId, string query,
         CancellationToken cancellation)
     {
         var connection = For(personaId).FirstOrDefault(item => item.Id == connectionId) ??
@@ -129,9 +131,10 @@ internal static partial class AssistantConnections
 
     private static string Limit(string text)
     {
-        if (text.Length <= ResultLimit)
+        if (text.Length <= AssistantContext.TextLimit)
             return text;
-        var length = char.IsHighSurrogate(text[ResultLimit - 1]) ? ResultLimit - 1 : ResultLimit;
+        var limit = AssistantContext.TextLimit - "\n[Result clipped]".Length;
+        var length = char.IsHighSurrogate(text[limit - 1]) ? limit - 1 : limit;
         return text[..length] + "\n[Result clipped]";
     }
 }

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,6 +14,7 @@ namespace WindowsDock;
 
 public partial class DashboardWindow
 {
+    private const int AssistantMessageLimit = 8000;
     private sealed record AssistantSource(string Label, AssistantProvider Provider, string Model, string? Variable);
     private static readonly AssistantSource[] AssistantSources =
     [
@@ -27,7 +29,7 @@ public partial class DashboardWindow
         internal List<(bool User, string Text)> Turns { get; } = [];
         internal string Draft { get; set; } = "";
         internal int SourceIndex { get; set; }
-        internal AssistantMcpResult? Context { get; set; }
+        internal AssistantContext? Context { get; set; }
     }
     private readonly AssistantConversation[] assistantConversations = AssistantPersonas.All.Select(_ => new AssistantConversation()).ToArray();
     private readonly System.Security.SecureString?[] assistantKeys = new System.Security.SecureString?[AssistantSources.Length];
@@ -44,7 +46,9 @@ public partial class DashboardWindow
 
     internal void ShowAssistantWidget()
     {
-        var persona = AssistantPersonas.All[assistantRole];
+        var slot = assistantRole;
+        var persona = AssistantPersonas.All[slot];
+        var chat = assistantConversations[slot];
         var tint = PersonaTint(persona);
         var (window, content, cancellation) = CreateDockPanel(persona.Name, persona.Role, 506, 0xEAB7, tint,
             backAction: ShowAssistantPicker, backLabel: "Back to assistants", portrait: PersonaPortrait(persona, 38));
@@ -58,8 +62,15 @@ public partial class DashboardWindow
             var connections = AccentButton("MCP connections", 0xE8A7, tint, () => ShowAssistantConnections(persona));
             connections.Padding = new Thickness(7, 4, 7, 4);
             toolRow.Children.Add(connections);
-            content.Children.Add(toolRow);
         }
+        if (persona.Id is "coding" or "casual")
+        {
+            var quick = ActionButton(AssistantQuickLabel(persona), () => OpenAssistantQuickAction(slot));
+            quick.Padding = new Thickness(7, 4, 7, 4);
+            quick.Margin = new Thickness(toolRow.Children.Count > 0 ? 5 : 0, 0, 0, 0);
+            toolRow.Children.Add(quick);
+        }
+        content.Children.Add(toolRow);
         var starters = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
         content.Children.Add(starters);
         var providers = new ComboBox { ItemsSource = AssistantSources, DisplayMemberPath = nameof(AssistantSource.Label) };
@@ -103,7 +114,7 @@ public partial class DashboardWindow
         var conversation = new ScrollViewer { Content = messages, MaxHeight = 218, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
         content.Children.Add(conversation);
-        var prompt = Field("Message", 8000);
+        var prompt = Field("Message", AssistantMessageLimit);
         prompt.AcceptsReturn = true;
         prompt.TextWrapping = TextWrapping.Wrap;
         prompt.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
@@ -134,12 +145,11 @@ public partial class DashboardWindow
         var catalog = new Dictionary<string, PlanModel[]>();
         var cooldownTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         cooldownTimer.Tick += (_, _) => SetBusy(busy);
-        AssistantConversation conversationState() => assistantConversations[assistantRole];
         var preferred = ChatGptPlan.Load().FirstOrDefault()?.ClientId;
         clear.Click += (_, _) =>
         {
-            conversationState().Turns.Clear();
-            conversationState().Context = null;
+            chat.Turns.Clear();
+            chat.Context = null;
             prompt.Clear();
             RenderConversation();
             RenderAttachment();
@@ -167,7 +177,7 @@ public partial class DashboardWindow
         {
             if (!updating && providers.SelectedIndex >= 0)
             {
-                conversationState().SourceIndex = providers.SelectedIndex;
+                chat.SourceIndex = providers.SelectedIndex;
                 SetProvider();
             }
         };
@@ -196,13 +206,13 @@ public partial class DashboardWindow
         window.Loaded += (_, _) => prompt.Focus();
         window.Closed += (_, _) =>
         {
-            conversationState().Draft = prompt.Text;
+            chat.Draft = prompt.Text;
             key.Clear();
             cooldownTimer.Stop();
         };
-        prompt.Text = conversationState().Draft;
+        prompt.Text = chat.Draft;
         updating = true;
-        providers.SelectedIndex = conversationState().SourceIndex;
+        providers.SelectedIndex = chat.SourceIndex;
         updating = false;
         RenderConversation();
         RenderAttachment();
@@ -222,7 +232,7 @@ public partial class DashboardWindow
 
         void SetProvider()
         {
-            var index = conversationState().SourceIndex;
+            var index = chat.SourceIndex;
             var source = AssistantSources[index];
             var plan = source.Provider == AssistantProvider.ChatGptPlan;
             model.Text = assistantModels[index] ?? source.Model;
@@ -242,7 +252,7 @@ public partial class DashboardWindow
 
         void SetDisclosure()
         {
-            var source = AssistantSources[conversationState().SourceIndex];
+            var source = AssistantSources[chat.SourceIndex];
             status.Text = source.Provider == AssistantProvider.ChatGptPlan
                 ? (accounts.SelectedItem as PlanAccount)?.Refresh.Length > 0
                     ? "Using ChatGPT plan. Send shares the current role’s conversation with ChatGPT."
@@ -254,7 +264,7 @@ public partial class DashboardWindow
 
         void SetBusy(bool busy)
         {
-            var isPlan = AssistantSources[conversationState().SourceIndex].Provider == AssistantProvider.ChatGptPlan;
+            var isPlan = AssistantSources[chat.SourceIndex].Provider == AssistantProvider.ChatGptPlan;
             var account = accounts.SelectedItem as PlanAccount;
             send.IsEnabled = !busy && (!isPlan || planModels.SelectedItem != null && account != null &&
                 assistantPlanCooldowns.GetValueOrDefault(account.ClientId) <= DateTimeOffset.UtcNow);
@@ -264,7 +274,7 @@ public partial class DashboardWindow
             foreach (Button button in starters.Children)
                 button.IsEnabled = !busy;
             toolRow.IsEnabled = attachment.IsEnabled = !busy;
-            clear.IsEnabled = !busy && conversationState().Turns.Count > 0;
+            clear.IsEnabled = !busy && chat.Turns.Count > 0;
             prompt.IsReadOnly = busy;
             cancel.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -354,7 +364,7 @@ public partial class DashboardWindow
 
         void RenderConversation()
         {
-            var history = conversationState().Turns;
+            var history = chat.Turns;
             intro.Visibility = starters.Visibility = history.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             messages.Children.Clear();
             conversation.Visibility = history.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -363,7 +373,26 @@ public partial class DashboardWindow
                 var line = new StackPanel();
                 var name = user ? "You" : persona.Name;
                 var messageTint = user ? accent : tint;
-                line.Children.Add(Text(name, 10, messageTint, true));
+                var heading = new DockPanel();
+                if (!user)
+                {
+                    var copy = IconButton(0xE8C8, "Copy reply", () =>
+                    {
+                        try
+                        {
+                            Clipboard.SetText(text);
+                            status.Text = "Reply copied.";
+                        }
+                        catch (ExternalException) { status.Text = "Clipboard is busy. Try again."; }
+                    });
+                    copy.Padding = new Thickness(4, 2, 4, 2);
+                    DockPanel.SetDock(copy, Dock.Right);
+                    heading.Children.Add(copy);
+                }
+                var author = Text(name, 10, messageTint, true);
+                author.VerticalAlignment = VerticalAlignment.Center;
+                heading.Children.Add(author);
+                line.Children.Add(heading);
                 var message = Field(name + " message", 0);
                 message.Text = text;
                 message.IsReadOnly = true;
@@ -383,7 +412,7 @@ public partial class DashboardWindow
         void RenderAttachment()
         {
             attachment.Children.Clear();
-            if (conversationState().Context is not { } context)
+            if (chat.Context is not { } context)
                 return;
             var review = ActionButton("Attached: " + context.Source, () =>
             {
@@ -402,7 +431,7 @@ public partial class DashboardWindow
             attachment.Children.Add(review);
             var remove = IconButton(0xE711, "Remove attached context", () =>
             {
-                conversationState().Context = null;
+                chat.Context = null;
                 RenderAttachment();
             });
             attachment.Children.Add(remove);
@@ -410,7 +439,6 @@ public partial class DashboardWindow
 
         async Task SendAsync()
         {
-            var chat = conversationState();
             var index = chat.SourceIndex;
             var source = AssistantSources[index];
             var isPlan = source.Provider == AssistantProvider.ChatGptPlan;
@@ -534,7 +562,7 @@ public partial class DashboardWindow
             for (var index = 0; index < AssistantSources.Length; index++)
             {
                 var alternate = index;
-                if (alternate == conversationState().SourceIndex ||
+                if (alternate == chat.SourceIndex ||
                     AssistantSources[alternate].Provider is not (AssistantProvider.Gemini or AssistantProvider.Grok))
                     continue;
                 var button = ActionButton("Switch to " + AssistantSources[alternate].Label, () =>

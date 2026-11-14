@@ -55,6 +55,8 @@ Choose **Widgets** from the dashboard or the compact Coding chats panel. Star a 
 - **Bolt** debugs and reviews code with Microsoft Learn. Set `GITHUB_MCP_TOKEN` to a token allowed to read your pull requests, then enable the read-only GitHub PR reader. Enter a PR as `owner/repository#123`.
 - **Orbit** is for conversation and brainstorming.
 
+In the picker, **Search the web** previews Exa results, **Preview schedule** reads today or seven days from the local planner, **Attach logs** accepts an editable excerpt, and **Idea jar** adds a conversation starter to Orbit’s draft. Search results, schedules, and logs have an attachment preview before you send a message. Use **Copy reply** to put any assistant reply on the clipboard.
+
 Open **MCP connections** inside a character's chat. **Fetch context** runs the selected read and shows a preview. **Attach to draft** adds the selected result to your next explicit send. The dock manages these connections and the model receives only the result you attach. Close the panel to cancel an in-progress read.
 
 In **Weather**, choose **Use my location** for automatic forecasts, or search for a city. The automatic option requests Windows location access and sends rounded coordinates to Open-Meteo when refreshing the forecast.
