@@ -485,7 +485,7 @@ public partial class DashboardWindow
 
     private (Window Window, StackPanel Content, CancellationToken Cancellation) CreateDockPanel(
         string title, string subtitle, double width, int icon, SolidColorBrush tint, bool widget = false,
-        Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null, Brush? surface = null)
+        Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null, bool assistant = false)
     {
         agentPanel?.Close();
         var returnFocus = FocusManager.GetFocusedElement(this) as FrameworkElement;
@@ -508,10 +508,9 @@ public partial class DashboardWindow
             heading.Children.Add(badge);
         }
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        labels.Children.Add(Text(title, 19, surface != null && SystemParameters.HighContrast
-            ? SystemColors.WindowTextBrush : Foreground, strong: true));
+        labels.Children.Add(Text(title, 19, assistant ? AssistantInk : Foreground, strong: true));
         if (!string.IsNullOrEmpty(subtitle))
-            labels.Children.Add(Text(subtitle, 11, subdued));
+            labels.Children.Add(Text(subtitle, 11, assistant ? AssistantSecondary : subdued));
         heading.Children.Add(labels);
         header.Children.Add(heading);
         var frame = new DockPanel();
@@ -525,18 +524,22 @@ public partial class DashboardWindow
             Owner = this, Title = title, Width = Math.Min(width, screen.WorkingArea.Width / dpi.DpiScaleX - 24),
             MaxHeight = screen.Bounds.Height / dpi.DpiScaleY - 80, SizeToContent = SizeToContent.Height,
             WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent,
-            Foreground = Foreground, FontFamily = FontFamily, ResizeMode = ResizeMode.NoResize, Topmost = true,
+            Foreground = assistant ? AssistantInk : Foreground, FontFamily = FontFamily, ResizeMode = ResizeMode.NoResize, Topmost = true,
             ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, UseLayoutRounding = true
         };
         window.Resources.MergedDictionaries.Add(new ResourceDictionary
         {
             Source = new Uri("/WindowsDock;component/DashboardControls.xaml", UriKind.Relative)
         });
+        if (assistant)
+            ApplyAssistantResources(window);
         frame.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         var card = Card(frame);
         card.CornerRadius = new CornerRadius(21);
-        card.Background = surface ?? new LinearGradientBrush(Color.FromRgb(37, 28, 53), Color.FromRgb(23, 21, 35), 55);
-        card.BorderBrush = AgentArt.Wash(tint, 123);
+        card.Background = assistant
+            ? (SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantShell)
+            : new LinearGradientBrush(Color.FromRgb(37, 28, 53), Color.FromRgb(23, 21, 35), 55);
+        card.BorderBrush = assistant ? AssistantRule : AgentArt.Wash(tint, 123);
         card.Padding = new Thickness(15);
         window.Content = card;
 

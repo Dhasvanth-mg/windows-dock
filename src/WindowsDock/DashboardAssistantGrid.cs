@@ -8,11 +8,33 @@ namespace WindowsDock;
 
 public partial class DashboardWindow
 {
-    private static readonly SolidColorBrush assistantShell = Brush("#202B37");
-    private static readonly SolidColorBrush assistantBay = Brush("#293746");
-    private static readonly SolidColorBrush assistantRule = Brush("#435264");
-    private static readonly SolidColorBrush assistantInk = Brush("#F2F6FA");
-    private static readonly SolidColorBrush assistantSoftInk = Brush("#B5C4D2");
+    private static readonly SolidColorBrush assistantShell = Brush("#000000");
+    private static readonly SolidColorBrush assistantInset = Brush("#141414");
+    private static readonly SolidColorBrush assistantRule = Brush("#272727");
+    private static readonly SolidColorBrush assistantInk = Brush("#F5F5F5");
+    private static readonly SolidColorBrush assistantSoftInk = Brush("#AEAEAE");
+    private static SolidColorBrush AssistantInk => SystemParameters.HighContrast ? SystemColors.WindowTextBrush : assistantInk;
+    private static SolidColorBrush AssistantSecondary => SystemParameters.HighContrast ? SystemColors.WindowTextBrush : assistantSoftInk;
+    private static SolidColorBrush AssistantRule => SystemParameters.HighContrast ? SystemColors.WindowTextBrush : assistantRule;
+
+    private static void ApplyAssistantResources(Window window)
+    {
+        var contrast = SystemParameters.HighContrast;
+        var surface = contrast ? SystemColors.WindowBrush : assistantInset;
+        var focus = contrast ? SystemColors.HighlightBrush : AssistantInk;
+        var hover = contrast ? SystemColors.ControlBrush : Brush("#10FFFFFF");
+        var selected = contrast ? SystemColors.ControlBrush : Brush("#22FFFFFF");
+        foreach (var key in new[] { "ChipSurface", "FieldSurface", "InputSurface", "InputPopup" })
+            window.Resources[key] = surface;
+        foreach (var key in new[] { "ChipStroke", "FieldStroke", "InputStroke" })
+            window.Resources[key] = AssistantRule;
+        foreach (var key in new[] { "TextPrimary", "InputText", "InputMark" })
+            window.Resources[key] = AssistantInk;
+        window.Resources["TextMuted"] = AssistantSecondary;
+        window.Resources["ChipHover"] = window.Resources["InputItemHover"] = hover;
+        window.Resources["InputItemSelected"] = window.Resources["InputChecked"] = selected;
+        window.Resources["ControlFocus"] = window.Resources["InputFocus"] = focus;
+    }
 
     internal void ShowAssistantPicker()
     {
@@ -21,28 +43,31 @@ public partial class DashboardWindow
             picker.Activate();
             return;
         }
-        var contrast = SystemParameters.HighContrast;
-        var ink = contrast ? SystemColors.WindowTextBrush : assistantInk;
-        var secondary = contrast ? SystemColors.WindowTextBrush : assistantSoftInk;
-        var rule = contrast ? SystemColors.WindowTextBrush : assistantRule;
-        var (window, content, _) = CreateDockPanel("Assistants", "", 366, 0, rule, widget: true,
-            surface: contrast ? SystemColors.WindowBrush : assistantShell);
+        var (window, content, _) = CreateDockPanel("Assistants", "", 366, 0, AssistantRule, widget: true, assistant: true);
         var grid = Columns(1, 1);
+        grid.ColumnDefinitions.Insert(1, new ColumnDefinition { Width = new GridLength(1) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var verticalRule = new Border { Background = AssistantRule };
+        Grid.SetColumn(verticalRule, 1);
+        Grid.SetRowSpan(verticalRule, 3);
+        grid.Children.Add(verticalRule);
+        var horizontalRule = new Border { Background = AssistantRule };
+        Grid.SetRow(horizontalRule, 1);
+        Grid.SetColumnSpan(horizontalRule, 3);
+        grid.Children.Add(horizontalRule);
         var buttons = new List<Button>();
         var buttonStyle = (Style)FindResource("AssistantPickerButton");
         for (var index = 0; index < AssistantPersonas.All.Length; index++)
         {
             var slot = index;
             var persona = AssistantPersonas.All[index];
-            var tint = contrast ? ink : PersonaTint(persona);
+            var keyLabel = (index + 1).ToString();
             var body = new DockPanel();
-            var key = new Border
-            {
-                Child = Text((index + 1).ToString(), 11, secondary),
-                BorderThickness = new Thickness(1), BorderBrush = rule, CornerRadius = new CornerRadius(4),
-                Padding = new Thickness(4, 0, 4, 1), Margin = new Thickness(4, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Top
-            };
+            var key = Text(keyLabel, 11, AssistantSecondary);
+            key.Margin = new Thickness(4, 2, 0, 0);
+            key.VerticalAlignment = VerticalAlignment.Top;
             DockPanel.SetDock(key, Dock.Right);
             body.Children.Add(key);
             var portrait = PersonaPortrait(persona, 42);
@@ -50,16 +75,16 @@ public partial class DashboardWindow
             portrait.Margin = new Thickness(0, 0, 7, 0);
             body.Children.Add(portrait);
             var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            labels.Children.Add(Text(persona.Name, 16, ink, strong: true));
-            labels.Children.Add(Text(persona.Role, 11, secondary));
+            labels.Children.Add(Text(persona.Name, 16, AssistantInk, strong: true));
+            labels.Children.Add(Text(persona.Role, 12, AssistantSecondary));
             body.Children.Add(labels);
             var tile = MakeButton(body, persona.Label, () => OpenAssistantConversation(slot));
             tile.Style = buttonStyle;
-            tile.Foreground = tint;
-            tile.Padding = new Thickness(4, 5, 5, 4);
+            tile.Foreground = AssistantInk;
+            tile.Padding = new Thickness(3, 4, 6, 3);
             tile.ToolTip = persona.Bio;
             AutomationProperties.SetHelpText(tile, persona.Bio);
-            AutomationProperties.SetAcceleratorKey(tile, (index + 1).ToString());
+            AutomationProperties.SetAcceleratorKey(tile, keyLabel);
             var actionLabel = AssistantQuickLabel(persona);
             var actionIcon = persona.Id switch
             {
@@ -69,26 +94,24 @@ public partial class DashboardWindow
                 _ => 0xEA80
             };
             var action = new DockPanel();
-            var glyph = DockGlyph(actionIcon, 12, tint);
+            var glyph = DockGlyph(actionIcon, 12, AssistantSecondary);
             glyph.Margin = new Thickness(0, 0, 7, 0);
             action.Children.Add(glyph);
-            action.Children.Add(Text(actionLabel, 12, ink));
+            action.Children.Add(Text(actionLabel, 12, AssistantInk));
             var tools = MakeButton(action, actionLabel, () => OpenAssistantQuickAction(slot));
             tools.Style = buttonStyle;
-            tools.Foreground = tint;
-            tools.Padding = new Thickness(8, 5, 8, 5);
-            tools.MinHeight = 29;
-            var cell = new StackPanel();
-            cell.Children.Add(tile);
-            cell.Children.Add(new Border { Height = 1, Background = rule, Margin = new Thickness(8, 0, 8, 0) });
-            cell.Children.Add(tools);
-            var compartment = new Border
+            tools.Foreground = AssistantInk;
+            tools.Padding = new Thickness(10, 4, 8, 4);
+            tools.MinHeight = 28;
+            var cell = new StackPanel
             {
-                Child = cell, Background = contrast ? SystemColors.WindowBrush : assistantBay,
-                BorderBrush = rule, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(11),
-                Padding = new Thickness(2)
+                Margin = new Thickness(index % 2 == 0 ? 0 : 5, 4, index % 2 == 0 ? 5 : 0, 4)
             };
-            Put(grid, compartment, index / 2, index % 2);
+            cell.Children.Add(tile);
+            cell.Children.Add(tools);
+            Grid.SetRow(cell, index / 2 * 2);
+            Grid.SetColumn(cell, index % 2 * 2);
+            grid.Children.Add(cell);
             buttons.Add(tile);
         }
         KeyboardNavigation.SetDirectionalNavigation(grid, KeyboardNavigationMode.Contained);
@@ -121,7 +144,6 @@ public partial class DashboardWindow
 
     private Border PersonaPortrait(AssistantPersona persona, double size)
     {
-        var tint = PersonaTint(persona);
         var art = new Image
         {
             Source = persona.Face, Width = size * .82, Height = size * .82,
@@ -130,7 +152,7 @@ public partial class DashboardWindow
         return new Border
         {
             Width = size, Height = size, CornerRadius = new CornerRadius(size / 3),
-            HorizontalAlignment = HorizontalAlignment.Center, Background = AgentArt.Wash(tint, 36),
+            HorizontalAlignment = HorizontalAlignment.Center,
             Child = art
         };
     }

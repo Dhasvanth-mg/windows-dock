@@ -49,10 +49,10 @@ public partial class DashboardWindow
         var slot = assistantRole;
         var persona = AssistantPersonas.All[slot];
         var chat = assistantConversations[slot];
-        var tint = PersonaTint(persona);
+        var tint = AssistantInk;
         var (window, content, cancellation) = CreateDockPanel(persona.Name, persona.Role, 506, 0xEAB7, tint,
-            backAction: ShowAssistantPicker, backLabel: "Back to assistants", portrait: PersonaPortrait(persona, 38));
-        var intro = Text(persona.Greeting, 14, tint, strong: true);
+            backAction: ShowAssistantPicker, backLabel: "Back to assistants", portrait: PersonaPortrait(persona, 38), assistant: true);
+        var intro = Text(persona.Greeting, 14, AssistantInk, strong: true);
         intro.Margin = new Thickness(0, 0, 0, 6);
         content.Children.Add(intro);
         var toolRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 7) };
@@ -124,7 +124,7 @@ public partial class DashboardWindow
         content.Children.Add(prompt);
         var attachment = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
         content.Children.Add(attachment);
-        var status = Text("", 11, subdued);
+        var status = Text("", 11, AssistantSecondary);
         status.TextWrapping = TextWrapping.Wrap;
         status.Margin = new Thickness(0, 6, 0, 6);
         content.Children.Add(status);
@@ -224,7 +224,7 @@ public partial class DashboardWindow
         StackPanel Labeled(string label, Control control)
         {
             var group = new StackPanel();
-            group.Children.Add(Text(label, 11, subdued));
+            group.Children.Add(Text(label, 11, AssistantSecondary));
             control.Margin = new Thickness(0, 3, 0, 0);
             group.Children.Add(control);
             return group;
@@ -372,7 +372,7 @@ public partial class DashboardWindow
             {
                 var line = new StackPanel();
                 var name = user ? "You" : persona.Name;
-                var messageTint = user ? accent : tint;
+                var messageTint = user ? AssistantSecondary : AssistantInk;
                 var heading = new DockPanel();
                 if (!user)
                 {
@@ -401,7 +401,9 @@ public partial class DashboardWindow
                 message.BorderBrush = System.Windows.Media.Brushes.Transparent;
                 message.Padding = new Thickness(0, 3, 0, 0);
                 line.Children.Add(message);
-                var card = Card(line, messageTint);
+                var card = Card(line);
+                card.Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantInset;
+                card.BorderBrush = AssistantRule;
                 card.Padding = new Thickness(8, 6, 8, 6);
                 card.Margin = new Thickness(user ? 27 : 0, 0, user ? 0 : 27, 5);
                 messages.Children.Add(card);
@@ -417,7 +419,7 @@ public partial class DashboardWindow
             var review = ActionButton("Attached: " + context.Source, () =>
             {
                 var (previewWindow, body, _) = CreateDockPanel("Attached context", context.Source, 474, 0xE8A7, tint,
-                    backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}");
+                    backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}", assistant: true);
                 var text = Field("Attached context text", 0);
                 text.IsReadOnly = true;
                 text.TextWrapping = TextWrapping.Wrap;
@@ -425,7 +427,7 @@ public partial class DashboardWindow
                 text.MaxHeight = 270;
                 text.Text = context.Text;
                 body.Children.Add(text);
-                body.Children.Add(Text("Included with your next message.", 11, subdued));
+                body.Children.Add(Text("Included with your next message.", 11, AssistantSecondary));
                 previewWindow.Show();
             });
             attachment.Children.Add(review);

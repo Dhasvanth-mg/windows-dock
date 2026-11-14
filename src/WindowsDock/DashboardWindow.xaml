@@ -14,10 +14,16 @@
         <SolidColorBrush x:Key="TextPrimary" Color="#F8F3FF"/>
         <SolidColorBrush x:Key="TextSecondary" Color="#C5BCD6"/>
         <SolidColorBrush x:Key="TextMuted" Color="#A69BB8"/>
+        <SolidColorBrush x:Key="ChipSurface" Color="#1BCDB6F9"/>
+        <SolidColorBrush x:Key="ChipStroke" Color="#22D9C6FF"/>
+        <SolidColorBrush x:Key="ChipHover" Color="#16DCCAFF"/>
+        <SolidColorBrush x:Key="FieldSurface" Color="#22110D1B"/>
+        <SolidColorBrush x:Key="FieldStroke" Color="#40C6AEF5"/>
+        <SolidColorBrush x:Key="ControlFocus" Color="#E2CBFF"/>
         <Style x:Key="Chip" TargetType="Button">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="Background" Value="#1BCDB6F9"/>
-            <Setter Property="BorderBrush" Value="#22D9C6FF"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="Background" Value="{DynamicResource ChipSurface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ChipStroke}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10,6"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
@@ -32,7 +38,7 @@
                             <Grid>
                                 <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                                   HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
-                                <Border x:Name="Hover" Background="#16DCCAFF" CornerRadius="7" Margin="-2"
+                                <Border x:Name="Hover" Background="{DynamicResource ChipHover}" CornerRadius="7" Margin="-2"
                                         Opacity="0" IsHitTestVisible="False"/>
                             </Grid>
                         </Border>
@@ -41,7 +47,7 @@
                                 <Setter TargetName="Hover" Property="Opacity" Value="1"/>
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Surface" Property="BorderBrush" Value="#E2CBFF"/>
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource ControlFocus}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Surface" Property="Opacity" Value="0.7"/>
@@ -73,10 +79,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Hit" Property="Background" Value="#1E8DA9C4"/>
+                                <Setter TargetName="Hit" Property="Background" Value="#10FFFFFF"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Hit" Property="Background" Value="#378DA9C4"/>
+                                <Setter TargetName="Hit" Property="Background" Value="#22FFFFFF"/>
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Hit" Property="BorderBrush" Value="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
@@ -87,9 +93,9 @@
             </Setter>
         </Style>
         <Style x:Key="Field" TargetType="TextBox">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="Background" Value="#22110D1B"/>
-            <Setter Property="BorderBrush" Value="#40C6AEF5"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="Background" Value="{DynamicResource FieldSurface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource FieldStroke}"/>
             <Setter Property="Padding" Value="8,5"/>
             <Setter Property="CaretBrush" Value="White"/>
             <Setter Property="Template">
@@ -99,13 +105,13 @@
                                 BorderThickness="1" CornerRadius="7" Padding="{TemplateBinding Padding}">
                             <Grid>
                                 <ScrollViewer x:Name="PART_ContentHost"/>
-                                <TextBlock x:Name="Placeholder" Text="{TemplateBinding Tag}" Foreground="{StaticResource TextMuted}"
+                                <TextBlock x:Name="Placeholder" Text="{TemplateBinding Tag}" Foreground="{DynamicResource TextMuted}"
                                            IsHitTestVisible="False" Visibility="Collapsed"/>
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="FieldSurface" Property="BorderBrush" Value="#CDB4FF"/>
+                                <Setter TargetName="FieldSurface" Property="BorderBrush" Value="{DynamicResource InputFocus}"/>
                             </Trigger>
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>

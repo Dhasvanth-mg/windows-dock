@@ -38,10 +38,10 @@ public partial class DashboardWindow
     private void ShowAssistantLogs(AssistantPersona persona, AssistantConversation chat)
     {
         const string source = "Debug logs";
-        var tint = PersonaTint(persona);
+        var tint = AssistantInk;
         var (window, content, _) = CreateDockPanel("Attach logs", persona.Name, 460, 0xE8C8, tint,
-            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}");
-        var note = Text("Keep the relevant lines and remove secrets before attaching.", 11, subdued);
+            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}", assistant: true);
+        var note = Text("Keep the relevant lines and remove secrets before attaching.", 11, AssistantSecondary);
         note.TextWrapping = TextWrapping.Wrap;
         note.Margin = new Thickness(0, 0, 0, 7);
         content.Children.Add(note);
@@ -56,7 +56,7 @@ public partial class DashboardWindow
             logs.Text = chat.Context.Text;
         content.Children.Add(logs);
 
-        var status = Text("", 11, subdued);
+        var status = Text("", 11, AssistantSecondary);
         status.TextWrapping = TextWrapping.Wrap;
         status.Margin = new Thickness(0, 6, 0, 6);
         content.Children.Add(status);
@@ -108,12 +108,12 @@ public partial class DashboardWindow
 
     private void ShowAssistantIdeaJar(AssistantPersona persona, AssistantConversation chat)
     {
-        var (window, content, _) = CreateDockPanel("Idea jar", persona.Name, 366, 0xEA80, PersonaTint(persona),
-            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}");
-        var note = Text("Pick a conversation starter to add to your draft.", 11, subdued);
+        var (window, content, _) = CreateDockPanel("Idea jar", persona.Name, 366, 0xEA80, AssistantInk,
+            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}", assistant: true);
+        var note = Text("Pick a conversation starter to add to your draft.", 11, AssistantSecondary);
         note.Margin = new Thickness(0, 0, 0, 7);
         content.Children.Add(note);
-        var status = Text("", 11, subdued);
+        var status = Text("", 11, AssistantSecondary);
         status.TextWrapping = TextWrapping.Wrap;
         foreach (var (label, prompt) in new[]
         {

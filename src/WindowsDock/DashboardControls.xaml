@@ -4,6 +4,11 @@
     <SolidColorBrush x:Key="InputSurface" Color="#2D253D"/>
     <SolidColorBrush x:Key="InputStroke" Color="#594B70"/>
     <SolidColorBrush x:Key="InputFocus" Color="#CDB4FF"/>
+    <SolidColorBrush x:Key="InputItemHover" Color="#39577A"/>
+    <SolidColorBrush x:Key="InputItemSelected" Color="#30445E"/>
+    <SolidColorBrush x:Key="InputPopup" Color="#242731"/>
+    <SolidColorBrush x:Key="InputMark" Color="#F6FAFF"/>
+    <SolidColorBrush x:Key="InputChecked" Color="#3B689E"/>
 
     <Style TargetType="Thumb">
         <Setter Property="Background" Value="#757C8D"/>
@@ -58,11 +63,11 @@
     </Style>
 
     <Style TargetType="ContextMenu">
-        <Setter Property="Foreground" Value="{StaticResource InputText}"/>
+        <Setter Property="Foreground" Value="{DynamicResource InputText}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContextMenu">
-                    <Border Background="{StaticResource InputSurface}" BorderBrush="{StaticResource InputStroke}"
+                    <Border Background="{DynamicResource InputSurface}" BorderBrush="{DynamicResource InputStroke}"
                             CornerRadius="8" BorderThickness="1" Padding="4">
                         <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
                     </Border>
@@ -72,7 +77,7 @@
     </Style>
 
     <Style TargetType="MenuItem">
-        <Setter Property="Foreground" Value="{StaticResource InputText}"/>
+        <Setter Property="Foreground" Value="{DynamicResource InputText}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuItem">
@@ -81,7 +86,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="Surface" Property="Background" Value="#39577A"/>
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource InputItemHover}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Surface" Property="Opacity" Value="0.5"/>
@@ -93,9 +98,9 @@
     </Style>
 
     <Style TargetType="PasswordBox">
-        <Setter Property="Background" Value="{StaticResource InputSurface}"/>
-        <Setter Property="Foreground" Value="{StaticResource InputText}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource InputStroke}"/>
+        <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
+        <Setter Property="Foreground" Value="{DynamicResource InputText}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource InputStroke}"/>
         <Setter Property="CaretBrush" Value="White"/>
         <Setter Property="Padding" Value="8,5"/>
         <Setter Property="Template">
@@ -107,7 +112,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource InputFocus}"/>
+                            <Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource InputFocus}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Surface" Property="Opacity" Value="0.5"/>
@@ -119,7 +124,7 @@
     </Style>
 
     <Style TargetType="ComboBoxItem">
-        <Setter Property="Foreground" Value="{StaticResource InputText}"/>
+        <Setter Property="Foreground" Value="{DynamicResource InputText}"/>
         <Setter Property="Padding" Value="8,5"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -129,10 +134,10 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="Item" Property="Background" Value="#39577A"/>
+                                <Setter TargetName="Item" Property="Background" Value="{DynamicResource InputItemHover}"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Item" Property="Background" Value="#30445E"/>
+                                <Setter TargetName="Item" Property="Background" Value="{DynamicResource InputItemSelected}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -141,9 +146,9 @@
     </Style>
 
     <Style TargetType="ComboBox">
-        <Setter Property="Foreground" Value="{StaticResource InputText}"/>
-        <Setter Property="Background" Value="{StaticResource InputSurface}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource InputStroke}"/>
+        <Setter Property="Foreground" Value="{DynamicResource InputText}"/>
+        <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource InputStroke}"/>
         <Setter Property="MinHeight" Value="28"/>
         <Setter Property="MaxDropDownHeight" Value="220"/>
         <Setter Property="Template">
@@ -157,7 +162,7 @@
                                     <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                                             BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                                             CornerRadius="7" BorderThickness="1">
-                                        <Path Data="M 0 0 L 4 4 L 8 0" Stroke="#C1CBDD" StrokeThickness="1.3"
+                                        <Path Data="M 0 0 L 4 4 L 8 0" Stroke="{DynamicResource InputText}" StrokeThickness="1.3"
                                               HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,9,0"/>
                                     </Border>
                                 </ControlTemplate>
@@ -169,7 +174,7 @@
                         <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" PlacementTarget="{Binding ElementName=Switch}"
                                Placement="Bottom" VerticalOffset="3" AllowsTransparency="True" Focusable="False">
                             <Border MinWidth="{Binding ActualWidth, ElementName=Switch}" MaxHeight="{TemplateBinding MaxDropDownHeight}"
-                                    Background="#242731" BorderBrush="{StaticResource InputStroke}" BorderThickness="1"
+                                    Background="{DynamicResource InputPopup}" BorderBrush="{DynamicResource InputStroke}" BorderThickness="1"
                                     Padding="3" CornerRadius="8">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto" CanContentScroll="True">
                                     <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
@@ -179,7 +184,7 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter Property="BorderBrush" Value="{StaticResource InputFocus}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource InputFocus}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5"/>
@@ -191,25 +196,25 @@
     </Style>
 
     <Style TargetType="CheckBox">
-        <Setter Property="Foreground" Value="{StaticResource InputText}"/>
+        <Setter Property="Foreground" Value="{DynamicResource InputText}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
                     <StackPanel Orientation="Horizontal">
-                        <Border x:Name="Box" Width="16" Height="16" CornerRadius="4" BorderBrush="{StaticResource InputStroke}"
-                                BorderThickness="1" Background="{StaticResource InputSurface}" Margin="0,0,7,0">
-                            <Path x:Name="Mark" Data="M 0 4 L 3 7 L 9 1" Stroke="#F6FAFF" StrokeThickness="1.5"
+                        <Border x:Name="Box" Width="16" Height="16" CornerRadius="4" BorderBrush="{DynamicResource InputStroke}"
+                                BorderThickness="1" Background="{DynamicResource InputSurface}" Margin="0,0,7,0">
+                            <Path x:Name="Mark" Data="M 0 4 L 3 7 L 9 1" Stroke="{DynamicResource InputMark}" StrokeThickness="1.5"
                                   HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                         </Border>
                         <ContentPresenter VerticalAlignment="Center"/>
                     </StackPanel>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Box" Property="Background" Value="#3B689E"/>
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource InputChecked}"/>
                             <Setter TargetName="Mark" Property="Visibility" Value="Visible"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource InputFocus}"/>
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource InputFocus}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5"/>
@@ -221,7 +226,7 @@
     </Style>
 
     <Style TargetType="ProgressBar">
-        <Setter Property="Foreground" Value="{StaticResource InputFocus}"/>
+        <Setter Property="Foreground" Value="{DynamicResource InputFocus}"/>
         <Setter Property="Background" Value="#25FFFFFF"/>
         <Setter Property="Template">
             <Setter.Value>

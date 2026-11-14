@@ -384,3 +384,12 @@
 - Outcome: The skill command completed successfully and its full output and supporting license were reviewed. The picker uses a compact slate surface and each character has one compartment with two separate targets for chat and its quick action. Type hierarchy comes from the native Segoe UI Variable family, with portraits and role colors reserved for character recognition. The displayed 1 to 4 keys map directly to chat shortcuts.
 - Verification: Release build, x64 publish, Windows smoke checks, and visual review of the 366-DIP render passed. The installed tray build advertised all four keyboard shortcuts to Windows UI Automation, exposed all four quick actions as focusable, and opened Orbit’s Idea jar. Hitodama remained running.
 - Remaining work: High-contrast theme and alternate monitor scaling were not exercised live in this pass.
+
+#### Black assistant surfaces and frosted taskbar
+
+- Status: Built, verified, and running in tray mode.
+- Scope: Rerun frontend-design, review Astryx, and refine the native assistant interface around true black and neutral surfaces. Preserve the taskbar material and current styling mode.
+- Acceptance criteria: The picker and assistant panels use a consistent neutral palette and clear keyboard focus. The 2×2 grid and quick actions keep their existing routes. The taskbar retains its frosted appearance.
+- Outcome: Reran the requested skill and reviewed Astryx’s dark surfaces and interaction states. The picker uses a single black surface with neutral rules, plain shortcut numbers, and color in the portraits. Assistant chats and tools use the same black surface and neutral inputs, buttons, reply cards, and focus states. No change was made to native acrylic styling or Hitodama settings.
+- Verification: Release build, x64 publish, and Windows smoke checks passed. The harness checked opaque black picker and chat surfaces, neutral provider controls, and quick-action behavior. Inspected the picker, chat, and connection screenshots. The installed tray build exposed all four numbered chats and quick actions and opened Lark’s chat. The native taskbar binary hash and Hitodama processes matched before and after installation.
+- Remaining work: Alternate display scaling and high-contrast mode were not exercised live.

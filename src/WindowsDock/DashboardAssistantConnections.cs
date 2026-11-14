@@ -11,10 +11,10 @@ public partial class DashboardWindow
 {
     private void ShowAssistantConnections(AssistantPersona persona, bool quick = false)
     {
-        var tint = PersonaTint(persona);
+        var tint = AssistantInk;
         var title = quick ? AssistantQuickLabel(persona) : "MCP connections";
         var (window, content, cancellation) = CreateDockPanel(title, persona.Label, 458, 0xE8A7, tint,
-            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}");
+            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}", assistant: true);
         var connections = AssistantConnections.For(persona.Id);
         var chat = assistantConversations[assistantRole];
         var enabled = AssistantConnections.Enabled();
@@ -23,7 +23,7 @@ public partial class DashboardWindow
         choices.ItemsSource = connections;
         choices.SelectedIndex = 0;
         content.Children.Add(choices);
-        var description = Text("", 11, subdued);
+        var description = Text("", 11, AssistantSecondary);
         description.Margin = new Thickness(0, 6, 0, 4);
         description.TextWrapping = TextWrapping.Wrap;
         content.Children.Add(description);
@@ -44,7 +44,7 @@ public partial class DashboardWindow
         var attach = ActionButton(chat.Context == null ? "Attach to draft" : "Replace attached context");
         actions.Children.Add(attach);
         content.Children.Add(actions);
-        var status = Text("", 11, subdued);
+        var status = Text("", 11, AssistantSecondary);
         status.TextWrapping = TextWrapping.Wrap;
         status.Margin = new Thickness(0, 6, 0, 0);
         content.Children.Add(status);
