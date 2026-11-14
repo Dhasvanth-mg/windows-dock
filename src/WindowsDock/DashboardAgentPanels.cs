@@ -485,7 +485,7 @@ public partial class DashboardWindow
 
     private (Window Window, StackPanel Content, CancellationToken Cancellation) CreateDockPanel(
         string title, string subtitle, double width, int icon, SolidColorBrush tint, bool widget = false,
-        Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null)
+        Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null, Brush? surface = null)
     {
         agentPanel?.Close();
         var returnFocus = FocusManager.GetFocusedElement(this) as FrameworkElement;
@@ -501,11 +501,15 @@ public partial class DashboardWindow
             header.Children.Add(back);
         }
         var heading = new DockPanel { VerticalAlignment = VerticalAlignment.Center };
-        var badge = portrait ?? GlyphBadge(icon, tint, 33);
-        badge.Margin = new Thickness(0, 0, 9, 0);
-        heading.Children.Add(badge);
+        if (portrait != null || icon != 0)
+        {
+            var badge = portrait ?? GlyphBadge(icon, tint, 33);
+            badge.Margin = new Thickness(0, 0, 9, 0);
+            heading.Children.Add(badge);
+        }
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        labels.Children.Add(Text(title, 19, strong: true));
+        labels.Children.Add(Text(title, 19, surface != null && SystemParameters.HighContrast
+            ? SystemColors.WindowTextBrush : Foreground, strong: true));
         if (!string.IsNullOrEmpty(subtitle))
             labels.Children.Add(Text(subtitle, 11, subdued));
         heading.Children.Add(labels);
@@ -531,7 +535,7 @@ public partial class DashboardWindow
         frame.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         var card = Card(frame);
         card.CornerRadius = new CornerRadius(21);
-        card.Background = new LinearGradientBrush(Color.FromRgb(37, 28, 53), Color.FromRgb(23, 21, 35), 55);
+        card.Background = surface ?? new LinearGradientBrush(Color.FromRgb(37, 28, 53), Color.FromRgb(23, 21, 35), 55);
         card.BorderBrush = AgentArt.Wash(tint, 123);
         card.Padding = new Thickness(15);
         window.Content = card;

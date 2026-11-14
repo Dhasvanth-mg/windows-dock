@@ -375,3 +375,12 @@
 - Outcome: Lark previews Exa results from an explicit search. Fern previews today or seven days from the Dock Planner. Bolt can attach a reviewed excerpt of pasted logs and Orbit’s Idea jar adds a starter without overwriting the current draft. Assistant replies expose a copy button. All four shortcuts sit under their character tiles.
 - Verification: Release build and x64 publish passed. Windows smoke checks exercised draft preservation, both live planner ranges, stale-preview invalidation, the log size limit and attachment preview, Idea jar insertion, and presence of the copy action on a fixture reply. Exa and Microsoft Learn MCP calls passed. UI Automation opened all four actions in the installed tray app, and Hitodama remained running.
 - Remaining work: Live model replies using the new attachments and clipboard output from Copy reply were not exercised in this run.
+
+#### Frontend design skill pass
+
+- Status: Built, verified, and running in tray mode.
+- Scope: Load the requested frontend-design skill and use its design guidance for the native assistant interface.
+- Acceptance criteria: Read the complete skill instructions and supporting files it requires. Apply a coherent visual direction to the assistant picker while preserving existing shortcuts, accessibility, and draft routing.
+- Outcome: The skill command completed successfully and its full output and supporting license were reviewed. The picker uses a compact slate surface and each character has one compartment with two separate targets for chat and its quick action. Type hierarchy comes from the native Segoe UI Variable family, with portraits and role colors reserved for character recognition. The displayed 1 to 4 keys map directly to chat shortcuts.
+- Verification: Release build, x64 publish, Windows smoke checks, and visual review of the 366-DIP render passed. The installed tray build advertised all four keyboard shortcuts to Windows UI Automation, exposed all four quick actions as focusable, and opened Orbit’s Idea jar. Hitodama remained running.
+- Remaining work: High-contrast theme and alternate monitor scaling were not exercised live in this pass.
