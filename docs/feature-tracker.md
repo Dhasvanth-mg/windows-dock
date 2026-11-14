@@ -357,3 +357,12 @@
 - Acceptance criteria: All four assistants are identifiable by name and appearance. Selecting a tile opens that role directly and preserves its draft. The grid works from the existing assistant shortcut and tray mode.
 - Outcome: Ctrl+Alt+A, the tray Assistant entry, and the Assistant widget open the centered 2×2 picker. Each character has original pixel art, its own color, and a one-click route into its chat. The picker supports keys 1 through 4, arrow navigation, and Esc.
 - Verification: Inspected the Windows picker and chat renders. The installed shortcut opened all four tiles, and selecting Patch opened its chat. The smoke harness checked separate drafts as it switched between characters and reopened the picker.
+
+#### Assistant character refresh
+
+- Status: Built, verified, and running in tray mode.
+- Scope: Reimagine the four assistants’ characters, voices, and artwork and refine the quick picker.
+- Acceptance criteria: Each character is recognizable at a glance and has a distinct way of talking and starting a conversation. The 2×2 picker remains keyboard-accessible. Existing drafts and connections continue to map to the same roles.
+- Outcome: Lark researches like a field reporter, Fern helps make a busy day manageable, Bolt starts by reproducing a failure, and Orbit picks up conversational tangents. The compact picker uses original vector portraits, and each character offers two editable draft starters. The role IDs and MCP mappings stayed the same.
+- Verification: The Release build and x64 publish passed. Inspected the Windows render and verified all four names, starter behavior, draft switching, MCP routing, and planner context attachment in the smoke harness. Live MCP discovery and calls passed for Exa, Microsoft Learn, and the local planner. The installed tray opened the refreshed picker and Bolt’s chat while Hitodama remained running.
+- Remaining work: The revised prompts still need live response evaluation with a configured provider. This refresh verified prompt setup and local behavior without sending an assistant message.

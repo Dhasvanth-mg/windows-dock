@@ -152,10 +152,10 @@ public partial class DashboardWindow
         content.Children.Add(actions);
         foreach (var starter in persona.Starters)
         {
-            var button = ActionButton(starter, () =>
+            var button = ActionButton(starter.Label, () =>
             {
                 if (string.IsNullOrWhiteSpace(prompt.Text))
-                    prompt.Text = starter == "Just talk" ? "Hey Fizz" : starter + ": ";
+                    prompt.Text = starter.Draft;
                 prompt.Focus();
                 prompt.CaretIndex = prompt.Text.Length;
             });

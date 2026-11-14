@@ -137,7 +137,7 @@ public partial class DashboardWindow
         new("Downloads", "Files and transfers", "queue transfers files", 0xE896, accent, ShowDownloadWidget, "downloads"),
         new("Focus timer", "Sessions and breaks", "timer break do not disturb", 0xE916, green, ShowFocusWidget, "focus"),
         new("Notifications", "Review and summarize alerts", "alerts summary digest", 0xEA8F, pink, ShowNotificationWidget, "notifications"),
-        new("Assistant", "Vega, Miso, Patch, and Fizz", "AI model provider message research coding casual", 0xEAB7, purple, ShowAssistantPicker, "assistant"),
+        new("Assistant", "Choose a character", "AI model provider message research planning coding casual", 0xEAB7, purple, ShowAssistantPicker, "assistant"),
         new("Activity inbox", "Replies, approvals, and limits", "unread status finished quota", 0xEA8F, pink, ShowActivityInbox, "activity")
     ];
 

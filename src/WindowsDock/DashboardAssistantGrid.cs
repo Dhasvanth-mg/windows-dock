@@ -14,7 +14,7 @@ public partial class DashboardWindow
             picker.Activate();
             return;
         }
-        var (window, content, _) = CreateDockPanel("Assistants", "", 430, 0xEAB7, purple, widget: true);
+        var (window, content, _) = CreateDockPanel("Assistants", "", 366, 0xEAB7, purple, widget: true);
         var grid = Columns(1, 1);
         var buttons = new List<Button>();
         for (var index = 0; index < AssistantPersonas.All.Length; index++)
@@ -22,27 +22,25 @@ public partial class DashboardWindow
             var slot = index;
             var persona = AssistantPersonas.All[index];
             var tint = PersonaTint(persona);
-            var body = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-            var portrait = PersonaPortrait(persona, 50);
-            portrait.Margin = new Thickness(0, 0, 0, 5);
+            var body = new DockPanel();
+            var portrait = PersonaPortrait(persona, 40);
+            portrait.Margin = new Thickness(0, 0, 9, 0);
             body.Children.Add(portrait);
-            var name = Text(persona.Name, 17, tint, strong: true);
-            name.TextAlignment = TextAlignment.Center;
-            var role = Text(persona.Role, 11, subdued);
-            role.TextAlignment = TextAlignment.Center;
-            body.Children.Add(name);
-            body.Children.Add(role);
+            var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            labels.Children.Add(Text(persona.Name, 15, tint, strong: true));
+            labels.Children.Add(Text(persona.Role, 11, subdued));
+            body.Children.Add(labels);
             var tile = MakeButton(body, persona.Label, () => OpenAssistantConversation(slot));
-            tile.Padding = new Thickness(8, 9, 8, 10);
-            tile.Background = AgentArt.Wash(tint, 25);
-            tile.BorderBrush = AgentArt.Wash(tint, 70);
+            tile.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+            tile.Padding = new Thickness(9, 8, 9, 8);
             tile.ToolTip = persona.Bio;
+            System.Windows.Automation.AutomationProperties.SetHelpText(tile, persona.Bio);
             Put(grid, tile, index / 2, index % 2);
             buttons.Add(tile);
         }
         KeyboardNavigation.SetDirectionalNavigation(grid, KeyboardNavigationMode.Contained);
         content.Children.Add(grid);
-        var hint = Text("1–4 to pick · Esc to close", 10, muted);
+        var hint = Text("Keys 1 to 4 · Esc to close", 10, subdued);
         hint.HorizontalAlignment = HorizontalAlignment.Center;
         hint.Margin = new Thickness(0, 8, 0, 0);
         content.Children.Add(hint);
@@ -77,15 +75,14 @@ public partial class DashboardWindow
         var tint = PersonaTint(persona);
         var art = new Image
         {
-            Source = AssistantPersonas.Face(persona), Width = size * .78, Height = size * .65,
+            Source = persona.Face, Width = size * .82, Height = size * .82,
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
         };
-        RenderOptions.SetBitmapScalingMode(art, BitmapScalingMode.NearestNeighbor);
         return new Border
         {
             Width = size, Height = size, CornerRadius = new CornerRadius(size / 3),
-            HorizontalAlignment = HorizontalAlignment.Center, Background = AgentArt.Wash(tint, 25),
-            BorderBrush = AgentArt.Wash(tint, 55), BorderThickness = new Thickness(1), Child = art
+            HorizontalAlignment = HorizontalAlignment.Center, Background = AgentArt.Wash(tint, 36),
+            Child = art
         };
     }
 }

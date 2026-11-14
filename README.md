@@ -46,14 +46,14 @@ Choose **Widgets** from the dashboard or the compact Coding chats panel. Star a 
 - **Downloads** shows recent files and partial browser downloads from the Downloads folder, alongside Windows background transfers. Browser progress is limited to what the partial files expose.
 - **Focus timer** runs locally. **Windows Focus** opens the system controls for a focus session with Do Not Disturb.
 - **Notifications** reads recent Windows alerts when access is allowed. Select alerts and review the draft before sending it to Gemini or Groq.
-- **Assistant** opens Vega, Miso, Patch, and Fizz. Choose **ChatGPT plan** and continue in your browser to authorize eligible plan usage. **Claude API** uses a Claude Console key. Gemini, Grok, and Groq use their own API keys. Configure them in the panel or with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or `GROQ_API_KEY`. On a usage error, you can switch to Gemini or Grok and resend the draft. Each send shares the current character's recent conversation with the selected provider.
+- **Assistant** opens the 2×2 character picker. Choose **ChatGPT plan** and continue in your browser to authorize eligible plan usage. **Claude API** uses a Claude Console key. Gemini, Grok, and Groq use their own API keys. Configure them in the panel or with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or `GROQ_API_KEY`. On a usage error, you can switch to Gemini or Grok and resend the draft. Each send shares the current character's recent conversation with the selected provider.
 
 ### Assistant connections
 
-- **Vega** researches claims and comparisons with Exa web search.
-- **Miso** helps plan your day with a local MCP connection to dock reminders and the imported calendar. Calendar join links stay out of the result.
-- **Patch** debugs and reviews code with Microsoft Learn. Set `GITHUB_MCP_TOKEN` to a token allowed to read your pull requests, then enable the read-only GitHub PR reader. Enter a PR as `owner/repository#123`.
-- **Fizz** is for conversation and brainstorming.
+- **Lark** follows claims back to their sources with Exa web search.
+- **Fern** helps plan your day with a local MCP connection to dock reminders and the imported calendar. Calendar join links stay out of the result.
+- **Bolt** debugs and reviews code with Microsoft Learn. Set `GITHUB_MCP_TOKEN` to a token allowed to read your pull requests, then enable the read-only GitHub PR reader. Enter a PR as `owner/repository#123`.
+- **Orbit** is for conversation and brainstorming.
 
 Open **MCP connections** inside a character's chat. **Fetch context** runs the selected read and shows a preview. **Attach to draft** adds the selected result to your next explicit send. The dock manages these connections and the model receives only the result you attach. Close the panel to cancel an in-progress read.
 
