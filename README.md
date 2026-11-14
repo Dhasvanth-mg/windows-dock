@@ -4,11 +4,11 @@ Windows Dock styles Explorer's taskbar in place on Windows 11 x64 25H2 (build 26
 
 ## Run the native dock
 
-Keep the contents of the native publish directory together and run NativeTaskbar.exe. Click the grid button beside the tray to open the dashboard. Ctrl+Alt+D, the Windows Dock notification-area menu, and the dashboard's Settings page can restore the normal appearance. The console launcher also accepts `--restore <controller PID>`.
+Keep the contents of the native publish directory together and run NativeTaskbar.exe. Click the star beside the 2×2 chat grid to open the dashboard. Ctrl+Alt+D, the Windows Dock notification-area menu, and the dashboard's Settings page can restore the normal appearance. The console launcher also accepts `--restore <controller PID>`.
 
 Use only one taskbar appearance tool at a time. The native controller exits if it cannot find the expected taskbar layout. Explorer stays in charge of taskbar auto-hide and screen space. If Explorer restarts, run the controller again.
 
-The dashboard includes media sessions and volume, Windows settings shortcuts, a calendar, local reminders, a focus timer, system statistics, a file shelf, a wallpaper picker, and optional city-based weather. Entering a city and fetching a forecast uses Open-Meteo. In Music and mixer, the lyrics button sends track metadata to LRCLIB to look up line-synced lyrics.
+The dashboard includes media sessions and volume, Windows settings shortcuts, a calendar, local reminders, a focus timer, system statistics, a file shelf, a wallpaper picker, and weather. Forecasts use Open-Meteo. In the Audio tab, the lyrics button sends track metadata to LRCLIB to look up line-synced lyrics.
 
 ## Coding chats
 
@@ -24,7 +24,7 @@ Under **Connections and defaults**, enable the provider hooks for live updates. 
 
 ## Widgets
 
-Choose **Widgets** from the dashboard or the compact Coding chats panel. Press **Ctrl+K** while either panel is open to search installed desktop shortcuts, workspaces, and dock actions.
+Choose **Widgets** from the dashboard or the compact Coding chats panel. Press **Ctrl+K** while either panel or a widget popup is open to search installed desktop shortcuts, workspaces, and dock actions.
 
 - **Audio switchboard** changes the active output device and offers per-app volume and output routing. Some apps apply a new route when they reopen their audio stream.
 - **Meetings** reads a local `.ics` export and offers Join and Copy link for supported meeting providers.
@@ -34,6 +34,7 @@ Choose **Widgets** from the dashboard or the compact Coding chats panel. Press *
 - **Downloads** shows recent files and partial browser downloads from the Downloads folder, alongside Windows background transfers. Browser progress is limited to what the partial files expose.
 - **Focus timer** runs locally. **Windows Focus** opens the system controls for a focus session with Do Not Disturb.
 - **Notifications** reads recent Windows alerts when access is allowed. Select alerts and review the draft before sending it to Gemini or Groq.
+- **Assistant** opens a separate conversation with Gemini or Groq. Enter an API key for the dock session or use one of the same environment variables as Summaries. Each message sends the recent conversation to the selected provider.
 
 In **Weather**, choose **Use my location** for automatic forecasts, or search for a city. The automatic option requests Windows location access and sends rounded coordinates to Open-Meteo when refreshing the forecast.
 
@@ -62,5 +63,7 @@ dotnet publish src/WindowsDock -c Release -r win-x64 --self-contained -o artifac
 ```
 
 Keep the complete publish directory together. Run with `--safe-mode` to load defaults and keep edits in memory for the session. Normal settings are stored in `%LOCALAPPDATA%\WindowsDock\dock.json` with a previous-version backup.
+
+The companion Studio edits dividers and custom shortcuts for the companion bar. Native mode uses Windows app pins and the dashboard's Workspace shortcuts.
 
 See the [architecture and feasibility matrix](docs/ARCHITECTURE.md) and [roadmap](ROADMAP.md) for the remaining product milestones.

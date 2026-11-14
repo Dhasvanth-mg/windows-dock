@@ -10,9 +10,9 @@ public partial class DashboardWindow
 {
     private void ShowGitHubWidget()
     {
-        var (window, content, cancellation) = CreateAgentPanel("GitHub checks and reviews", "", 476);
+        var (window, content, cancellation) = CreateDockPanel("GitHub checks and reviews", "", 476, 0xE73E, purple, widget: true);
         var query = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
-        var refresh = ActionButton("Refresh");
+        var refresh = AccentButton("Refresh", 0xE72C, purple);
         DockPanel.SetDock(refresh, Dock.Right);
         refresh.Margin = new Thickness(6, 0, 0, 0);
         query.Children.Add(refresh);
@@ -125,16 +125,14 @@ public partial class DashboardWindow
                     if (!Uri.TryCreate(url, UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps ||
                         address.Host != "github.com" || address.UserInfo.Length != 0)
                         return;
-                    var body = new StackPanel();
-                    var name = Text(title, 12, strong: true);
-                    name.MaxWidth = 392;
-                    body.Children.Add(name);
-                    body.Children.Add(Text(detail, 10, subdued));
+                    var body = CardHeading(title, 0xE73E, purple,
+                        DockGlyph(0xE8A7, 12, purple), detail);
+                    body.Margin = new Thickness(0);
                     var button = MakeButton(body, title, () => OpenTarget(address.AbsoluteUri));
                     button.ToolTip = title;
                     button.Margin = new Thickness(0, 3, 0, 0);
                     button.HorizontalAlignment = HorizontalAlignment.Stretch;
-                    button.HorizontalContentAlignment = HorizontalAlignment.Left;
+                    button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
                     results.Children.Add(button);
                 }
             }

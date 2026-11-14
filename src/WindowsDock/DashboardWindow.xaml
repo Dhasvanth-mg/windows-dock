@@ -160,23 +160,35 @@
         </Border.BorderBrush>
         <Grid x:Name="PanelLayout">
             <Grid.RowDefinitions>
-                <RowDefinition Height="35"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <Grid x:Name="DashboardHeader" Margin="1,0,1,4">
-                <StackPanel x:Name="PrimaryTabs" Orientation="Horizontal" VerticalAlignment="Center"/>
-                <Border x:Name="HeaderClock" Background="#21C8AFF9" BorderBrush="#33C8AFF9"
-                        BorderThickness="1" Padding="9,3" CornerRadius="8"
-                        HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="HeaderTime" FontSize="12" FontWeight="SemiBold"/>
-                        <Border Width="3" Height="3" CornerRadius="2" Background="#CAB4FF" Margin="8,0" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="HeaderDate" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+            <StackPanel x:Name="DashboardHeader" Margin="4,3,4,8">
+                <DockPanel Height="35" Margin="0,0,0,8">
+                    <StackPanel x:Name="HeaderActions" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"/>
+                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="#29CAB4FF" BorderBrush="#50CAB4FF" BorderThickness="1"
+                                Width="29" Height="29" CornerRadius="9" Margin="0,0,8,0">
+                            <TextBlock Text="✦" FontSize="17" Foreground="#E0CEFF" FontFamily="Segoe UI Symbol"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Text="Windows Dock" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
-                </Border>
-                <StackPanel x:Name="SecondaryTabs" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-            </Grid>
-            <ContentControl Grid.Row="1" x:Name="PageHost" HorizontalContentAlignment="Stretch"/>
+                    <Border x:Name="HeaderClock" Background="#21C8AFF9" BorderBrush="#33C8AFF9"
+                            BorderThickness="1" Padding="9,3" CornerRadius="8"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="HeaderTime" FontSize="12" FontWeight="SemiBold"/>
+                            <Border Width="3" Height="3" CornerRadius="2" Background="#CAB4FF" Margin="8,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="HeaderDate" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </DockPanel>
+                <WrapPanel x:Name="DashboardTabs" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+            </StackPanel>
+            <ScrollViewer x:Name="PageScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <ContentControl x:Name="PageHost" HorizontalContentAlignment="Stretch"/>
+            </ScrollViewer>
         </Grid>
     </Border>
 </Window>

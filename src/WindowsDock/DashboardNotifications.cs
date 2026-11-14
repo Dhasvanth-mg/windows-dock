@@ -11,7 +11,7 @@ public partial class DashboardWindow
 {
     private void ShowNotificationWidget()
     {
-        var (window, content, cancellation) = CreateAgentPanel("Notifications", "", 466);
+        var (window, content, cancellation) = CreateDockPanel("Notifications", "", 466, 0xEA8F, pink, widget: true);
         var status = Text("", 11, subdued);
         status.TextWrapping = TextWrapping.Wrap;
         content.Children.Add(status);
@@ -21,7 +21,7 @@ public partial class DashboardWindow
         var fetch = ActionButton("Read notifications");
         fetch.Margin = new Thickness(0, 0, 5, 4);
         actions.Children.Add(fetch);
-        var digest = ActionButton("Summarize selected");
+        var digest = AccentButton("Summarize selected", 0xEAB7, pink);
         digest.Margin = new Thickness(0, 0, 5, 4);
         actions.Children.Add(digest);
         actions.Children.Add(ActionButton("Paste text", () => ShowTextSummary("Notification summary", "", "Notifications to summarize", "")));
@@ -61,13 +61,18 @@ public partial class DashboardWindow
                             continue;
                         var title = item.AppInfo?.DisplayInfo.DisplayName ?? "Windows";
                         var display = title + " · " + (text.Length > 170 ? text[..169] + "…" : text);
-                        var label = Text(display, 11, subdued);
+                        var labels = new StackPanel();
+                        labels.Children.Add(Text(title, 11, strong: true));
+                        var label = Text(text.Length > 170 ? text[..169] + "…" : text, 11, subdued);
                         label.TextWrapping = TextWrapping.Wrap;
-                        var check = new CheckBox { Content = label, ToolTip = title + "\n" + text,
-                            Margin = new Thickness(0, 0, 0, 7) };
+                        labels.Children.Add(label);
+                        var check = new CheckBox { Content = labels, ToolTip = title + "\n" + text };
                         System.Windows.Automation.AutomationProperties.SetName(check, display);
                         notifications.Add((title + ": " + text, check));
-                        list.Children.Add(check);
+                        var card = Card(check, pink);
+                        card.Padding = new Thickness(8, 6, 8, 6);
+                        card.Margin = new Thickness(0, 0, 0, 5);
+                        list.Children.Add(card);
                         check.Checked += (_, _) => UpdateDigest();
                         check.Unchecked += (_, _) => UpdateDigest();
                     }

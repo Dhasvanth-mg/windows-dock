@@ -11,7 +11,7 @@ public partial class DashboardWindow
 {
     private void ShowDownloadWidget()
     {
-        var (window, content, cancellation) = CreateAgentPanel("Downloads", "", 466);
+        var (window, content, cancellation) = CreateDockPanel("Downloads", "", 466, 0xE896, accent, widget: true);
         var status = Text("", 11, subdued);
         status.TextWrapping = TextWrapping.Wrap;
         var list = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
@@ -20,7 +20,7 @@ public partial class DashboardWindow
         refresh.Click += (_, _) => _ = LoadAsync();
         refresh.Margin = new Thickness(0, 0, 5, 4);
         actions.Children.Add(refresh);
-        actions.Children.Add(ActionButton("Open Downloads folder", () => OpenTarget(DownloadsDirectory())));
+        actions.Children.Add(AccentButton("Open Downloads folder", 0xE8B7, accent, () => OpenTarget(DownloadsDirectory())));
         content.Children.Add(status);
         content.Children.Add(list);
         content.Children.Add(actions);
@@ -70,7 +70,7 @@ public partial class DashboardWindow
 
         void AddRow(string title, string detail, string? file, string folder)
         {
-            var row = new DockPanel { Margin = new Thickness(0, 4, 0, 0) };
+            var row = new DockPanel();
             var action = IconButton(0xE8B7, "Open folder for " + title, () => OpenTarget(folder));
             DockPanel.SetDock(action, Dock.Right);
             row.Children.Add(action);
@@ -86,13 +86,19 @@ public partial class DashboardWindow
                 DockPanel.SetDock(open, Dock.Right);
                 row.Children.Add(open);
             }
+            var badge = GlyphBadge(file == null ? 0xE896 : 0xE8A5, accent, 27);
+            badge.Margin = new Thickness(0, 0, 7, 0);
+            row.Children.Add(badge);
             var labels = new StackPanel();
             var name = Text(title, 12, strong: true);
             name.ToolTip = title;
             labels.Children.Add(name);
             labels.Children.Add(Text(detail, 10, muted));
             row.Children.Add(labels);
-            list.Children.Add(Card(row));
+            var card = Card(row, accent);
+            card.Padding = new Thickness(7, 5, 7, 5);
+            card.Margin = new Thickness(0, 0, 0, 5);
+            list.Children.Add(card);
         }
 
         async System.Threading.Tasks.Task<Transfer[]> ReadTransfersAsync()

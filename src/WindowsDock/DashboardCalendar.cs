@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Ellipse = System.Windows.Shapes.Ellipse;
+using ShapePath = System.Windows.Shapes.Path;
 using System.Windows.Threading;
 
 namespace WindowsDock;
@@ -17,16 +18,22 @@ public partial class DashboardWindow
     private DateTime reminderDate = DateTime.Today;
     private bool showReminders;
     private List<Reminder>? reminders;
+    private Action? updateFocusWidget;
 
     private UIElement CalendarPage()
     {
         var content = new StackPanel();
         var tabs = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 0, 0, 7) };
-        foreach (var (name, selected) in new[] { ("Calendar", false), ("Reminders", true) })
+        foreach (var (name, icon, selected) in new[] { ("Calendar", 0xE787, false), ("Reminders", 0xEA8F, true) })
         {
-            var tab = ActionButton(name, () => { showReminders = selected; ShowPage(DashboardPage.Calendar); });
-            tab.Background = selected == showReminders ? Brush("#3DFFFFFF") : Brushes.Transparent;
+            var tab = MakeButton(IconLabel(name, icon, amber), name, () =>
+            {
+                showReminders = selected;
+                ShowPage(DashboardPage.Calendar);
+            });
+            tab.Background = selected == showReminders ? AgentArt.Wash(amber, 35) : Brushes.Transparent;
+            tab.BorderBrush = selected == showReminders ? AgentArt.Wash(amber, 65) : Brushes.Transparent;
             tab.Margin = new Thickness(2, 0, 2, 0);
             tabs.Children.Add(tab);
         }
@@ -37,10 +44,14 @@ public partial class DashboardWindow
 
     private UIElement CalendarContent()
     {
-        var grid = Columns(0.75, 2.45, 1.6);
+        var grid = WideDashboard ? Columns(0.8, 2.35, 1.55) : Columns(0.9, 2.2);
         var today = DateTime.Today;
         var date = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
-        var heading = Text(today.ToString("dddd"), 11, accent, true);
+        var stamp = GlyphBadge(0xE787, amber, 28);
+        stamp.HorizontalAlignment = HorizontalAlignment.Center;
+        stamp.Margin = new Thickness(0, 0, 0, 6);
+        date.Children.Add(stamp);
+        var heading = Text(today.ToString("dddd"), 11, amber, true);
         heading.HorizontalAlignment = HorizontalAlignment.Center;
         date.Children.Add(heading);
         var day = Text(today.ToString("d MMM"), 23, strong: true);
@@ -50,7 +61,7 @@ public partial class DashboardWindow
         todayButton.HorizontalAlignment = HorizontalAlignment.Center;
         todayButton.Margin = new Thickness(0, 6, 0, 0);
         date.Children.Add(todayButton);
-        Put(grid, Card(date), 0);
+        Put(grid, Card(date, amber), 0);
 
         var calendar = new StackPanel();
         var nav = new DockPanel();
@@ -74,42 +85,86 @@ public partial class DashboardWindow
         calendar.Children.Add(nav);
 
         var first = calendarWeek.AddDays(-(((int)calendarWeek.DayOfWeek + 6) % 7));
-        var week = new System.Windows.Controls.Primitives.UniformGrid { Columns = 7, Margin = new Thickness(0, 6, 0, 0) };
+        var week = new System.Windows.Controls.Primitives.UniformGrid { Columns = 7, Margin = new Thickness(0, 8, 0, 0) };
         for (var i = 0; i < 7; i++)
         {
             var entry = first.AddDays(i);
             var values = new StackPanel();
-            var weekday = Text(entry.ToString("ddd"), 10, muted);
+            var isToday = entry == today;
+            var weekday = Text(entry.ToString("ddd"), 10, isToday ? amber : muted);
             weekday.HorizontalAlignment = HorizontalAlignment.Center;
             values.Children.Add(weekday);
-            var number = Text(entry.Day.ToString(), 12, strong: true);
-            values.Children.Add(MakeButton(number, entry.ToString("D"), () =>
+            var number = Text(entry.Day.ToString(), 14, isToday ? amber : Foreground, true);
+            number.HorizontalAlignment = HorizontalAlignment.Center;
+            values.Children.Add(number);
+            var button = MakeButton(values, entry.ToString("D"), () =>
             {
                 reminderDate = entry;
                 showReminders = true;
                 ShowPage(DashboardPage.Calendar);
-            }));
-            var button = (Button)values.Children[1];
-            button.Background = entry == today ? Brush("#285488") : Brushes.Transparent;
-            button.BorderBrush = Brushes.Transparent;
-            button.Padding = new Thickness(4, 3, 4, 3);
-            button.HorizontalAlignment = HorizontalAlignment.Center;
-            week.Children.Add(values);
+            });
+            button.Background = isToday ? AgentArt.Wash(amber, 35) : AgentArt.Wash(purple, 15);
+            button.BorderBrush = isToday ? AgentArt.Wash(amber, 64) : Brushes.Transparent;
+            button.Padding = new Thickness(2, 6, 2, 6);
+            button.Margin = new Thickness(1, 0, 1, 0);
+            week.Children.Add(button);
         }
         calendar.Children.Add(week);
+        var meetings = ActionButton("Upcoming meetings", ShowMeetingWidget);
+        meetings.HorizontalAlignment = HorizontalAlignment.Left;
+        meetings.Margin = new Thickness(0, 9, 0, 0);
+        calendar.Children.Add(meetings);
         Put(grid, Card(calendar), 1);
 
+        var focus = FocusCard(out var update);
+        if (WideDashboard)
+            Put(grid, focus, 2);
+        else
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetRow(focus, 1);
+            Grid.SetColumnSpan(focus, 2);
+            focus.Margin = new Thickness(0, 7, 0, 0);
+            grid.Children.Add(focus);
+        }
+        updatePage = update;
+        return grid;
+    }
+
+    private void ShowFocusWidget()
+    {
+        var (window, content, _) = CreateDockPanel("Focus timer", "", 406, 0xE916, green, widget: true);
+        content.Children.Add(FocusCard(out var update, title: false));
+        updateFocusWidget = update;
+        window.Closed += (_, _) => updateFocusWidget = null;
+        update();
+        window.Show();
+    }
+
+    private Border FocusCard(out Action update, bool title = true)
+    {
         var focus = new DockPanel { LastChildFill = true };
-        var badge = new Grid { Width = 64, Height = 64, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 9, 0) };
-        badge.Children.Add(new Ellipse { Stroke = amber, StrokeThickness = 3 });
-        var reading = Text("", 16, strong: true);
+        const double size = 74;
+        const double radius = 32;
+        var badge = new Grid { Width = size, Height = size, VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 0) };
+        var dial = new Ellipse { Width = radius * 2, Height = radius * 2, Stroke = AgentArt.Wash(green, 43),
+            Fill = AgentArt.Wash(green, 17), StrokeThickness = 3 };
+        badge.Children.Add(dial);
+        var remaining = new ShapePath { Stroke = green, StrokeThickness = 3,
+            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
+        badge.Children.Add(remaining);
+        var reading = Text("", 17, green, true);
         reading.HorizontalAlignment = HorizontalAlignment.Center;
         reading.VerticalAlignment = VerticalAlignment.Center;
         badge.Children.Add(reading);
         focus.Children.Add(badge);
         var controls = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        controls.Children.Add(Text("Focus timer", 12, strong: true));
-        var presets = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) };
+        if (title)
+            controls.Children.Add(Text("Focus timer", 13, strong: true));
+        var presets = new WrapPanel { Margin = new Thickness(0, 4, 0, 4) };
+        var buttons = new List<(int Minutes, Button Button)>();
         foreach (var minutes in new[] { 5, 10, 25, 50 })
         {
             var button = ActionButton(minutes + "m", () =>
@@ -117,39 +172,72 @@ public partial class DashboardWindow
                 focusMinutes = minutes;
                 focusEnds = null;
                 PersistFocus();
-                ShowPage(DashboardPage.Calendar);
+                UpdateDashboard();
             });
-            button.Padding = new Thickness(5, 3, 5, 3);
+            button.Padding = new Thickness(6, 4, 6, 4);
             button.Margin = new Thickness(0, 0, 3, 0);
-            if (minutes == focusMinutes)
-                button.Background = Brush("#664315");
+            buttons.Add((minutes, button));
             presets.Children.Add(button);
         }
         controls.Children.Add(presets);
-        var toggle = ActionButton("Start", () =>
+        var actions = new WrapPanel();
+        var toggle = AccentButton("Start", 0xE768, green, () =>
         {
             focusEnds = focusEnds == null ? DateTimeOffset.Now.AddMinutes(focusMinutes) : null;
             PersistFocus();
             UpdateDashboard();
         });
-        toggle.Background = Brush("#795018");
-        toggle.HorizontalAlignment = HorizontalAlignment.Left;
-        controls.Children.Add(toggle);
+        toggle.Margin = new Thickness(0, 0, 4, 4);
+        actions.Children.Add(toggle);
         var quiet = ActionButton("Windows Focus", () => OpenTarget("ms-settings:quiethours"));
         quiet.ToolTip = "Start a Windows Focus session with Do Not Disturb";
-        quiet.HorizontalAlignment = HorizontalAlignment.Left;
-        quiet.Margin = new Thickness(0, 4, 0, 0);
-        controls.Children.Add(quiet);
+        actions.Children.Add(quiet);
+        controls.Children.Add(actions);
         focus.Children.Add(controls);
-        Put(grid, Card(focus), 2);
-        updatePage = () =>
+        bool? showingTimer = null;
+        var displayedPreset = 0;
+        var displayedSeconds = -1;
+        var track = AgentArt.Wash(green, 43);
+        update = () =>
         {
-            var left = focusEnds.HasValue ? focusEnds.Value - DateTimeOffset.Now : TimeSpan.FromMinutes(focusMinutes);
-            reading.Text = FormatTime(left < TimeSpan.Zero ? TimeSpan.Zero : left);
-            toggle.Content = focusEnds.HasValue ? "Reset" : "Start";
-            System.Windows.Automation.AutomationProperties.SetName(toggle, (string)toggle.Content);
+            var running = focusEnds.HasValue;
+            var duration = TimeSpan.FromMinutes(focusMinutes);
+            var seconds = (int)Math.Ceiling(Math.Clamp((focusEnds - DateTimeOffset.Now ?? duration).TotalSeconds, 0, duration.TotalSeconds));
+            if (displayedSeconds != seconds || displayedPreset != focusMinutes)
+            {
+                displayedSeconds = seconds;
+                var ratio = seconds / duration.TotalSeconds;
+                reading.Text = FormatTime(TimeSpan.FromSeconds(seconds));
+                dial.Stroke = ratio >= 1 ? green : track;
+                if (ratio is > 0 and < 1)
+                {
+                    var middle = size / 2;
+                    var angle = (ratio * 2 - .5) * Math.PI;
+                    var end = new Point(middle + radius * Math.Cos(angle), middle + radius * Math.Sin(angle));
+                    var arc = new ArcSegment(end, new Size(radius, radius), 0, ratio > .5, SweepDirection.Clockwise, true);
+                    remaining.Data = new PathGeometry(new[] { new PathFigure(new Point(middle, middle - radius), new[] { arc }, false) });
+                }
+                else
+                    remaining.Data = null;
+            }
+            if (showingTimer != running)
+            {
+                showingTimer = running;
+                var label = running ? "Reset" : "Start";
+                toggle.Content = IconLabel(label, running ? 0xE72C : 0xE768, green);
+                System.Windows.Automation.AutomationProperties.SetName(toggle, label);
+            }
+            if (displayedPreset != focusMinutes)
+            {
+                displayedPreset = focusMinutes;
+                foreach (var (minutes, button) in buttons)
+                {
+                    button.Background = minutes == focusMinutes ? AgentArt.Wash(green, 35) : Brushes.Transparent;
+                    button.BorderBrush = minutes == focusMinutes ? AgentArt.Wash(green, 65) : Brushes.Transparent;
+                }
+            }
         };
-        return grid;
+        return Card(focus, green);
     }
 
     private UIElement RemindersContent()
@@ -157,7 +245,7 @@ public partial class DashboardWindow
         reminders ??= ReadJson<List<Reminder>>("reminders.json") ?? [];
         var grid = Columns(1.35, 1);
         var compose = new StackPanel();
-        compose.Children.Add(Text("Add reminder", 13, strong: true));
+        compose.Children.Add(CardHeading("Add reminder", 0xEA8F, amber));
         var input = Field("Reminder", 160);
         input.Margin = new Thickness(0, 6, 0, 5);
         compose.Children.Add(input);
@@ -182,11 +270,12 @@ public partial class DashboardWindow
             WriteJson("reminders.json", reminders);
             ShowPage(DashboardPage.Calendar);
         });
-        add.Background = Brush("#275998");
+        add.Background = AgentArt.Wash(amber, 35);
+        add.BorderBrush = AgentArt.Wash(amber, 65);
         DockPanel.SetDock(add, Dock.Right);
         actions.Children.Add(add);
         compose.Children.Add(actions);
-        Put(grid, Card(compose), 0);
+        Put(grid, Card(compose, amber), 0);
 
         var pending = new StackPanel();
         pending.Children.Add(Text("Pending", 12, subdued, true));
@@ -218,7 +307,11 @@ public partial class DashboardWindow
             focusMinutes = saved.Minutes;
             focusEnds = saved.Ends > DateTimeOffset.Now ? saved.Ends : null;
         }
-        focusTicker.Tick += (_, _) => CheckFocusTimer();
+        focusTicker.Tick += (_, _) =>
+        {
+            CheckFocusTimer();
+            updateFocusWidget?.Invoke();
+        };
         if (focusEnds.HasValue)
             focusTicker.Start();
         Closed += (_, _) => focusTicker.Stop();

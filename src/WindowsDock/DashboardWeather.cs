@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using Windows.Devices.Geolocation;
 
 namespace WindowsDock;
@@ -24,13 +25,9 @@ public partial class DashboardWindow
     private UIElement WeatherPage()
     {
         var layout = new StackPanel();
-        var toolbar = new DockPanel { Margin = new Thickness(0, 0, 0, 7) };
-        var credit = ActionButton("Open-Meteo", () => OpenTarget("https://open-meteo.com/"));
-        credit.Padding = new Thickness(7, 4, 7, 4);
-        DockPanel.SetDock(credit, Dock.Right);
-        toolbar.Children.Add(credit);
-        var detect = ActionButton("Use my location", () => _ = LocateWeatherAsync());
-        detect.Margin = new Thickness(5, 0, 5, 0);
+        var toolbar = new DockPanel();
+        var detect = AccentButton("Use my location", 0xE707, accent, () => _ = LocateWeatherAsync());
+        detect.Margin = new Thickness(6, 0, 0, 0);
         detect.IsEnabled = !loadingWeather;
         detect.ToolTip = "Uses Windows location and sends rounded coordinates to Open-Meteo.";
         DockPanel.SetDock(detect, Dock.Right);
@@ -40,7 +37,7 @@ public partial class DashboardWindow
         search.ToolTip = "Enter a city name";
         search.Tag = "Search for a city";
         var status = Text(weatherError ?? (loadingWeather ? "Loading weather…" : ""), 11, subdued);
-        var submit = ActionButton("Find city", async () =>
+        var submit = AccentButton("Find city", 0xE721, purple, async () =>
         {
             if (loadingWeather || string.IsNullOrWhiteSpace(search.Text))
                 return;
@@ -78,10 +75,13 @@ public partial class DashboardWindow
             if (e.Key == System.Windows.Input.Key.Enter)
                 submit.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         };
-        submit.Margin = new Thickness(5, 0, 6, 0);
+        submit.Margin = new Thickness(6, 0, 0, 0);
         toolbar.Children.Add(submit);
         toolbar.Children.Add(search);
-        layout.Children.Add(toolbar);
+        var searchCard = Card(toolbar);
+        searchCard.Padding = new Thickness(8);
+        searchCard.Margin = new Thickness(0, 0, 0, 7);
+        layout.Children.Add(searchCard);
         if (loadingWeather || weatherError != null)
         {
             status.Margin = new Thickness(0, 0, 0, 6);
@@ -120,29 +120,52 @@ public partial class DashboardWindow
 
         if (weather is not { } forecast)
         {
-            layout.Children.Add(Card(Text("Use your location or search for a city.", 13, subdued)));
+            layout.Children.Add(Card(CardHeading("Set a forecast location", 0xE753, accent,
+                detail: "Use Windows location for automatic updates, or choose a city."), accent));
             return layout;
         }
 
-        var row = Columns(1.25, 2.4);
-        var current = new StackPanel();
-        current.Children.Add(Text(forecast.City, 13, subdued, true));
-        current.Children.Add(Text($"{forecast.Temperature:0}°F", 29, strong: true));
-        current.Children.Add(Text(WeatherLabel(forecast.Code), 11, muted));
-        Put(row, Card(current), 0);
-        var upcoming = new System.Windows.Controls.Primitives.UniformGrid { Rows = 1, Columns = Math.Max(1, forecast.Days.Length) };
+        var row = WideDashboard ? Columns(1, 2.7) : Columns(1);
+        var current = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var (icon, tint) = WeatherStyle(forecast.Code);
+        current.Children.Add(CardHeading(forecast.City, icon, tint, detail: WeatherLabel(forecast.Code)));
+        current.Children.Add(Text($"{forecast.Temperature:0}°F", 33, strong: true));
+        var credit = ActionButton("Open-Meteo", () => OpenTarget("https://open-meteo.com/"));
+        credit.Padding = new Thickness(7, 4, 7, 4);
+        credit.HorizontalAlignment = HorizontalAlignment.Left;
+        credit.Margin = new Thickness(0, 5, 0, 0);
+        current.Children.Add(credit);
+        Put(row, Card(current, tint), 0);
+        var upcoming = new System.Windows.Controls.Primitives.UniformGrid { Columns = Math.Max(1, Math.Min(5, forecast.Days.Length)) };
         foreach (var day in forecast.Days)
         {
-            var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            var (dailyIcon, dailyTint) = WeatherStyle(day.Code);
+            var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(2, 3, 2, 3) };
+            var badge = GlyphBadge(dailyIcon, dailyTint, 31);
+            badge.HorizontalAlignment = HorizontalAlignment.Center;
+            badge.Margin = new Thickness(0, 4, 0, 5);
             stack.Children.Add(Text(day.Date.ToString("ddd"), 11, subdued, true));
-            stack.Children.Add(Text($"{day.High:0}° / {day.Low:0}°", 16, strong: true));
+            stack.Children.Add(badge);
+            stack.Children.Add(Text($"{day.High:0}° / {day.Low:0}°", 14, strong: true));
             stack.Children.Add(Text(WeatherLabel(day.Code), 10, muted));
+            foreach (var label in stack.Children.OfType<TextBlock>())
+                label.TextAlignment = TextAlignment.Center;
             upcoming.Children.Add(stack);
         }
-        Put(row, Card(upcoming), 1);
+        Put(row, Card(upcoming, accent), WideDashboard ? 0 : 1, WideDashboard ? 1 : 0);
         layout.Children.Add(row);
         return layout;
     }
+
+    private (int Icon, SolidColorBrush Tint) WeatherStyle(int code) => code switch
+    {
+        0 or 1 => (0xE706, amber),
+        2 or 3 or 45 or 48 => (0xE753, subdued),
+        >= 71 and <= 77 or 85 or 86 => (0xE9CA, accent),
+        >= 95 => (0xE945, amber),
+        _ => (0xE753, accent)
+    };
 
     private async Task SetCityAsync(City selected)
     {

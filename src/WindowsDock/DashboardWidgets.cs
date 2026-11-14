@@ -15,7 +15,7 @@ public partial class DashboardWindow
 
     private void ShowWidgets()
     {
-        var (window, content, _) = CreateAgentPanel("Widgets", "", 492);
+        var (window, content, _) = CreateDockPanel("Widgets", "", 492, 0xECAA, purple);
         var searchRow = new DockPanel();
         var keyboard = new Border
         {
@@ -37,7 +37,7 @@ public partial class DashboardWindow
         items.ColumnDefinitions.Add(new ColumnDefinition());
         var row = 0;
         var column = 0;
-        foreach (var widget in WidgetActions(window))
+        foreach (var widget in WidgetActions())
         {
             if (widget.Wide && column != 0)
             {
@@ -62,29 +62,21 @@ public partial class DashboardWindow
                 column++;
         }
         content.Children.Add(items);
-        window.PreviewKeyDown += (_, args) =>
-        {
-            if (args.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
-            {
-                args.Handled = true;
-                ShowCommandPalette();
-            }
-        };
         window.Show();
     }
 
-    private WidgetAction[] WidgetActions(Window? from = null) =>
+    private WidgetAction[] WidgetActions() =>
     [
         new("Audio switchboard", "Outputs, app mixer, and playback", "music media volume speakers headphones",
-            0xE767, purple, () => OpenWidgetPage(DashboardPage.Media, from), Wide: true),
+            0xE767, purple, ShowAudioWidget, Wide: true),
         new("Meetings", "Upcoming calls", "calendar schedule join", 0xE787, accent, ShowMeetingWidget),
         new("Clipboard and files", "Pinned and recent items", "shelf snippets paste screenshots", 0xE77F, green, ShowClipboardWidget),
         new("GitHub checks", "Builds and reviews", "CI pull requests review build", 0xE73E, purple, ShowGitHubWidget),
         new("Workspace shortcuts", "Open a project setup", "projects launch folder editor", 0xE8B7, amber, ShowWorkspaceWidget),
         new("Downloads", "Files and transfers", "queue transfers files", 0xE896, accent, ShowDownloadWidget),
-        new("Focus timer", "Sessions and breaks", "timer break do not disturb", 0xE916, green,
-            () => OpenWidgetPage(DashboardPage.Calendar, from)),
-        new("Notifications", "Review alerts and summarize them", "alerts summary digest", 0xEA8F, Brush("#F4A6D4"), ShowNotificationWidget, Wide: true)
+        new("Focus timer", "Sessions and breaks", "timer break do not disturb", 0xE916, green, ShowFocusWidget),
+        new("Notifications", "Review and summarize alerts", "alerts summary digest", 0xEA8F, pink, ShowNotificationWidget),
+        new("Assistant", "Chat with Gemini or Groq", "AI model provider message", 0xEAB7, purple, ShowAssistantWidget)
     ];
 
     private Button WidgetTile(WidgetAction widget)
@@ -96,13 +88,9 @@ public partial class DashboardWindow
             DockPanel.SetDock(arrow, Dock.Right);
             line.Children.Add(arrow);
         }
-        var icon = DockGlyph(widget.Icon, 15, widget.Color);
-        icon.HorizontalAlignment = HorizontalAlignment.Center;
-        line.Children.Add(new Border
-        {
-            Width = 31, Height = 31, CornerRadius = new CornerRadius(9), Margin = new Thickness(0, 0, 8, 0),
-            Background = AgentArt.Wash(widget.Color, 32), Child = icon, VerticalAlignment = VerticalAlignment.Center
-        });
+        var badge = GlyphBadge(widget.Icon, widget.Color, 31);
+        badge.Margin = new Thickness(0, 0, 8, 0);
+        line.Children.Add(badge);
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         labels.Children.Add(Text(widget.Label, 12, strong: true));
         var detail = Text(widget.Detail, 10.5, subdued);
@@ -117,50 +105,45 @@ public partial class DashboardWindow
         return button;
     }
 
-    private void OpenWidgetPage(DashboardPage page, Window? from = null)
+    private void OpenWidgetPage(DashboardPage page)
     {
-        from?.Close();
+        agentPanel?.Close();
         if (compactAgents)
         {
             compactAgents = false;
             ConfigureWidth();
         }
-        if (page == DashboardPage.Calendar)
-            showReminders = false;
-        if (page == DashboardPage.Media)
-            lyricsOpen = false;
         ShowPage(page);
     }
 
     private void ShowCommandPalette()
     {
-        var (window, content, _) = CreateAgentPanel("Search", "", 472);
+        var (window, content, _) = CreateDockPanel("Search", "", 472, 0xE721, purple, widget: true);
         var search = Field("Search apps and actions", 150);
         search.Tag = "Apps, widgets, Windows settings…";
         search.Margin = new Thickness(0, 0, 0, 8);
         content.Children.Add(search);
         var list = new StackPanel();
         content.Children.Add(list);
-        var options = new List<(string Label, string Keywords, Action Action)>(
-            WidgetActions(window).Select(item => (item.Label, item.Keywords, item.Action)));
+        var options = WidgetActions().ToList();
         foreach (var (label, target) in new[]
         {
             ("Bluetooth settings", "ms-settings:bluetooth"), ("Wi-Fi settings", "ms-settings:network-wifi"),
             ("Display settings", "ms-settings:display"), ("Windows Focus and Do Not Disturb", "ms-settings:quiethours"),
             ("Taskbar settings", "ms-settings:taskbar"), ("Power settings", "ms-settings:powersleep")
         })
-            options.Add((label, "windows", () => { window.Close(); OpenTarget(target); }));
+            options.Add(new(label, "Windows settings", "windows", 0xE713, accent, () => { window.Close(); OpenTarget(target); }));
         foreach (var app in InstalledAppShortcuts())
-            options.Add((app.Label, "app", () => { window.Close(); OpenTarget(app.Path); }));
+            options.Add(new(app.Label, "App", "app", 0xECAA, green, () => { window.Close(); OpenTarget(app.Path); }));
         foreach (var workspace in Workspaces())
-            options.Add((workspace.Name, "workspace", () =>
+            options.Add(new(workspace.Name, "Workspace", "workspace", 0xE8B7, amber, () =>
             {
                 window.Close();
                 var failed = LaunchWorkspace(workspace);
                 if (failed > 0)
                     ShowOwnedMessage($"{failed} workspace item(s) could not open.");
             }));
-        (string Label, string Keywords, Action Action)[] matches = [];
+        WidgetAction[] matches = [];
         search.TextChanged += (_, _) => Render();
         search.PreviewKeyDown += (_, args) =>
         {
@@ -187,7 +170,7 @@ public partial class DashboardWindow
             list.Children.Clear();
             foreach (var item in matches)
             {
-                var button = ActionButton(item.Label, item.Action);
+                var button = WidgetTile(item);
                 button.Margin = new Thickness(0, 0, 0, 4);
                 button.HorizontalAlignment = HorizontalAlignment.Stretch;
                 list.Children.Add(button);
@@ -228,14 +211,14 @@ public partial class DashboardWindow
 
     private void ShowWorkspaceWidget()
     {
-        var (window, content, _) = CreateAgentPanel("Workspaces", "", 470);
+        var (window, content, _) = CreateDockPanel("Workspaces", "", 470, 0xE8B7, amber, widget: true);
         var list = new StackPanel();
         var editor = new StackPanel { Visibility = Visibility.Collapsed };
         var message = Text("", 11, subdued);
         message.TextWrapping = TextWrapping.Wrap;
         content.Children.Add(list);
         content.Children.Add(message);
-        var add = ActionButton("Add workspace", () => Edit(null));
+        var add = AccentButton("Add workspace", 0xE710, amber, () => Edit(null));
         add.HorizontalAlignment = HorizontalAlignment.Left;
         add.Margin = new Thickness(0, 6, 0, 4);
         content.Children.Add(add);
@@ -252,15 +235,18 @@ public partial class DashboardWindow
                 var edit = IconButton(0xE70F, "Edit " + item.Name, () => Edit(item));
                 DockPanel.SetDock(edit, Dock.Right);
                 row.Children.Add(edit);
-                var launch = ActionButton(item.Name, () =>
+                var launch = MakeButton(IconLabel(item.Name, 0xE8B7, amber), item.Name, () =>
                 {
                     var failures = LaunchWorkspace(item);
                     message.Text = failures == 0 ? "Workspace opened." : $"{failures} workspace item(s) could not open.";
                 });
-                launch.HorizontalAlignment = HorizontalAlignment.Left;
+                launch.HorizontalContentAlignment = HorizontalAlignment.Left;
                 launch.ToolTip = item.Folder;
                 row.Children.Add(launch);
-                list.Children.Add(row);
+                var card = Card(row, amber);
+                card.Padding = new Thickness(5);
+                card.Margin = new Thickness(0, 0, 0, 5);
+                list.Children.Add(card);
             }
             if (Workspaces().Count == 0)
                 list.Children.Add(Text("Group a project folder, websites, and apps into one shortcut.", 11, subdued));

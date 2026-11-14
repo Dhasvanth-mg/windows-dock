@@ -12,14 +12,14 @@ public partial class DashboardWindow
 {
     private void ShowMeetingWidget()
     {
-        var (window, content, cancellation) = CreateAgentPanel("Meetings", "", 470);
+        var (window, content, cancellation) = CreateDockPanel("Meetings", "", 470, 0xE787, accent, widget: true);
         var status = Text("Loading calendar…", 11, subdued);
         status.TextWrapping = TextWrapping.Wrap;
         var list = new StackPanel();
         content.Children.Add(status);
         content.Children.Add(list);
         var actions = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-        var select = ActionButton("Choose calendar file…");
+        var select = AccentButton("Choose calendar file…", 0xE8B7, accent);
         select.Margin = new Thickness(0, 0, 6, 4);
         actions.Children.Add(select);
         var refresh = ActionButton("Refresh");
@@ -61,12 +61,12 @@ public partial class DashboardWindow
                 foreach (var item in meetings)
                 {
                     var body = new StackPanel();
-                    body.Children.Add(Text(item.Title, 13, strong: true));
-                    body.Children.Add(Text(item.Start.LocalDateTime.ToString("ddd, MMM d · t"), 11, subdued));
+                    body.Children.Add(CardHeading(item.Title, 0xE787, accent,
+                        detail: item.Start.LocalDateTime.ToString("ddd, MMM d · t")));
                     if (item.Link != null)
                     {
                         var buttons = new WrapPanel { Margin = new Thickness(0, 5, 0, 0) };
-                        var join = ActionButton("Join", () => OpenTarget(item.Link));
+                        var join = AccentButton("Join", 0xE8A7, accent, () => OpenTarget(item.Link));
                         join.Margin = new Thickness(0, 0, 5, 0);
                         buttons.Children.Add(join);
                         buttons.Children.Add(ActionButton("Copy link", () =>
@@ -76,7 +76,7 @@ public partial class DashboardWindow
                         }));
                         body.Children.Add(buttons);
                     }
-                    var card = Card(body);
+                    var card = Card(body, accent);
                     card.Margin = new Thickness(0, 5, 0, 0);
                     list.Children.Add(card);
                 }

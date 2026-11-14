@@ -255,3 +255,20 @@
 - Outcome: Added original pixel faces and state-specific motion to the agent grid, with static alternatives for reduced motion and high contrast. The chat panel now highlights the selected chat, its status, and its actions. The widget launcher groups actions into labeled tiles under a search field. The native dock and panels share a plum and lavender palette.
 - Verification: The Release native and self-contained dashboard builds passed. Nine WPF panels opened and rendered, and the chat and widget previews were inspected. Explorer loaded the refreshed module, the four grid slots received live chat data, and native dock signals opened both centered panel sizes and switched back to the compact chat view.
 - Remaining work: Inspect the native hover animation and high-contrast appearance on the physical desktop.
+
+### Feature coverage and full dashboard refresh
+
+- Status: Built, smoke-tested, and running in the native dock.
+- Scope: Check the previously requested features in the current native dock and extend the visual refresh to the dashboard and its individual widgets.
+- Acceptance criteria: Verify that the selected widgets and existing dashboard pages remain reachable from the native build. Give each surface a consistent layout and recognizable controls. Distinguish what works in the native dock from companion-only features and provider-dependent behavior.
+- Outcome: Added labeled dashboard tabs, redesigned overview, audio, controls, calendar, weather, stats, file shelf, wallpapers, power, and settings surfaces, and styled each widget popup. The switchboard and focus timer open over the compact dock panel. The Gemini/Groq assistant now has a native dashboard popup. Widget popups have a back button and can open the command palette with Ctrl+K.
+- Verification: All eleven dashboard pages laid out at 1060 and 640 DIP. Ten launcher routes opened from the compact chat panel, and the timer preset, countdown, reset, audio output list, assistant provider control, and back buttons worked. Inspected rendered dashboard and widget previews. Account quota, transcript, provider response, calendar recurrence, slot, and audio routing fixtures passed.
+- Remaining work: Live Gemini/Groq replies and summaries, a physical audio output switch, an automatic location fix, and real approval events remain unverified. Active chat model and thinking changes remain in the provider. Custom dividers and inline shortcuts are companion Studio features. Native mode has Windows app pins and workspace shortcuts.
+
+#### Continue the full dashboard refresh
+
+- Status: Verified on the installed build.
+- Scope: Resume the dashboard and widget changes in the current checkout.
+- Acceptance criteria: Finish rendering and smoke checks, restart the native dashboard with the verified build, and publish the commit.
+- Outcome: Published the self-contained x64 dashboard into the existing dock installation and relaunched it through the native controller. The controller stayed active, and its signals reopened the full dashboard, the compact chat panel, and the full dashboard again.
+- Remaining work: Provider and device checks listed in the preceding entry.

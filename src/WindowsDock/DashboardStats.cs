@@ -4,7 +4,6 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using Ellipse = System.Windows.Shapes.Ellipse;
 using Polyline = System.Windows.Shapes.Polyline;
 
 namespace WindowsDock;
@@ -19,11 +18,11 @@ public partial class DashboardWindow
 
     private UIElement StatsPage()
     {
-        var grid = Columns(1, 1, 1, 1);
-        var cpu = StatsCard(grid, 0, "Processor", green, true);
-        var memory = StatsCard(grid, 1, "Memory", purple, false);
-        var disk = StatsCard(grid, 2, "System drive", Brush("#52DAC9"), false);
-        var network = StatsCard(grid, 3, "Network", accent, true);
+        var grid = WideDashboard ? Columns(1, 1, 1, 1) : Columns(1, 1);
+        var cpu = StatsCard(grid, 0, "Processor", 0xE950, green, true);
+        var memory = StatsCard(grid, 1, "Memory", 0xE7F1, purple, false);
+        var disk = StatsCard(grid, 2, "System drive", 0xEDA2, amber, false);
+        var network = StatsCard(grid, 3, "Network", 0xE701, accent, true);
         updatePage = () =>
         {
             var sample = ReadMetrics();
@@ -38,13 +37,10 @@ public partial class DashboardWindow
     }
 
     private Action<string, string, double, IEnumerable<double>?> StatsCard(Grid grid, int index, string name,
-        Brush color, bool graph)
+        int icon, SolidColorBrush color, bool graph)
     {
         var stack = new StackPanel();
-        var heading = new StackPanel { Orientation = Orientation.Horizontal };
-        heading.Children.Add(new Ellipse { Width = 6, Height = 6, Fill = color, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) });
-        heading.Children.Add(Text(name, 11, subdued, true));
-        stack.Children.Add(heading);
+        stack.Children.Add(CardHeading(name, icon, color));
         var value = Text("—", 24, strong: true);
         value.Margin = new Thickness(0, 4, 0, 0);
         stack.Children.Add(value);
@@ -61,7 +57,8 @@ public partial class DashboardWindow
             graphArea.Children.Add(bar);
         }
         stack.Children.Add(graphArea);
-        Put(grid, Card(stack), index);
+        var columns = grid.ColumnDefinitions.Count;
+        Put(grid, Card(stack, color), index / columns, index % columns);
 
         return (number, caption, percentage, points) =>
         {

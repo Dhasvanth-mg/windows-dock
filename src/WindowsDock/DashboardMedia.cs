@@ -19,54 +19,57 @@ public partial class DashboardWindow
     private Playback? playback;
     private bool readingMedia;
     private DateTime mediaRetryAfter;
+    private Action? updateAudioWidget;
 
     private UIElement HomePage()
     {
-        var grid = Columns(2.1, 1.5, 0.85, 1.0, 1.2);
-        grid.MinHeight = 102;
+        var grid = WideDashboard ? Columns(1.18, .82, 1.26) : Columns(1, 1);
         var media = MediaCard(false, out var updateMedia);
-        Put(grid, media, 0);
-        Put(grid, QuickCard(), 1);
+        Put(grid, media, 0, 0, WideDashboard ? 2 : 1);
+        Put(grid, QuickCard(), 0, WideDashboard ? 2 : 1);
 
         var date = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var today = DateTime.Today;
-        var dateLabel = Text(today.ToString("ddd MMM"), 11, amber, true);
-        var dateNumber = Text(today.ToString("dd"), 30, strong: true);
+        var dateLabel = Text(today.ToString("dddd"), 11, amber, true);
+        var dateNumber = Text(today.ToString("d MMM"), 24, strong: true);
         dateLabel.TextAlignment = dateNumber.TextAlignment = TextAlignment.Center;
         date.Children.Add(dateLabel);
         date.Children.Add(dateNumber);
-        var calendar = ActionButton("Calendar", () => ShowPage(DashboardPage.Calendar));
-        calendar.Padding = new Thickness(6, 3, 6, 3);
+        var calendar = AccentButton("Open calendar", 0xE787, amber, () => ShowPage(DashboardPage.Calendar));
+        calendar.Padding = new Thickness(7, 4, 7, 4);
+        calendar.Margin = new Thickness(0, 5, 0, 0);
         calendar.HorizontalAlignment = HorizontalAlignment.Center;
         date.Children.Add(calendar);
-        Put(grid, Card(date), 2);
+        Put(grid, Card(date, amber), 1, 0);
 
         var forecast = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        forecast.Children.Add(Text("Weather", 11, muted, true));
-        var temperature = Text(weather == null ? "—" : $"{weather.Temperature:0}°", 27, strong: true);
-        forecast.Children.Add(temperature);
-        var weatherLink = ActionButton(weather?.City ?? "Weather options", () => ShowPage(DashboardPage.Weather));
-        weatherLink.Padding = new Thickness(6, 3, 6, 3);
+        forecast.Children.Add(CardHeading("Weather", 0xE753, accent));
+        if (weather is { } currentWeather)
+        {
+            forecast.Children.Add(Text($"{currentWeather.Temperature:0}°F", 23, strong: true));
+            forecast.Children.Add(Text(currentWeather.City, 11, subdued));
+        }
+        var weatherLink = AccentButton(weather == null ? "Set location" : "View forecast", 0xE707, accent,
+            () => ShowPage(DashboardPage.Weather));
+        weatherLink.Padding = new Thickness(7, 4, 7, 4);
+        weatherLink.Margin = new Thickness(0, 5, 0, 0);
         weatherLink.HorizontalAlignment = HorizontalAlignment.Left;
         forecast.Children.Add(weatherLink);
-        Put(grid, Card(forecast), 3);
+        Put(grid, Card(forecast, accent), 1, 1);
 
         var overview = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var details = ActionButton("Details", () => ShowPage(DashboardPage.Stats));
+        details.Padding = new Thickness(7, 4, 7, 4);
+        overview.Children.Add(CardHeading("System stats", 0xE9D9, green, details));
         var cpu = MetricBar(overview, "CPU", green);
         var memory = MetricBar(overview, "Memory", accent);
-        var details = ActionButton("System stats", () => ShowPage(DashboardPage.Stats));
-        details.Padding = new Thickness(6, 3, 6, 3);
-        details.HorizontalAlignment = HorizontalAlignment.Left;
-        details.Margin = new Thickness(0, 4, 0, 0);
-        overview.Children.Add(details);
-        Put(grid, Card(overview), 4);
+        Put(grid, Card(overview, green), WideDashboard ? 1 : 2, WideDashboard ? 2 : 0, WideDashboard ? 1 : 2);
         updatePage = () =>
         {
             updateMedia();
             var current = DateTime.Today;
-            dateLabel.Text = current.ToString("ddd MMM");
-            dateNumber.Text = current.ToString("dd");
-            temperature.Text = weather == null ? "—" : $"{weather.Temperature:0}°";
+            dateLabel.Text = current.ToString("dddd");
+            dateNumber.Text = current.ToString("d MMM");
             var snapshot = ReadMetrics();
             cpu(snapshot.Cpu, $"{snapshot.Cpu:0}%");
             memory(snapshot.Memory, $"{snapshot.Memory:0}%");
@@ -76,47 +79,60 @@ public partial class DashboardWindow
 
     private UIElement MediaPage()
     {
-        var grid = Columns(1.35, 1);
+        var grid = WideDashboard ? Columns(1.23, 1) : Columns(1);
         var card = MediaCard(true, out var update);
         Put(grid, card, 0);
         if (lyricsOpen)
         {
-            Put(grid, LyricsCard(out var refreshLyrics), 1);
+            Put(grid, LyricsCard(out var refreshLyrics), WideDashboard ? 0 : 1, WideDashboard ? 1 : 0);
             updatePage = () => { update(); refreshLyrics(); };
         }
         else
         {
-            Put(grid, MixerCard(), 1);
+            Put(grid, MixerCard(), WideDashboard ? 0 : 1, WideDashboard ? 1 : 0);
             updatePage = update;
         }
         return grid;
     }
 
-    private Border MediaCard(bool expanded, out Action refresh)
+    private void ShowAudioWidget()
+    {
+        var (window, content, _) = CreateDockPanel("Audio switchboard", "", 524, 0xE767, purple, widget: true);
+        var playbackCard = MediaCard(true, out var refresh, widget: true);
+        playbackCard.Margin = new Thickness(0, 0, 0, 7);
+        content.Children.Add(playbackCard);
+        content.Children.Add(MixerCard());
+        updateAudioWidget = refresh;
+        window.Closed += (_, _) => updateAudioWidget = null;
+        refresh();
+        window.Show();
+    }
+
+    private Border MediaCard(bool expanded, out Action refresh, bool widget = false)
     {
         var body = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var row = new DockPanel { LastChildFill = true };
-        var artSize = expanded ? 67 : 50;
+        var artSize = expanded ? 60 : 43;
         var artwork = new Image { Width = artSize, Height = artSize, Stretch = Stretch.UniformToFill };
-        var icon = new TextBlock { Text = "\uE8D6", FontFamily = new FontFamily("Segoe Fluent Icons"),
-            FontSize = 23, Foreground = subdued, HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center };
+        var icon = DockGlyph(0xE8D6, 22, purple);
+        icon.HorizontalAlignment = HorizontalAlignment.Center;
         var art = new Grid();
         art.Children.Add(icon);
         art.Children.Add(artwork);
-        var artworkFrame = new Border { Width = artSize, Height = artSize, Background = Brush("#343945"),
-            CornerRadius = new CornerRadius(10), Child = art, Margin = new Thickness(0, 0, 9, 0),
-            Clip = new RectangleGeometry(new Rect(0, 0, artSize, artSize), 10, 10) };
+        var artworkFrame = new Border { Width = artSize, Height = artSize, Background = AgentArt.Wash(purple, 38),
+            CornerRadius = new CornerRadius(11), Child = art, Margin = new Thickness(0, 0, 10, 0),
+            Clip = new RectangleGeometry(new Rect(0, 0, artSize, artSize), 11, 11) };
         row.Children.Add(artworkFrame);
-        var transport = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        DockPanel.SetDock(transport, Dock.Right);
+        var transport = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 7, 0, 0) };
         transport.Children.Add(IconButton(0xE892, "Previous track", () => ControlPlayback(0xB1)));
         var play = IconButton(0xE768, "Play or pause", () => ControlPlayback(0xB3));
-        play.Background = Brushes.White;
-        play.Foreground = Brush("#171A21");
+        play.Background = purple;
+        play.Foreground = Brush("#20162D");
+        play.Width = 36;
         transport.Children.Add(play);
         transport.Children.Add(IconButton(0xE893, "Next track", () => ControlPlayback(0xB0)));
-        if (expanded)
+        if (expanded && !widget)
         {
             var lyrics = IconButton(lyricsOpen ? 0xE9E9 : 0xE8A5, lyricsOpen ? "Show mixer" : "Find synced lyrics with LRCLIB", () =>
             {
@@ -126,21 +142,22 @@ public partial class DashboardWindow
             });
             transport.Children.Add(lyrics);
         }
-        row.Children.Add(transport);
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) };
-        var title = Text("Nothing playing", expanded ? 21 : 13, strong: true);
+        var title = Text("Nothing playing", expanded ? 19 : 14, strong: true);
         var artist = Text("Windows media", 11, subdued);
+        labels.Children.Add(Text("Now playing", 10, purple, true));
         labels.Children.Add(title);
         labels.Children.Add(artist);
         row.Children.Add(labels);
         body.Children.Add(row);
-        var progress = new ProgressBar { Height = 3, Maximum = 100, Foreground = Brushes.White, Background = Brush("#30FFFFFF"),
-            BorderThickness = new Thickness(0), Margin = new Thickness(0, 9, 0, 0) };
+        var progress = Progress(purple);
+        progress.Margin = new Thickness(0, 9, 0, 0);
         body.Children.Add(progress);
         var times = Text("", 10, muted);
         times.Margin = new Thickness(0, 4, 0, 0);
         if (expanded)
             body.Children.Add(times);
+        body.Children.Add(transport);
 
         refresh = () =>
         {
@@ -161,7 +178,7 @@ public partial class DashboardWindow
                 times.Text = "";
             }
         };
-        return Card(body);
+        return Card(body, purple);
     }
 
     private async Task RefreshPlaybackAsync()
@@ -237,50 +254,63 @@ public partial class DashboardWindow
     private Border QuickCard()
     {
         var controls = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+        var details = ActionButton("All controls", () => ShowPage(DashboardPage.Controls));
+        details.Padding = new Thickness(7, 4, 7, 4);
+        controls.Children.Add(CardHeading("Quick controls", 0xE9E9, accent, details));
+        var row = new WrapPanel();
         foreach (var (symbol, label, target) in new[]
         {
             (0xE701, "Wi-Fi", "ms-settings:network-wifi"),
             (0xE702, "Bluetooth", "ms-settings:bluetooth"),
-            (0xE7F4, "Notifications", "ms-settings:notifications"),
+            (0xEA8F, "Notifications", "ms-settings:notifications"),
             (0xE706, "Display", "ms-settings:display")
         })
         {
-            var button = IconButton(symbol, label, () => OpenTarget(target));
-            button.Background = label == "Display" ? Brush("#32FFFFFF") : Brush("#215C9D");
+            var button = AccentButton(label, symbol, accent, () => OpenTarget(target));
+            button.Padding = new Thickness(6, 4, 6, 4);
+            button.Margin = new Thickness(0, 0, 3, 3);
             row.Children.Add(button);
         }
         controls.Children.Add(row);
         var slider = OutputSlider();
-        slider.Margin = new Thickness(0, 8, 0, 0);
+        slider.Margin = new Thickness(0, 3, 0, 0);
         controls.Children.Add(slider);
         controls.Children.Add(Text("Output volume", 10, subdued));
-        return Card(controls);
+        return Card(controls, accent);
     }
 
     private UIElement ControlsPage()
     {
-        var grid = Columns(1, 1, 1, 1, 1.65);
-        foreach (var (index, label, detail, second, secondDetail) in new[]
+        var grid = Columns(1, 1);
+        foreach (var (index, label, symbol, tint, settings) in new[]
         {
-            (0, "Wi-Fi", "ms-settings:network-wifi", "Ethernet", "ms-settings:network-ethernet"),
-            (1, "Bluetooth", "ms-settings:bluetooth", "Display", "ms-settings:display"),
-            (2, "Notifications", "ms-settings:notifications", "Night light", "ms-settings:nightlight"),
-            (3, "Sound", "ms-settings:sound", "Accessibility", "ms-settings:easeofaccess")
+            (0, "Network", 0xE701, accent, new[] { ("Wi-Fi", "network-wifi"), ("Ethernet", "network-ethernet"), ("Bluetooth", "bluetooth") }),
+            (1, "Display", 0xE706, amber, new[] { ("Display", "display"), ("Night light", "nightlight"), ("Accessibility", "easeofaccess") }),
+            (2, "Windows alerts", 0xEA8F, pink, new[] { ("Notification settings", "notifications"), ("Windows Focus", "quiethours") })
         })
         {
             var stack = new StackPanel();
-            var first = ActionButton(label, () => OpenTarget(detail));
-            first.Margin = new Thickness(0, 0, 0, 6);
-            stack.Children.Add(first);
-            stack.Children.Add(ActionButton(second, () => OpenTarget(secondDetail)));
-            Put(grid, Card(stack), index);
+            stack.Children.Add(CardHeading(label, symbol, tint));
+            var links = new WrapPanel();
+            foreach (var (name, path) in settings)
+            {
+                var button = ActionButton(name, () => OpenTarget("ms-settings:" + path));
+                button.Margin = new Thickness(0, 0, 4, 4);
+                links.Children.Add(button);
+            }
+            stack.Children.Add(links);
+            Put(grid, Card(stack, tint), index / 2, index % 2);
         }
         var sliders = new StackPanel();
-        sliders.Children.Add(Text("Output volume", 11, subdued, true));
+        var mixer = AccentButton("App mixer", 0xE767, purple, ShowAudioWidget);
+        mixer.Padding = new Thickness(7, 4, 7, 4);
+        sliders.Children.Add(CardHeading("Output volume", 0xE767, purple, mixer));
         sliders.Children.Add(OutputSlider());
-        sliders.Children.Add(ActionButton("Windows volume mixer", () => OpenTarget("ms-settings:apps-volume")));
-        Put(grid, Card(sliders), 4);
+        var windowsMixer = ActionButton("Sound settings", () => OpenTarget("ms-settings:sound"));
+        windowsMixer.HorizontalAlignment = HorizontalAlignment.Left;
+        windowsMixer.Margin = new Thickness(0, 6, 0, 0);
+        sliders.Children.Add(windowsMixer);
+        Put(grid, Card(sliders, purple), 1, 1);
         return grid;
     }
 
@@ -326,13 +356,16 @@ public partial class DashboardWindow
         var refresh = IconButton(0xE72C, "Refresh audio devices and apps");
         DockPanel.SetDock(refresh, Dock.Right);
         top.Children.Add(refresh);
-        top.Children.Add(Text("Audio switchboard", 13, strong: true));
+        top.Children.Add(IconLabel("Output and app mixer", 0xE9E9, accent));
         body.Children.Add(top);
+        var outputLabel = Text("Default output", 10, subdued, true);
+        outputLabel.Margin = new Thickness(0, 3, 0, 4);
+        body.Children.Add(outputLabel);
         var outputs = new ComboBox { Margin = new Thickness(0, 0, 0, 6), DisplayMemberPath = nameof(AudioOutput.Name) };
         AutomationProperties.SetName(outputs, "Audio output");
         var status = Text("", 11, subdued);
         status.TextWrapping = TextWrapping.Wrap;
-        var system = new DockPanel();
+        var system = new DockPanel { Margin = new Thickness(0, 2, 0, 0) };
         var mute = ActionButton("Mute output");
         mute.Margin = new Thickness(6, 0, 0, 0);
         DockPanel.SetDock(mute, Dock.Right);
@@ -342,6 +375,9 @@ public partial class DashboardWindow
         body.Children.Add(outputs);
         body.Children.Add(system);
         body.Children.Add(status);
+        var appHeading = Text("App volumes and outputs", 11, accent, true);
+        appHeading.Margin = new Thickness(0, 8, 0, 0);
+        body.Children.Add(appHeading);
         var sessions = new StackPanel();
         body.Children.Add(new ScrollViewer { Content = sessions, MaxHeight = 154, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Margin = new Thickness(0, 6, 0, 0) });
@@ -377,7 +413,7 @@ public partial class DashboardWindow
             }
         };
         Reload();
-        return Card(body);
+        return Card(body, accent);
 
         void Reload()
         {
@@ -427,7 +463,7 @@ public partial class DashboardWindow
             var name = session.IsSystemSoundsSession ? "System sounds" : AudioSessionName(session);
             var row = Columns(1.05, 1, 0.85);
             row.Margin = new Thickness(0, 3, 0, 0);
-            var label = Text(name, 11, subdued);
+            var label = Text(name, 11, subdued, true);
             label.VerticalAlignment = VerticalAlignment.Center;
             label.ToolTip = output.Name;
             Put(row, label, 0);

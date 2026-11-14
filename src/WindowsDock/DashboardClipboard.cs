@@ -15,16 +15,16 @@ public partial class DashboardWindow
     private void ShowClipboardWidget()
     {
         clips ??= ReadJson<List<ClipItem>>("clipboard-pins.json") ?? [];
-        var (window, content, cancellation) = CreateAgentPanel("Clipboard and files", "", 472);
+        var (window, content, cancellation) = CreateDockPanel("Clipboard and files", "", 472, 0xE77F, green, widget: true);
         var controls = new WrapPanel();
         var list = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
         var status = Text("", 11, subdued);
         status.TextWrapping = TextWrapping.Wrap;
         var historyRevision = 0;
-        var pin = ActionButton("Pin current clipboard", PinClipboard);
+        var pin = AccentButton("Pin current clipboard", 0xE718, green, PinClipboard);
         pin.Margin = new Thickness(0, 0, 5, 4);
         controls.Children.Add(pin);
-        var files = ActionButton("File shelf", () => { window.Close(); ShowPage(DashboardPage.Shelf); });
+        var files = ActionButton("File shelf", () => OpenWidgetPage(DashboardPage.Shelf));
         files.Margin = new Thickness(0, 0, 5, 4);
         controls.Children.Add(files);
         controls.Children.Add(ActionButton("Windows clipboard history", () => OpenTarget("ms-settings:clipboard")));
@@ -51,7 +51,8 @@ public partial class DashboardWindow
                         : data.Contains(StandardDataFormats.Bitmap) ? "Image" : "Clipboard item";
                     if (revision != historyRevision || cancellation.IsCancellationRequested)
                         return;
-                    var button = ActionButton(ShortLabel(preview), () =>
+                    var caption = ShortLabel(preview);
+                    var button = MakeButton(IconLabel(caption, 0xE8C8, green), caption, () =>
                     {
                         try
                         {
@@ -60,7 +61,7 @@ public partial class DashboardWindow
                         }
                         catch (COMException) { status.Text = "Windows could not restore this item."; }
                     });
-                    button.HorizontalAlignment = HorizontalAlignment.Left;
+                    button.HorizontalContentAlignment = HorizontalAlignment.Left;
                     button.Margin = new Thickness(0, 4, 0, 0);
                     list.Children.Add(button);
                 }
@@ -141,7 +142,7 @@ public partial class DashboardWindow
                 });
                 DockPanel.SetDock(remove, Dock.Right);
                 row.Children.Add(remove);
-                var copy = ActionButton(item.Label, () =>
+                var copy = MakeButton(IconLabel(item.Label, item.Image != null ? 0xE91B : 0xE8C8, green), item.Label, () =>
                 {
                     try
                     {
@@ -156,7 +157,7 @@ public partial class DashboardWindow
                         status.Text = "Could not copy this pin.";
                     }
                 });
-                copy.HorizontalAlignment = HorizontalAlignment.Left;
+                copy.HorizontalContentAlignment = HorizontalAlignment.Left;
                 copy.ToolTip = "Click to copy or drag into an app";
                 EnableDrag(copy, () => item.Text is { } text ? new DataObject(DataFormats.UnicodeText, text) :
                     ClipImagePath(item) is { } path && File.Exists(path) ? new DataObject(DataFormats.FileDrop, new[] { path }) : null);

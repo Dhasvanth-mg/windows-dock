@@ -20,18 +20,19 @@ public partial class DashboardWindow
     {
         shelf ??= ReadJson<List<string>>("files.json") ?? [];
         var content = new StackPanel { MinHeight = 81 };
-        var top = new DockPanel();
-        var browse = ActionButton("Add files…", () => ChooseFiles(false));
-        DockPanel.SetDock(browse, Dock.Right);
-        top.Children.Add(browse);
-        top.Children.Add(Text("File shelf", 13, strong: true));
-        content.Children.Add(top);
+        var browse = AccentButton("Add files…", 0xE710, green, () => ChooseFiles(false));
+        content.Children.Add(CardHeading("File shelf", 0xE8B7, green, browse));
         if (shelf.Count == 0)
         {
-            var hint = Text("Drop files or folders here", 13, subdued);
-            hint.HorizontalAlignment = HorizontalAlignment.Center;
-            hint.Margin = new Thickness(0, 13, 0, 12);
-            content.Children.Add(hint);
+            var hint = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            var badge = GlyphBadge(0xE896, green, 32);
+            badge.HorizontalAlignment = HorizontalAlignment.Center;
+            badge.Margin = new Thickness(0, 0, 0, 5);
+            hint.Children.Add(badge);
+            hint.Children.Add(Text("Drop files or folders here", 13, subdued));
+            var target = new Border { Background = AgentArt.Wash(green, 13), BorderBrush = AgentArt.Wash(green, 50),
+                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(11), Padding = new Thickness(10), Child = hint };
+            content.Children.Add(target);
         }
         else
         {
@@ -67,7 +68,7 @@ public partial class DashboardWindow
             }
             content.Children.Add(new ScrollViewer { Content = items, MaxHeight = 115, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         }
-        var card = Card(content);
+        var card = Card(content, green);
         card.AllowDrop = true;
         card.DragOver += (_, e) =>
         {
@@ -109,10 +110,12 @@ public partial class DashboardWindow
 
     private void AddFiles(IEnumerable<string> paths)
     {
-        shelf = (shelf ?? []).Concat(paths.Where(path => File.Exists(path) || Directory.Exists(path)))
+        shelf ??= ReadJson<List<string>>("files.json") ?? [];
+        shelf = shelf.Concat(paths.Where(path => File.Exists(path) || Directory.Exists(path)))
             .Distinct(StringComparer.OrdinalIgnoreCase).Take(40).ToList();
         WriteJson("files.json", shelf);
-        ShowPage(DashboardPage.Shelf);
+        if (currentPage == DashboardPage.Shelf)
+            ShowPage(DashboardPage.Shelf);
     }
 
     private UIElement WallpapersPage()
@@ -120,16 +123,12 @@ public partial class DashboardWindow
         wallpapers ??= ReadJson<List<string>>("wallpapers.json") ?? [];
         var available = wallpapers.Where(File.Exists).Take(30).ToArray();
         var content = new StackPanel();
-        var top = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
-        var add = ActionButton("Add wallpapers…", () => ChooseFiles(true));
-        DockPanel.SetDock(add, Dock.Right);
-        top.Children.Add(add);
-        top.Children.Add(Text("Wallpaper library", 13, strong: true));
-        content.Children.Add(top);
+        var add = AccentButton("Add wallpapers…", 0xE710, pink, () => ChooseFiles(true));
+        content.Children.Add(CardHeading("Wallpaper library", 0xE91B, pink, add));
         if (available.Length == 0)
         {
             content.Children.Add(Text("Add images to build your wallpaper library.", 13, subdued));
-            return Card(content);
+            return Card(content, pink);
         }
 
         wallpaperIndex = Math.Clamp(wallpaperIndex, 0, available.Length - 1);
@@ -170,7 +169,7 @@ public partial class DashboardWindow
             controls.Children.Add(Text(wallpaperStatus, 11, subdued));
         var row = Columns(1.35, 1);
         Put(row, Card(image), 0);
-        Put(row, Card(controls), 1);
+        Put(row, Card(controls, pink), 1);
         content.Children.Add(row);
         return content;
 
@@ -186,10 +185,12 @@ public partial class DashboardWindow
     {
         var row = Columns(1.3, 1);
         var general = new StackPanel();
-        general.Children.Add(Text("Windows taskbar", 14, strong: true));
-        general.Children.Add(Text("App pins, tray icons, and auto-hide use Windows settings.", 12, subdued));
+        general.Children.Add(CardHeading("Windows taskbar", 0xECAA, purple));
+        var layoutHelp = Text("App pins, tray icons, and auto-hide use Windows settings.", 12, subdued);
+        layoutHelp.TextWrapping = TextWrapping.Wrap;
+        general.Children.Add(layoutHelp);
         var actions = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-        var windows = ActionButton("Taskbar settings", () => OpenTarget("ms-settings:taskbar"));
+        var windows = AccentButton("Taskbar settings", 0xE713, purple, () => OpenTarget("ms-settings:taskbar"));
         windows.Margin = new Thickness(0, 0, 6, 0);
         actions.Children.Add(windows);
         if (controllerPid > 0)
@@ -206,9 +207,9 @@ public partial class DashboardWindow
             }));
         }
         general.Children.Add(actions);
-        Put(row, Card(general), 0);
+        Put(row, Card(general, purple), 0);
         var power = new StackPanel();
-        power.Children.Add(Text("Power and display", 14, strong: true));
+        power.Children.Add(CardHeading("Power and display", 0xE7E8, amber));
         var battery = System.Windows.Forms.SystemInformation.PowerStatus;
         power.Children.Add(Text(battery.BatteryChargeStatus.HasFlag(System.Windows.Forms.BatteryChargeStatus.NoSystemBattery)
             ? "Desktop power" : $"Battery  {battery.BatteryLifePercent:P0}", 12, subdued));
@@ -218,7 +219,7 @@ public partial class DashboardWindow
         controls.Children.Add(powerOptions);
         controls.Children.Add(ActionButton("Display settings", () => OpenTarget("ms-settings:display")));
         power.Children.Add(controls);
-        Put(row, Card(power), 1);
+        Put(row, Card(power, amber), 1);
         return row;
     }
 
@@ -231,14 +232,14 @@ public partial class DashboardWindow
         var charge = Math.Clamp(battery.BatteryLifePercent, 0, 1);
         var charging = battery.PowerLineStatus == System.Windows.Forms.PowerLineStatus.Online;
         var chargeBrush = !charging && charge < .2 ? amber : green;
-        var badge = new Grid { Width = 38, Height = 18, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 7) };
+        var badge = new Grid { Width = 54, Height = 23, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 7) };
         badge.Children.Add(new Border { CornerRadius = new CornerRadius(5), BorderBrush = subdued,
             BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 3, 0) });
         badge.Children.Add(new Border { CornerRadius = new CornerRadius(1), Background = subdued, Width = 2, Height = 7,
             HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center });
         if (hasBattery)
         {
-            badge.Children.Add(new Border { Width = Math.Max(2, 29 * charge), CornerRadius = new CornerRadius(2), Background = chargeBrush,
+            badge.Children.Add(new Border { Width = Math.Max(2, 45 * charge), CornerRadius = new CornerRadius(2), Background = chargeBrush,
                 Margin = new Thickness(3, 3, 0, 3), HorizontalAlignment = HorizontalAlignment.Left });
             summary.Children.Add(badge);
         }
@@ -246,10 +247,10 @@ public partial class DashboardWindow
         summary.Children.Add(Text(hasBattery ? $"{charge:P0}" : "Plugged in", 28, strong: true));
         var uptime = TimeSpan.FromMilliseconds(Environment.TickCount64);
         summary.Children.Add(Text($"Uptime  {uptime.Days}d {uptime.Hours}h {uptime.Minutes}m", 11, muted));
-        Put(row, Card(summary), 0);
+        Put(row, Card(summary, hasBattery ? chargeBrush : amber), 0);
 
         var actions = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        actions.Children.Add(Text("System power", 12, strong: true));
+        actions.Children.Add(CardHeading("System power", 0xE7E8, amber));
         var buttons = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
         var power = ActionButton("Power settings", () => OpenTarget("ms-settings:powersleep"));
         power.Margin = new Thickness(0, 0, 6, 0);

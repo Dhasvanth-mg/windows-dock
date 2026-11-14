@@ -26,6 +26,7 @@ public partial class DashboardWindow : Window
     private readonly SolidColorBrush green = Brush("#A1EDC5");
     private readonly SolidColorBrush purple = Brush("#CAB4FF");
     private readonly SolidColorBrush amber = Brush("#FFD187");
+    private readonly SolidColorBrush pink = Brush("#F4A6D4");
     private readonly TranslateTransform revealOffset = new();
     private DashboardPage currentPage;
     private Action? updatePage;
@@ -35,6 +36,7 @@ public partial class DashboardWindow : Window
     private bool compactAgents;
     private bool pageInitialized;
     private long lastReveal;
+    private bool WideDashboard => Width >= 840;
 
     public DashboardWindow() : this(0, null) { }
 
@@ -45,21 +47,22 @@ public partial class DashboardWindow : Window
         agentGrid = AgentGrid.Connect(controllerPid);
         ShowInTaskbar = controllerPid == 0;
 
-        AddTab(PrimaryTabs, DashboardPage.Home, 0xE80F, "Overview");
-        AddTab(PrimaryTabs, DashboardPage.Media, 0xE8D6, "Music and mixer");
-        AddTab(PrimaryTabs, DashboardPage.Controls, 0xE9E9, "Quick controls");
-        AddTab(PrimaryTabs, DashboardPage.Calendar, 0xE787, "Calendar and focus");
-        AddTab(PrimaryTabs, DashboardPage.Weather, 0xE753, "Weather");
-        AddTab(PrimaryTabs, DashboardPage.Agents, 0xE943, "Coding chats");
-        AddTab(SecondaryTabs, DashboardPage.Stats, 0xE9D9, "System stats");
-        AddTab(SecondaryTabs, DashboardPage.Shelf, 0xE8B7, "Files");
-        AddTab(SecondaryTabs, DashboardPage.Wallpapers, 0xE91B, "Wallpapers");
-        AddTab(SecondaryTabs, DashboardPage.Power, 0xE7E8, "Power");
-        AddTab(SecondaryTabs, DashboardPage.Settings, 0xE713, "Dashboard settings");
-        SecondaryTabs.Children.Add(WidgetLauncherButton());
-        SecondaryTabs.Children.Add(IconButton(0xE711, "Close dashboard", Dismiss));
+        AddTab(DashboardPage.Home, 0xE80F, "Overview");
+        AddTab(DashboardPage.Media, 0xE8D6, "Audio");
+        AddTab(DashboardPage.Controls, 0xE9E9, "Controls");
+        AddTab(DashboardPage.Calendar, 0xE787, "Calendar");
+        AddTab(DashboardPage.Weather, 0xE753, "Weather");
+        AddTab(DashboardPage.Agents, 0xE943, "Chats");
+        AddTab(DashboardPage.Stats, 0xE9D9, "Stats");
+        AddTab(DashboardPage.Shelf, 0xE8B7, "Files");
+        AddTab(DashboardPage.Wallpapers, 0xE91B, "Wallpapers");
+        AddTab(DashboardPage.Power, 0xE7E8, "Power");
+        AddTab(DashboardPage.Settings, 0xE713, "Settings");
+        HeaderActions.Children.Add(WidgetLauncherButton());
+        HeaderActions.Children.Add(IconButton(0xE711, "Close dashboard", Dismiss));
 
         Shell.RenderTransform = revealOffset;
+        ConfigureWidth();
         SourceInitialized += (_, _) => ConfigureWidth();
         Loaded += (_, _) =>
         {
@@ -86,7 +89,14 @@ public partial class DashboardWindow : Window
             }
         };
         SizeChanged += (_, _) => PositionAtTaskbar();
-        DpiChanged += (_, _) => Dispatcher.BeginInvoke(() => { ConfigureWidth(); PositionAtTaskbar(); });
+        DpiChanged += (_, _) => Dispatcher.BeginInvoke(() =>
+        {
+            var wasWide = WideDashboard;
+            ConfigureWidth();
+            if (pageInitialized && !compactAgents && wasWide != WideDashboard)
+                ShowPage(currentPage);
+            PositionAtTaskbar();
+        });
         PreviewKeyDown += (_, e) =>
         {
             if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
@@ -143,15 +153,19 @@ public partial class DashboardWindow : Window
             Close();
     }
 
-    private void AddTab(Panel strip, DashboardPage page, int icon, string label)
+    private void AddTab(DashboardPage page, int icon, string label)
     {
-        var button = IconButton(icon, label, () => ShowPage(page));
+        var button = MakeButton(IconLabel(label, icon), label, () => ShowPage(page));
+        button.Padding = new Thickness(8, 4, 8, 4);
+        button.Margin = new Thickness(0, 0, 3, 3);
         tabs[page] = button;
-        strip.Children.Add(button);
+        DashboardTabs.Children.Add(button);
     }
 
     private void ShowPage(DashboardPage page)
     {
+        if (currentPage != page)
+            PageScroll.ScrollToTop();
         pageInitialized = true;
         currentPage = page;
         updatePage = null;
@@ -183,6 +197,8 @@ public partial class DashboardWindow : Window
     }
     private void UpdateDashboard()
     {
+        updateAudioWidget?.Invoke();
+        updateFocusWidget?.Invoke();
         var now = DateTime.Now;
         HeaderTime.Text = now.ToString("t");
         HeaderDate.Text = now.ToString("ddd, MMM d");
@@ -190,7 +206,12 @@ public partial class DashboardWindow : Window
         pendingApprovals = pending;
         RefreshVisibleUsage();
         if (currentPage != DashboardPage.Agents)
-            tabs[DashboardPage.Agents].Background = pending.Length > 0 ? Brush("#65431E") : Brushes.Transparent;
+        {
+            var chats = tabs[DashboardPage.Agents];
+            chats.Background = pending.Length > 0 ? AgentArt.Wash(amber, 46) : Brushes.Transparent;
+            chats.BorderBrush = pending.Length > 0 ? AgentArt.Wash(amber, 75) : Brushes.Transparent;
+            chats.ToolTip = pending.Length > 0 ? "Coding chats · approval waiting" : "Coding chats";
+        }
         updatePage?.Invoke();
     }
 
@@ -199,10 +220,9 @@ public partial class DashboardWindow : Window
         var screen = TaskbarScreen();
         var dpi = VisualTreeHelper.GetDpi(this);
         Width = Math.Min(compactAgents ? 506 : 1060, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
+        MaxHeight = Math.Max(200, screen.Bounds.Height / dpi.DpiScaleY - 64);
         DashboardHeader.Visibility = compactAgents ? Visibility.Collapsed : Visibility.Visible;
-        PanelLayout.RowDefinitions[0].Height = new GridLength(compactAgents ? 0 : 35);
-        var narrow = Width < 760;
-        HeaderClock.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
+        HeaderClock.Visibility = Width < 580 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void PositionAtTaskbar()
@@ -243,10 +263,13 @@ public partial class DashboardWindow : Window
     private static void MoveWindowWithoutActivation(nint window, int x, int y) =>
         SetWindowPos(window, 0, x, y, 0, 0, 0x15);
 
-    private Border Card(UIElement child) => new()
+    private Border Card(UIElement child, SolidColorBrush? tint = null) => new()
     {
-        Background = new LinearGradientBrush(Color.FromRgb(41, 35, 54), Color.FromRgb(29, 25, 40), 90),
-        BorderBrush = Brush("#28D4BDFE"), BorderThickness = new Thickness(1),
+        Background = tint == null
+            ? new LinearGradientBrush(Color.FromRgb(41, 35, 54), Color.FromRgb(29, 25, 40), 90)
+            : new LinearGradientBrush(Color.FromArgb(33, tint.Color.R, tint.Color.G, tint.Color.B),
+                Color.FromArgb(10, tint.Color.R, tint.Color.G, tint.Color.B), 65),
+        BorderBrush = tint == null ? Brush("#28D4BDFE") : AgentArt.Wash(tint, 50), BorderThickness = new Thickness(1),
         CornerRadius = new CornerRadius(15), Padding = new Thickness(12), Child = child,
         ClipToBounds = true
     };
@@ -261,12 +284,29 @@ public partial class DashboardWindow : Window
 
     private static void Put(Grid grid, FrameworkElement element, int column)
     {
-        element.Margin = new Thickness(column == 0 ? 0 : 7, 0, 0, 0);
+        Put(grid, element, 0, column);
+    }
+
+    private static void Put(Grid grid, FrameworkElement element, int row, int column, int span = 1)
+    {
+        while (row >= grid.RowDefinitions.Count && row > 0)
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        element.Margin = new Thickness(column == 0 ? 0 : 7, row == 0 ? 0 : 7, 0, 0);
+        Grid.SetRow(element, row);
         Grid.SetColumn(element, column);
+        Grid.SetColumnSpan(element, span);
         grid.Children.Add(element);
     }
 
     private Button ActionButton(string label, Action? action = null) => MakeButton(label, label, action);
+
+    private Button AccentButton(string label, int icon, SolidColorBrush tint, Action? action = null)
+    {
+        var button = MakeButton(IconLabel(label, icon, tint), label, action);
+        button.Background = AgentArt.Wash(tint, 35);
+        button.BorderBrush = AgentArt.Wash(tint, 70);
+        return button;
+    }
 
     private Button IconButton(int icon, string label, Action? action = null)
     {
@@ -283,9 +323,7 @@ public partial class DashboardWindow : Window
 
     private Button WidgetLauncherButton()
     {
-        var button = MakeButton(IconLabel("Widgets", 0xECAA, purple), "Widgets", ShowWidgets);
-        button.Background = Brush("#22CAB4FF");
-        button.BorderBrush = Brush("#45CAB4FF");
+        var button = AccentButton("Widgets", 0xECAA, purple, ShowWidgets);
         button.Padding = new Thickness(8, 4, 8, 4);
         button.Margin = new Thickness(3, 0, 3, 0);
         return button;
@@ -303,13 +341,43 @@ public partial class DashboardWindow : Window
         return glyph;
     }
 
-    private static StackPanel IconLabel(string label, int icon, Brush color)
+    private static StackPanel IconLabel(string label, int icon, Brush? color = null)
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         var glyph = DockGlyph(icon, 12, color);
         glyph.Margin = new Thickness(0, 0, 6, 0);
         row.Children.Add(glyph);
         row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+        return row;
+    }
+
+    private Border GlyphBadge(int icon, SolidColorBrush tint, double size)
+    {
+        var glyph = DockGlyph(icon, size * .5, tint);
+        glyph.HorizontalAlignment = HorizontalAlignment.Center;
+        return new Border
+        {
+            Width = size, Height = size, CornerRadius = new CornerRadius(size * .29),
+            Background = AgentArt.Wash(tint, 30), Child = glyph, VerticalAlignment = VerticalAlignment.Center
+        };
+    }
+
+    private DockPanel CardHeading(string title, int icon, SolidColorBrush tint, UIElement? action = null, string? detail = null)
+    {
+        var row = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+        if (action != null)
+        {
+            DockPanel.SetDock(action, Dock.Right);
+            row.Children.Add(action);
+        }
+        var badge = GlyphBadge(icon, tint, 28);
+        badge.Margin = new Thickness(0, 0, 8, 0);
+        row.Children.Add(badge);
+        var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        labels.Children.Add(Text(title, 13, strong: true));
+        if (!string.IsNullOrEmpty(detail))
+            labels.Children.Add(Text(detail, 11, subdued));
+        row.Children.Add(labels);
         return row;
     }
 
