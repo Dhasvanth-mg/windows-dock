@@ -151,6 +151,8 @@ public partial class DashboardWindow : Window
             agentGrid?.Dispose();
             foreach (var key in summaryKeys)
                 key?.Dispose();
+            foreach (var key in assistantKeys)
+                key?.Dispose();
         };
         ticker.Tick += (_, _) => UpdateDashboard();
         if (agentGrid != null)

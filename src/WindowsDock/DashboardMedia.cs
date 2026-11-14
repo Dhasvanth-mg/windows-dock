@@ -361,6 +361,11 @@ public partial class DashboardWindow
         var refresh = IconButton(0xE72C, "Refresh audio devices and apps");
         DockPanel.SetDock(refresh, Dock.Right);
         top.Children.Add(refresh);
+        var presets = ActionButton("Presets", ShowAudioPresets);
+        presets.Padding = new Thickness(7, 3, 7, 3);
+        presets.Margin = new Thickness(5, 0, 2, 0);
+        DockPanel.SetDock(presets, Dock.Right);
+        top.Children.Add(presets);
         top.Children.Add(IconLabel("Output and app mixer", 0xE9E9, accent));
         body.Children.Add(top);
         var outputLabel = Text("Default output", 10, subdued, true);

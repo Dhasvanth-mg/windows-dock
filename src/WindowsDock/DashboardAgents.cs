@@ -47,6 +47,9 @@ public partial class DashboardWindow
         DockPanel.SetDock(usage, Dock.Right);
         usage.Margin = new Thickness(0, 0, 6, 0);
         toolbar.Children.Add(usage);
+        var inbox = IconButton(0xEA8F, "Activity inbox", ShowActivityInbox);
+        DockPanel.SetDock(inbox, Dock.Right);
+        toolbar.Children.Add(inbox);
         if (compactAgents)
         {
             var widgets = WidgetLauncherButton();

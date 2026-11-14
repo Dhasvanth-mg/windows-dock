@@ -314,3 +314,29 @@
 - Scope: Explain how a separate assistant and a separate dock can share the same Windows desktop.
 - Acceptance criteria: Distinguish the independently running apps from the shared Explorer taskbar appearance.
 - Outcome: Each app runs independently. Their appearance modules can target the same Explorer taskbar. The tray mode provides an independent entry point for Windows Dock when Hitodama styles the taskbar.
+
+### Activity inbox, window search, and audio presets
+
+- Status: Built, smoke-tested, and running in tray mode.
+- Scope: Build the three prioritized features from the shortlist.
+- Acceptance criteria: Track recent chat completions, approvals, and usage limits with read state. Find and activate open windows through Ctrl+K. Save and recall an output device and per-app volume settings from the audio switchboard.
+- Outcome: The monitor records up to 80 recent replies, approvals, and usage limits. The bell in Coding chats opens the inbox with a saved read position. Ctrl+K searches running window titles and `window:` filters to those results. Presets capture the output device, master level and mute state, and levels and mute states for available apps.
+- Verification: Inbox fixtures covered persistence across scans and duplicate suppression. The installed build opened the inbox and the live monitor populated it. The smoke harness found a separate process by window title, saved and removed a preset against the real audio endpoint, and verified the disconnected-output path before audio changes. Twelve launch routes and eleven dashboard pages passed.
+- Remaining work: Verify a physical switch between separate outputs and the foreground transition when selecting a live window on the desktop. Saved app levels can be applied while the app has an audio session.
+
+### Assistant accounts, personalities, and battery alerts
+
+- Status: Built and running. Local flows verified. Live provider authorization and alert delivery still need interactive checks.
+- Scope: Review the attached clip. Investigate paid ChatGPT and Claude account access, support Gemini and Grok fallbacks, add four personalities, and alert at 25, 20, 15, 10, and 5 percent.
+- Acceptance criteria: Label subscription and API access accurately, preserve explicit consent before changing providers, and keep battery alerts lightweight and de-duplicated while unplugged.
+- Outcome: The attached Atticus demo informed the centered, shortcut-first composer. Ctrl+Alt+A opens the assistant from the controller. Research, Housekeeping, Coding, and Casual chat maintain separate drafts and histories for the dashboard session. ChatGPT plan access uses the browser authorization flow and Windows-protected credentials. Claude API has separate key billing. Gemini and Grok are selectable after usage failures and require an explicit send. The native controller alerts while unplugged at 25%, 20%, 15%, 10%, and 5%.
+- Verification: Release native and self-contained dashboard builds passed. Windows opened the installed assistant with its four roles and sign-in button. The harness checked draft separation, loopback state validation, completed and quota-failed response streams, and the five battery thresholds, duplicate suppression, and recharge reset. Hitodama remained styled while tray mode ran at about 27 MiB private resident memory across the controller and monitor.
+- Remaining work: Complete a real browser grant and one response on the owner's ChatGPT account. Live Claude, Gemini, Grok, and Groq replies require API keys. Physically verify Windows notification delivery at a battery threshold. The four roles currently provide text assistance. The clip's voice capture, screen context, and learned desktop routines were reference material.
+
+#### Clarify subscription tokens
+
+- Status: Answered in chat. Supported account flow built and ready for sign-in.
+- Scope: Confirm whether the assistant can consume existing consumer subscriptions.
+- Acceptance criteria: Use the official ChatGPT plan grant and keep Claude Console billing separate from Claude Pro.
+- Outcome: Official documentation confirms plan usage through Sign in with ChatGPT for eligible accounts. Anthropic directs third-party apps to Claude Console API keys and does not permit reuse of Claude Pro credentials.
+- Remaining work: The owner's browser consent and a live response will verify plan eligibility on this installation.

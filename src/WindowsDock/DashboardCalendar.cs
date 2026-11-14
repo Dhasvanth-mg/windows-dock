@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -342,24 +341,15 @@ public partial class DashboardWindow
         WriteJson("focus.json", new FocusState(focusMinutes, focusEnds));
     }
 
-    private static string DataPath(string file) => Path.Combine(Environment.GetFolderPath(
-        Environment.SpecialFolder.LocalApplicationData), "WindowsDock", "Dashboard", file);
+    private static string DataPath(string file) => DockData.FilePath(file);
 
-    private static T? ReadJson<T>(string file)
-    {
-        try { return JsonSerializer.Deserialize<T>(File.ReadAllText(DataPath(file))); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) { return default; }
-    }
+    private static T? ReadJson<T>(string file) => DockData.Read<T>(file);
 
     private void WriteJson<T>(string file, T value)
     {
-        var path = DataPath(file);
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var temporary = path + ".tmp";
-            File.WriteAllText(temporary, JsonSerializer.Serialize(value));
-            File.Move(temporary, path, true);
+            DockData.Save(file, value);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {

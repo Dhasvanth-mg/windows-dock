@@ -253,6 +253,12 @@ public partial class DashboardWindow
 
         var actions = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         actions.Children.Add(CardHeading("System power", 0xE7E8, amber));
+        if (hasBattery && controllerPid > 0)
+        {
+            var alerts = Text("Low battery alerts at 25%, 20%, 15%, 10%, and 5% while unplugged.", 11, subdued);
+            alerts.TextWrapping = TextWrapping.Wrap;
+            actions.Children.Add(alerts);
+        }
         var buttons = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
         var power = ActionButton("Power settings", () => OpenTarget("ms-settings:powersleep"));
         power.Margin = new Thickness(0, 0, 6, 0);

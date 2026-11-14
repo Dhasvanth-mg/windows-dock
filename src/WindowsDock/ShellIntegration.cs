@@ -5,7 +5,7 @@ using System.Windows.Threading;
 
 namespace WindowsDock;
 
-internal sealed record AppWindow(nint Handle, string Title, string Path);
+internal sealed record AppWindow(nint Handle, string Title, string Path, uint ProcessId = 0);
 
 internal sealed class ShellIntegration : IDisposable
 {
@@ -43,6 +43,7 @@ internal sealed class ShellIntegration : IDisposable
     public static IReadOnlyList<AppWindow> Windows()
     {
         var windows = new List<AppWindow>();
+        var processes = new Dictionary<uint, string>();
         EnumWindows((window, _) =>
         {
             const uint owner = 4;
@@ -66,13 +67,17 @@ internal sealed class ShellIntegration : IDisposable
 
             var name = title.ToString();
             if (name is not ("Program Manager" or "Windows Input Experience"))
-                windows.Add(new AppWindow(window, name, ProcessPath(processId)));
+            {
+                if (!processes.TryGetValue(processId, out var path))
+                    processes[processId] = path = ProcessPath(processId);
+                windows.Add(new AppWindow(window, name, path, processId));
+            }
             return true;
         }, 0);
         return windows;
     }
 
-    private static string ProcessPath(uint processId)
+    internal static string ProcessPath(uint processId)
     {
         const uint queryLimitedInformation = 0x1000;
         var process = OpenProcess(queryLimitedInformation, false, processId);
@@ -102,6 +107,14 @@ internal sealed class ShellIntegration : IDisposable
         if (IsIconic(window))
             ShowWindowAsync(window, 9);
         return SetForegroundWindow(window);
+    }
+
+    internal static bool Activate(AppWindow target)
+    {
+        if (!IsWindowVisible(target.Handle) ||
+            GetWindowThreadProcessId(target.Handle, out var process) == 0 || process != target.ProcessId)
+            return false;
+        return Switch(target.Handle, 0);
     }
 
     public static void Launch(string target) =>

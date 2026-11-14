@@ -129,6 +129,7 @@ public partial class DashboardWindow
     [
         new("Audio switchboard", "Outputs, app mixer, and playback", "music media volume speakers headphones",
             0xE767, purple, ShowAudioWidget, "audio", Wide: true),
+        new("Audio presets", "Save and recall mixes", "headphones speaker mixer audio output", 0xE9E9, purple, ShowAudioPresets, "audio-presets"),
         new("Meetings", "Upcoming calls", "calendar schedule join", 0xE787, accent, ShowMeetingWidget, "meetings"),
         new("Clipboard and files", "Pinned and recent items", "shelf snippets paste screenshots", 0xE77F, green, ShowClipboardWidget, "clipboard"),
         new("GitHub checks", "Builds and reviews", "CI pull requests review build", 0xE73E, purple, ShowGitHubWidget, "github"),
@@ -136,7 +137,8 @@ public partial class DashboardWindow
         new("Downloads", "Files and transfers", "queue transfers files", 0xE896, accent, ShowDownloadWidget, "downloads"),
         new("Focus timer", "Sessions and breaks", "timer break do not disturb", 0xE916, green, ShowFocusWidget, "focus"),
         new("Notifications", "Review and summarize alerts", "alerts summary digest", 0xEA8F, pink, ShowNotificationWidget, "notifications"),
-        new("Assistant", "Chat with Gemini or Groq", "AI model provider message", 0xEAB7, purple, ShowAssistantWidget, "assistant")
+        new("Assistant", "Choose a role and chat", "AI model provider message", 0xEAB7, purple, ShowAssistantWidget, "assistant"),
+        new("Activity inbox", "Replies, approvals, and limits", "unread status finished quota", 0xEA8F, pink, ShowActivityInbox, "activity")
     ];
 
     private Button WidgetTile(WidgetAction widget, bool showArrow = true)
@@ -188,7 +190,7 @@ public partial class DashboardWindow
         var search = Field("Search apps and actions", 150);
         commandInput = search;
         window.Closed += (_, _) => commandInput = null;
-        search.Tag = "Chats, widgets, apps, and settings…";
+        search.Tag = "Windows, chats, widgets, and apps…";
         search.Margin = new Thickness(0, 0, 0, 8);
         content.Children.Add(search);
         var list = new StackPanel();
@@ -228,6 +230,21 @@ public partial class DashboardWindow
             }));
         var apps = new Lazy<WidgetAction[]>(() => InstalledAppShortcuts().Select(app =>
             new WidgetAction(app.Label, "App", "app", 0xECAA, green, () => { window.Close(); OpenTarget(app.Path); })).ToArray());
+        var openWindows = new Lazy<WidgetAction[]>(() => ShellIntegration.Windows().Select(target =>
+        {
+            var app = Path.GetFileNameWithoutExtension(target.Path);
+            return new WidgetAction(target.Title, app.Length == 0 ? "Open window" : $"Open window · {app}",
+                "open window running switch " + app, 0xE737, accent, () =>
+                {
+                    if (ShellIntegration.Activate(target))
+                        Dismiss();
+                    else
+                    {
+                        hint.Text = "Could not switch to this window. Reopen search to refresh the list.";
+                        hint.Foreground = amber;
+                    }
+                });
+        }).ToArray());
         WidgetAction[] matches = [];
         var selected = -1;
         search.TextChanged += (_, _) => Render();
@@ -263,7 +280,14 @@ public partial class DashboardWindow
         void Render()
         {
             var query = search.Text.Trim();
-            matches = query.Length == 0 ? emptyResults : options.Concat(apps.Value)
+            var windowsOnly = query.StartsWith("window:", StringComparison.OrdinalIgnoreCase);
+            if (windowsOnly)
+                query = query[7..].Trim();
+            hint.Text = "↑ ↓ Select   ·   Enter Open   ·   Esc Close";
+            hint.Foreground = subdued;
+            matches = query.Length == 0
+                ? windowsOnly ? openWindows.Value.Take(10).ToArray() : emptyResults
+                : (windowsOnly ? openWindows.Value : openWindows.Value.Concat(options).Concat(apps.Value))
                 .Select(item => (Item: item, Score: SearchScore(item, query)))
                 .Where(match => match.Score > 0)
                 .OrderByDescending(match => match.Score).Take(10).Select(match => match.Item).ToArray();

@@ -16,6 +16,8 @@ The dashboard includes media sessions and volume, Windows settings shortcuts, a 
 
 With Windows Dock's native styling stopped, run `NativeTaskbar.exe --tray` to keep the dashboard and coding chats available while Hitodama styles the taskbar. The Windows Dock icon in the notification area shows the four chat states. Click it or press **Ctrl+Alt+D** to open Coding chats. Right-click the icon and choose **Dashboard and widgets** for the full panel. If the icon is hidden, open the tray overflow arrow.
 
+In either mode, **Ctrl+Alt+A** or **Open assistant** in the tray menu opens the compact assistant. On battery, the controller sends Windows notifications at 25%, 20%, 15%, 10%, and 5%. Reconnecting power resets the alert sequence.
+
 To switch back to Windows Dock's taskbar styling, exit tray mode from its icon, turn off Hitodama's taskbar appearance, and launch `NativeTaskbar.exe` without arguments. Hitodama's assistant can run in either mode.
 
 ## Coding chats
@@ -32,9 +34,11 @@ Under **Connections and defaults**, enable the provider hooks for live updates. 
 
 ## Widgets
 
-Choose **Widgets** from the dashboard or the compact Coding chats panel. Star a widget to show it first in the launcher and add a shortcut to Overview. Press **Ctrl+K** in any dock panel to search chats, widgets, apps, workspaces, and settings. Use **↑** and **↓** to select a result, **Enter** to open it, and **Esc** to close the popup.
+Choose **Widgets** from the dashboard or the compact Coding chats panel. Star a widget to show it first in the launcher and add a shortcut to Overview. Press **Ctrl+K** in any dock panel to search open windows, chats, widgets, apps, workspaces, and settings. Type `window:` to limit the search to open windows on your current desktop. Use **↑** and **↓** to select a result, **Enter** to open it, and **Esc** to close the popup.
 
 - **Audio switchboard** changes the active output device and offers per-app volume and output routing. Some apps apply a new route when they reopen their audio stream.
+- **Audio presets** saves the default output, master volume, and available per-app levels and mute states. Reapply a preset after an absent app opens an audio session.
+- **Activity inbox** keeps the last three days of observed chat replies, approval requests, and limits. Open it from the bell in Coding chats or from Widgets. Mark all read saves your position.
 - **Meetings** reads a local `.ics` export and offers Join and Copy link for supported meeting providers.
 - **Clipboard and files** shows Windows clipboard history when it is enabled. Pin text, images, or files and drag them into other apps.
 - **GitHub checks** reads your PRs, review requests, and recent Actions runs through the signed-in GitHub CLI. Enter a repository as `owner/repo`.
@@ -42,7 +46,7 @@ Choose **Widgets** from the dashboard or the compact Coding chats panel. Star a 
 - **Downloads** shows recent files and partial browser downloads from the Downloads folder, alongside Windows background transfers. Browser progress is limited to what the partial files expose.
 - **Focus timer** runs locally. **Windows Focus** opens the system controls for a focus session with Do Not Disturb.
 - **Notifications** reads recent Windows alerts when access is allowed. Select alerts and review the draft before sending it to Gemini or Groq.
-- **Assistant** opens a separate conversation with Gemini or Groq. Enter an API key for the dock session or use one of the same environment variables as Summaries. Each message sends the recent conversation to the selected provider.
+- **Assistant** has separate conversations for Research, Housekeeping, Coding, and Casual chat. Choose **ChatGPT plan** and continue in your browser to authorize eligible plan usage. **Claude API** uses a Claude Console key. Gemini, Grok, and Groq use their own API keys. Configure them in the panel or with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or `GROQ_API_KEY`. On a usage error, you can switch to Gemini or Grok and resend the draft. Each send shares the current role's recent conversation with the selected provider.
 
 In **Weather**, choose **Use my location** for automatic forecasts, or search for a city. The automatic option requests Windows location access and sends rounded coordinates to Open-Meteo when refreshing the forecast.
 

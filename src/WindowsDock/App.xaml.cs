@@ -22,6 +22,7 @@ public partial class App : Application
                 dashboardSession = NativeDashboardSession.Connect(controller,
                     () => Dispatcher.BeginInvoke(() => ShowDashboard(false)),
                     () => Dispatcher.BeginInvoke(() => ShowDashboard(true)),
+                    () => Dispatcher.BeginInvoke(() => ShowAssistant()),
                     () => Dispatcher.InvokeAsync(() => Shutdown()));
                 if (dashboardSession == null)
                 {
@@ -51,6 +52,19 @@ public partial class App : Application
                     if (!current.IsVisible)
                         current.Show();
                     current.Activate();
+                }
+            }
+
+            void ShowAssistant()
+            {
+                if (MainWindow is DashboardWindow current)
+                {
+                    if (!current.IsVisible)
+                    {
+                        current.OpenAgentGrid();
+                        current.Show();
+                    }
+                    current.ShowAssistantWidget();
                 }
             }
         }

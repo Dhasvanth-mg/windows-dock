@@ -20,12 +20,13 @@ internal static class DockMonitor
 
         using (stop)
         {
-            var focusFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "WindowsDock", "Dashboard", "focus.json");
+            var focusFile = DockData.FilePath("focus.json");
             var nextScan = DateTime.UtcNow;
             var started = nextScan;
             var lastFocusWrite = DateTime.MinValue;
             DateTimeOffset? focusEnds = null;
+            var inbox = DockData.Read<InboxItem[]>("activity-inbox.json") ?? [];
+            DateTimeOffset? quotaSince = null;
             do
             {
                 var now = DateTime.UtcNow;
@@ -33,8 +34,18 @@ internal static class DockMonitor
                 {
                     if (controller.HasExited)
                         return 0;
-                    var sessions = AgentSessions.Rank(AgentSessions.Read(), AgentApprovals.Read(), grid.QuotaBlocked());
+                    var chats = AgentSessions.Read();
+                    var approvals = AgentApprovals.Read();
+                    var quotaBlocked = grid.QuotaBlocked();
+                    quotaSince = quotaBlocked ? quotaSince ?? DateTimeOffset.UtcNow : null;
+                    var sessions = AgentSessions.Rank(chats, approvals, quotaBlocked);
                     grid.Publish(AgentSlots.Select(AgentSlots.Load(), sessions));
+                    var nextInbox = AgentInbox.Merge(inbox, chats, approvals, quotaSince, DateTimeOffset.UtcNow);
+                    if (!inbox.SequenceEqual(nextInbox))
+                    {
+                        try { DockData.Save("activity-inbox.json", nextInbox); inbox = nextInbox; }
+                        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+                    }
                     nextScan = DateTime.UtcNow.AddSeconds(6);
                     var stamp = LastFocusWrite(focusFile);
                     if (stamp != lastFocusWrite)

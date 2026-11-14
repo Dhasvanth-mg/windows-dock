@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 
 namespace WindowsDock;
 
+internal enum AssistantProvider { Gemini, Groq, Grok, ClaudeApi, ChatGptPlan }
+
 internal static class TextModelClient
 {
     internal const string GeminiSummaryModel = "gemini-3.5-flash-lite";
@@ -26,10 +28,20 @@ internal static class TextModelClient
 
     internal static async Task<string> SendChat(bool gemini, string model, string key,
         (bool User, string Text)[] turns, CancellationToken cancellation, string? systemInstruction = null)
+        => await SendChat(gemini ? AssistantProvider.Gemini : AssistantProvider.Groq, model, key, turns, cancellation, systemInstruction);
+
+    internal static async Task<string> SendChat(AssistantProvider provider, string model, string key,
+        (bool User, string Text)[] turns, CancellationToken cancellation, string? systemInstruction = null)
     {
-        var url = gemini
-            ? $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model.StartsWith("models/", StringComparison.Ordinal) ? model[7..] : model)}:generateContent"
-            : "https://api.groq.com/openai/v1/chat/completions";
+        var gemini = provider == AssistantProvider.Gemini;
+        var url = provider switch
+        {
+            AssistantProvider.Gemini => $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model.StartsWith("models/", StringComparison.Ordinal) ? model[7..] : model)}:generateContent",
+            AssistantProvider.Groq => "https://api.groq.com/openai/v1/chat/completions",
+            AssistantProvider.Grok => "https://api.x.ai/v1/chat/completions",
+            AssistantProvider.ClaudeApi => "https://api.anthropic.com/v1/messages",
+            _ => throw new ArgumentOutOfRangeException(nameof(provider))
+        };
         using var request = new HttpRequestMessage(HttpMethod.Post, url);
         if (gemini)
         {
@@ -43,6 +55,18 @@ internal static class TextModelClient
                 body["systemInstruction"] = new { parts = new[] { new { text = systemInstruction } } };
             request.Content = JsonContent.Create(body);
         }
+        else if (provider == AssistantProvider.ClaudeApi)
+        {
+            request.Headers.Add("x-api-key", key);
+            request.Headers.Add("anthropic-version", "2026-10-21");
+            request.Content = JsonContent.Create(new
+            {
+                model,
+                system = systemInstruction ?? "",
+                messages = turns.Select(turn => new { role = turn.User ? "user" : "assistant", content = turn.Text }),
+                max_tokens = 1024
+            });
+        }
         else
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
@@ -53,15 +77,22 @@ internal static class TextModelClient
                 ["messages"] = systemInstruction == null ? messages : messages.Prepend(new { role = "system", content = systemInstruction }),
                 ["max_completion_tokens"] = 1024
             };
-            if (systemInstruction != null && model == GroqSummaryModel)
+            if (provider == AssistantProvider.Groq && systemInstruction != null && model == GroqSummaryModel)
                 body["reasoning_effort"] = "none";
             request.Content = JsonContent.Create(body);
         }
         using var response = await ChatClient.SendAsync(request, cancellation);
         response.EnsureSuccessStatusCode();
         using var result = await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: cancellation);
-        return result == null ? "" : ReadResponse(gemini, result.RootElement);
+        return result == null ? "" : provider == AssistantProvider.ClaudeApi
+            ? ReadClaudeResponse(result.RootElement) : ReadResponse(gemini, result.RootElement);
     }
+
+    private static string ReadClaudeResponse(JsonElement root) =>
+        AgentSessions.Property(root, "content") is { ValueKind: JsonValueKind.Array } content
+            ? string.Concat(content.EnumerateArray().Where(part => AgentSessions.String(part, "type") == "text")
+                .Select(part => AgentSessions.String(part, "text")))
+            : "";
 
     private static string ReadResponse(bool gemini, JsonElement root)
     {

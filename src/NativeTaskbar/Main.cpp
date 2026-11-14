@@ -31,14 +31,17 @@ namespace
               showDashboard(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowDashboard").c_str())),
               agent(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"Agent").c_str())),
               showAgent(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowAgent").c_str())),
+              assistant(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"Assistant").c_str())),
+              showAssistant(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowAssistant").c_str())),
               agentGrid(CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(AgentGridState),
                   SessionName(pid, L"AgentGrid").c_str()))
         {
-            if (!ready || !restored || !stop || !dashboard || !showDashboard || !agent || !showAgent || !agentGrid)
+            if (!ready || !restored || !stop || !dashboard || !showDashboard || !agent || !showAgent ||
+                !assistant || !showAssistant || !agentGrid)
                 winrt::throw_last_error();
         }
 
-        winrt::handle ready, restored, stop, dashboard, showDashboard, agent, showAgent, agentGrid;
+        winrt::handle ready, restored, stop, dashboard, showDashboard, agent, showAgent, assistant, showAssistant, agentGrid;
     };
 
     int Run(int argc, wchar_t** argv)
@@ -128,7 +131,7 @@ namespace
             : nullptr);
         if (trayMode && !grid)
             winrt::throw_last_error();
-        DockTray tray(trayMode, session.stop.get(), session.dashboard.get(), session.agent.get());
+        DockTray tray(trayMode, session.stop.get(), session.dashboard.get(), session.agent.get(), session.assistant.get());
         if (!tray.HasEntryPoint())
             return 1;
         tray.Watch(grid.get());
@@ -195,15 +198,17 @@ namespace
             dashboardProcess = launchPanel(L"--dashboard " + initialization + (trayMode ? L" --tray" : L" --on-demand"));
             return static_cast<bool>(dashboardProcess);
         };
-        const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get(), session.agent.get()};
+        const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get(), session.agent.get(),
+            session.assistant.get()};
+        const HANDLE panels[] = {session.showDashboard.get(), session.showAgent.get(), session.showAssistant.get()};
         for (;;)
         {
-            const HANDLE waitFor[] = {signals[0], signals[1], signals[2], signals[3], monitor.get()};
+            const HANDLE waitFor[] = {signals[0], signals[1], signals[2], signals[3], signals[4], monitor.get()};
             const DWORD count = monitor ? ARRAYSIZE(waitFor) : ARRAYSIZE(signals);
             const auto result = MsgWaitForMultipleObjects(count, waitFor, FALSE, monitor ? INFINITE : 6000, QS_ALLINPUT);
             if (result == WAIT_OBJECT_0 || result == WAIT_OBJECT_0 + 1 || result == WAIT_FAILED)
                 break;
-            if (monitor && result == WAIT_OBJECT_0 + 4)
+            if (monitor && result == WAIT_OBJECT_0 + ARRAYSIZE(signals))
             {
                 monitor.close();
                 continue;
@@ -213,12 +218,12 @@ namespace
                 monitor = launchPanel(L"--monitor " + initialization);
                 monitorRetry = GetTickCount64() + 6000;
             }
-            if (result == WAIT_OBJECT_0 + 2 || result == WAIT_OBJECT_0 + 3)
+            if (result >= WAIT_OBJECT_0 + 2 && result < WAIT_OBJECT_0 + ARRAYSIZE(signals))
             {
                 if (ensureDashboard())
                 {
                     AllowSetForegroundWindow(GetProcessId(dashboardProcess.get()));
-                    SetEvent(result == WAIT_OBJECT_0 + 2 ? session.showDashboard.get() : session.showAgent.get());
+                    SetEvent(panels[result - WAIT_OBJECT_0 - 2]);
                 }
                 continue;
             }
