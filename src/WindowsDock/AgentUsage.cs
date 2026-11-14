@@ -8,12 +8,16 @@ internal sealed record AgentQuota(string Label, double? UsedPercent, DateTimeOff
 internal sealed record AgentPlanUsage(DateTimeOffset Observed, AgentQuota[] Windows, long? DailyTokens = null,
     long? LifetimeTokens = null, bool? Allowed = null, string Source = "")
 {
-    internal bool IsBlocked(DateTimeOffset now)
+    internal bool IsBlocked(DateTimeOffset now) => BlockedUntil(now) > now;
+
+    internal DateTimeOffset BlockedUntil(DateTimeOffset now)
     {
-        if (Allowed != false || now - Observed > TimeSpan.FromMinutes(10))
-            return false;
-        var resets = Windows.Where(window => window.ResetAt.HasValue && window.UsedPercent >= 100).ToArray();
-        return resets.Length == 0 || resets.Any(window => window.ResetAt > now);
+        var expires = Observed.AddMinutes(10);
+        if (Allowed != false || expires <= now)
+            return DateTimeOffset.MinValue;
+        var latestReset = Windows.Where(window => window.UsedPercent >= 100 && window.ResetAt.HasValue)
+            .Select(window => window.ResetAt!.Value).DefaultIfEmpty(expires).Max();
+        return latestReset < expires ? latestReset : expires;
     }
 }
 

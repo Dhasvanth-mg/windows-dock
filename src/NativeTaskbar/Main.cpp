@@ -229,30 +229,44 @@ namespace
         else
             std::fputws(L"Use the notification area icon to restore.\n", stdout);
         std::fflush(stdout);
-        winrt::handle dashboardProcess;
-        const auto ensureDashboard = [&]
+        const auto launchPanel = [&](std::wstring const& args)
         {
-            if (dashboardProcess && WaitForSingleObject(dashboardProcess.get(), 0) == WAIT_TIMEOUT)
-                return true;
-            dashboardProcess.close();
-            const auto args = L"--dashboard " + initialization + L" --hidden";
             SHELLEXECUTEINFOW launch{};
             launch.cbSize = sizeof(launch);
             launch.fMask = SEE_MASK_NOCLOSEPROCESS;
             launch.lpFile = panel.c_str();
             launch.lpParameters = args.c_str();
             launch.nShow = SW_SHOWNORMAL;
-            if (ShellExecuteExW(&launch))
-                dashboardProcess.attach(launch.hProcess);
+            return winrt::handle(ShellExecuteExW(&launch) ? launch.hProcess : nullptr);
+        };
+        auto monitor = launchPanel(L"--monitor " + initialization);
+        auto monitorRetry = GetTickCount64() + 6000;
+        winrt::handle dashboardProcess;
+        const auto ensureDashboard = [&]
+        {
+            if (dashboardProcess && WaitForSingleObject(dashboardProcess.get(), 0) == WAIT_TIMEOUT)
+                return true;
+            dashboardProcess = launchPanel(L"--dashboard " + initialization + L" --on-demand");
             return static_cast<bool>(dashboardProcess);
         };
-        ensureDashboard();
         const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get(), session.agent.get()};
         for (;;)
         {
-            const auto result = MsgWaitForMultipleObjects(ARRAYSIZE(signals), signals, FALSE, INFINITE, QS_ALLINPUT);
+            const HANDLE waitFor[] = {signals[0], signals[1], signals[2], signals[3], monitor.get()};
+            const DWORD count = monitor ? ARRAYSIZE(waitFor) : ARRAYSIZE(signals);
+            const auto result = MsgWaitForMultipleObjects(count, waitFor, FALSE, monitor ? INFINITE : 6000, QS_ALLINPUT);
             if (result == WAIT_OBJECT_0 || result == WAIT_OBJECT_0 + 1 || result == WAIT_FAILED)
                 break;
+            if (monitor && result == WAIT_OBJECT_0 + 4)
+            {
+                monitor.close();
+                continue;
+            }
+            if (!monitor && GetTickCount64() >= monitorRetry)
+            {
+                monitor = launchPanel(L"--monitor " + initialization);
+                monitorRetry = GetTickCount64() + 6000;
+            }
             if (result == WAIT_OBJECT_0 + 2 || result == WAIT_OBJECT_0 + 3)
             {
                 if (ensureDashboard())

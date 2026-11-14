@@ -24,7 +24,7 @@ public partial class DashboardWindow
         Put(settings, Labeled("Provider", providers), 0);
         Put(settings, Labeled("Model ID", model), 1);
         content.Children.Add(settings);
-        var credentials = Labeled("API key for this dock session", key);
+        var credentials = Labeled("API key for this dashboard session", key);
         credentials.Margin = new Thickness(0, 7, 0, 0);
         content.Children.Add(credentials);
 

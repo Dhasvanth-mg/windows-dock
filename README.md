@@ -8,6 +8,8 @@ Keep the contents of the native publish directory together and run NativeTaskbar
 
 Use only one taskbar appearance tool at a time. The native controller exits if it cannot find the expected taskbar layout. Explorer stays in charge of taskbar auto-hide and screen space. If Explorer restarts, run the controller again.
 
+The dashboard opens on demand and exits about 20 seconds after hiding. A smaller background process keeps coding chat status and active focus timers current. An API key typed into the dashboard lasts until that process exits. Use the Windows environment variables below if you want the key available on subsequent opens.
+
 The dashboard includes media sessions and volume, Windows settings shortcuts, a calendar, local reminders, a focus timer, system statistics, a file shelf, a wallpaper picker, and weather. Forecasts use Open-Meteo. In the Audio tab, the lyrics button sends track metadata to LRCLIB to look up line-synced lyrics.
 
 ## Coding chats
@@ -24,7 +26,7 @@ Under **Connections and defaults**, enable the provider hooks for live updates. 
 
 ## Widgets
 
-Choose **Widgets** from the dashboard or the compact Coding chats panel. Press **Ctrl+K** while either panel or a widget popup is open to search installed desktop shortcuts, workspaces, and dock actions.
+Choose **Widgets** from the dashboard or the compact Coding chats panel. Star a widget to show it first in the launcher and add a shortcut to Overview. Press **Ctrl+K** in any dock panel to search chats, widgets, apps, workspaces, and settings. Use **↑** and **↓** to select a result, **Enter** to open it, and **Esc** to close the popup.
 
 - **Audio switchboard** changes the active output device and offers per-app volume and output routing. Some apps apply a new route when they reopen their audio stream.
 - **Meetings** reads a local `.ics` export and offers Join and Copy link for supported meeting providers.

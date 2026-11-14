@@ -74,7 +74,12 @@ public partial class DashboardWindow
             cpu(snapshot.Cpu, $"{snapshot.Cpu:0}%");
             memory(snapshot.Memory, $"{snapshot.Memory:0}%");
         };
-        return grid;
+        var content = new StackPanel();
+        homeFavorites = new WrapPanel { Margin = new Thickness(1, 0, 0, 4) };
+        RenderHomeFavorites();
+        content.Children.Add(homeFavorites);
+        content.Children.Add(grid);
+        return content;
     }
 
     private UIElement MediaPage()

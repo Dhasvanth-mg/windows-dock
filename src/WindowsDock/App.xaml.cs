@@ -1,4 +1,5 @@
 using System.Threading;
+using System.IO;
 using System.Windows;
 
 namespace WindowsDock;
@@ -11,14 +12,6 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        if (e.Args is ["--agent-status", _] or ["--agent-status", _, "--approval"])
-        {
-            try { AgentSessions.Receive(e.Args[1], Console.In, Console.Out, e.Args.Length == 3); }
-            catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
-            Shutdown();
-            return;
-        }
-
         if (e.Args.Length > 0 && e.Args[0] == "--dashboard")
         {
             var controller = e.Args.Length >= 2 && int.TryParse(e.Args[1], out var pid) ? pid : 0;
@@ -37,8 +30,11 @@ public partial class App : Application
                 }
                 ShutdownMode = ShutdownMode.OnExplicitShutdown;
             }
-            var hidden = e.Args.Length == 3 && e.Args[2] == "--hidden";
-            MainWindow = new DashboardWindow(controller, initialPage, hidden);
+            var onDemand = e.Args.Length == 3 && e.Args[2] == "--on-demand";
+            var hidden = onDemand || e.Args.Length == 3 && e.Args[2] == "--hidden";
+            MainWindow = new DashboardWindow(controller, initialPage, hidden, onDemand);
+            if (onDemand)
+                MainWindow.Closed += (_, _) => Shutdown();
             if (!hidden)
                 ShowDashboard(false);
             return;
@@ -77,5 +73,30 @@ public partial class App : Application
             instance?.ReleaseMutex();
         instance?.Dispose();
         base.OnExit(e);
+    }
+}
+
+internal static class DockEntryPoint
+{
+    [STAThread]
+    public static int Main(string[] args)
+    {
+        if (args is ["--monitor", var controller] && int.TryParse(controller, out var pid) && pid > 0)
+            return DockMonitor.Run(pid);
+        if (args is ["--agent-status", _] or ["--agent-status", _, "--approval"])
+        {
+            try { AgentSessions.Receive(args[1], Console.In, Console.Out, args.Length == 3); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+            return 0;
+        }
+        return RunApplication();
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static int RunApplication()
+    {
+        var app = new App();
+        app.InitializeComponent();
+        return app.Run();
     }
 }

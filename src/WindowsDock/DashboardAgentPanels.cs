@@ -82,7 +82,7 @@ public partial class DashboardWindow
         content.Children.Add(fields);
         var key = new PasswordBox { MaxLength = 512 };
         AutomationProperties.SetName(key, "Summary API key");
-        var keyField = Labeled("API key for this dock session", key);
+        var keyField = Labeled("API key for this dashboard session", key);
         keyField.Margin = new Thickness(0, 7, 0, 0);
         content.Children.Add(keyField);
 
@@ -467,6 +467,8 @@ public partial class DashboardWindow
             if (!cancellation.IsCancellationRequested && !closed)
             {
                 nextUsageRefresh = DateTimeOffset.UtcNow.AddSeconds(30);
+                if (releaseWhenIdle && codexPlan is { Allowed: not null } plan)
+                    agentGrid?.WriteQuota(plan.BlockedUntil(DateTimeOffset.UtcNow));
                 PublishAgentGrid();
                 updatePage?.Invoke();
             }
@@ -485,6 +487,7 @@ public partial class DashboardWindow
         string title, string subtitle, double width, int icon, SolidColorBrush tint, bool widget = false)
     {
         agentPanel?.Close();
+        var returnFocus = FocusManager.GetFocusedElement(this) as FrameworkElement;
         var panel = new StackPanel();
         var header = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
         var close = IconButton(0xE711, "Close " + title.ToLowerInvariant(), () => agentPanel?.Close());
@@ -548,6 +551,12 @@ public partial class DashboardWindow
             }
             if (args.Key == Key.Escape && !args.Handled)
             {
+                if (OpenComboBox(args.OriginalSource) is { } combo)
+                {
+                    args.Handled = true;
+                    combo.IsDropDownOpen = false;
+                    return;
+                }
                 args.Handled = true;
                 window.Close();
             }
@@ -558,6 +567,12 @@ public partial class DashboardWindow
             lifetime.Dispose();
             agentPanel = null;
             modalOpen = false;
+            if (returnFocus != null && !closed)
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (agentPanel == null && IsActive && returnFocus.IsVisible)
+                        returnFocus.Focus();
+                }, System.Windows.Threading.DispatcherPriority.Input);
         };
         if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
         {
@@ -584,5 +599,14 @@ public partial class DashboardWindow
             var y = Math.Max(area.Top, area.Bottom - (window.ActualHeight + 58) * scale.DpiScaleY);
             MoveWindowWithoutActivation(hwnd.Handle, (int)x, (int)y);
         }
+    }
+
+    private static ComboBox? OpenComboBox(object source)
+    {
+        for (var element = source as DependencyObject; element != null;
+             element = element is Visual visual ? VisualTreeHelper.GetParent(visual) : LogicalTreeHelper.GetParent(element))
+            if (element is ComboBox { IsDropDownOpen: true } combo)
+                return combo;
+        return null;
     }
 }

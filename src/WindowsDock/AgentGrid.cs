@@ -80,6 +80,7 @@ internal sealed class AgentGrid : IDisposable
     private const int RevisionSize = 4;
     private const int TileSize = 528;
     private const int SelectionOffset = RevisionSize + 4 * TileSize;
+    private const int QuotaOffset = SelectionOffset + 204;
     private readonly MemoryMappedFile mapping;
     private readonly MemoryMappedViewAccessor view;
     private byte[] previous = [];
@@ -108,6 +109,9 @@ internal sealed class AgentGrid : IDisposable
     }
 
     internal static string SessionObject(int pid, string name) => $@"Local\WindowsDock.NativeTaskbar.{pid}.{name}";
+
+    internal void WriteQuota(DateTimeOffset until) => view.Write(QuotaOffset, until.UtcTicks);
+    internal bool QuotaBlocked() => view.ReadInt64(QuotaOffset) > DateTimeOffset.UtcNow.UtcTicks;
 
     internal void Publish(AgentGridTile[] tiles)
     {

@@ -272,3 +272,21 @@
 - Acceptance criteria: Finish rendering and smoke checks, restart the native dashboard with the verified build, and publish the commit.
 - Outcome: Published the self-contained x64 dashboard into the existing dock installation and relaunched it through the native controller. The controller stayed active, and its signals reopened the full dashboard, the compact chat panel, and the full dashboard again.
 - Remaining work: Provider and device checks listed in the preceding entry.
+
+### Faster widget and chat navigation
+
+- Status: Built, smoke-tested, and running in the native dock.
+- Scope: Improve everyday task and widget access in the native dashboard.
+- Acceptance criteria: Frequently used widgets can be favorited and reopened from the dock. Search prioritizes strong matches and supports keyboard selection. Users can find chats, dashboard pages, and common actions through the same search.
+- Outcome: Added saved widget favorites to the launcher and Overview. Search now ranks direct matches first and includes local chats, dashboard pages, widgets, installed apps, and workspaces. Selecting a chat keeps its details and actions in the dock. The search panel supports arrow keys and Enter, and closing a popup restores focus when its original control is still visible.
+- Verification: Favorite and unfavorite round-tripped through local settings. A reopened search loaded the saved favorite first, ranked a dashboard page and widget keyword correctly, and opened a sample chat. The eleven pages and ten widget routes from the previous pass still passed. Inspected the launcher and search render.
+
+#### Reduce idle memory
+
+- Status: Built and running. Dashboard lifecycle measured on Windows 11 25H2.
+- Scope: Reduce memory used by the native dashboard between openings and measure the running build.
+- Acceptance criteria: Release unused UI and media resources when idle, preserve live chat status and timer behavior, and report measured memory and its limits.
+- Outcome: The native controller starts a monitor without loading WPF. The monitor publishes chat status and tracks focus deadlines. The dashboard starts when requested and exits after twenty seconds hidden. The rollout scan reuses a byte buffer and decodes only candidate status records.
+- Verification: Release native build and self-contained x64 publish passed. The monitor populated the live grid. Full and compact panels shared one process within an open session. The Close button hid the panel, its process exited after idle, and the native Agent event reopened it in a fresh process. Private committed memory across the controller and UI processes dropped from about 151 MiB to 31–33 MiB on this desk. The final idle sample showed 29 MiB of private resident memory across the controller and monitor. The figures exclude the in-process Explorer module.
+- Desktop state: Explorer restarted during deployment. Hitodama re-enabled its appearance after that restart and blocked native attach. Its taskbar appearance was paused, with the original rules backed up locally.
+- Remaining work: Cold opens pay the dashboard startup cost. API keys entered in the UI expire when the dashboard process exits. The running timer countdown passed the smoke test. Audible expiry while the UI is closed needs a live check. The memory figures reflect a single Windows session and can vary with activity and paging.

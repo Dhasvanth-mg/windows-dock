@@ -322,8 +322,13 @@ public partial class DashboardWindow
         if (!focusEnds.HasValue || focusEnds > DateTimeOffset.Now)
             return;
         focusEnds = null;
-        PersistFocus();
-        System.Media.SystemSounds.Asterisk.Play();
+        if (releaseWhenIdle)
+            focusTicker.Stop();
+        else
+        {
+            PersistFocus();
+            System.Media.SystemSounds.Asterisk.Play();
+        }
         if (IsVisible)
             UpdateDashboard();
     }
@@ -363,5 +368,4 @@ public partial class DashboardWindow
     }
 
     private sealed record Reminder(string Title, DateTime Date);
-    private sealed record FocusState(int Minutes, DateTimeOffset? Ends);
 }

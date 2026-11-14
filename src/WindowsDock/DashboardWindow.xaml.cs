@@ -20,6 +20,8 @@ public partial class DashboardWindow : Window
     private readonly DispatcherTimer agentTicker = new() { Interval = TimeSpan.FromSeconds(6) };
     private readonly CancellationTokenSource lifetime = new();
     private readonly int controllerPid;
+    private readonly bool releaseWhenIdle;
+    private readonly DispatcherTimer idleExit = new() { Interval = TimeSpan.FromSeconds(20) };
     private readonly SolidColorBrush subdued = Brush("#C5BCD6");
     private readonly SolidColorBrush muted = Brush("#A69BB8");
     private readonly SolidColorBrush accent = Brush("#9CC9FF");
@@ -40,10 +42,19 @@ public partial class DashboardWindow : Window
 
     public DashboardWindow() : this(0, null) { }
 
-    internal DashboardWindow(int controllerPid, string? initialPage, bool deferPage = false)
+    internal DashboardWindow(int controllerPid, string? initialPage, bool deferPage = false, bool releaseWhenIdle = false)
     {
         InitializeComponent();
         this.controllerPid = controllerPid;
+        this.releaseWhenIdle = releaseWhenIdle;
+        idleExit.Tick += (_, _) =>
+        {
+            idleExit.Stop();
+            if (!IsVisible)
+                Application.Current.Shutdown();
+        };
+        if (releaseWhenIdle && deferPage)
+            idleExit.Start();
         agentGrid = AgentGrid.Connect(controllerPid);
         ShowInTaskbar = controllerPid == 0;
 
@@ -73,8 +84,11 @@ public partial class DashboardWindow : Window
             if (!IsVisible)
             {
                 ticker.Stop();
+                if (releaseWhenIdle)
+                    idleExit.Start();
                 return;
             }
+            idleExit.Stop();
             lastReveal = Environment.TickCount64;
             UpdateDashboard();
             if (currentPage is DashboardPage.Weather or DashboardPage.Home)
@@ -108,7 +122,12 @@ public partial class DashboardWindow : Window
             if (e.Key == Key.Escape && !e.Handled)
             {
                 e.Handled = true;
-                Dismiss();
+                if (OpenComboBox(e.OriginalSource) is { } combo)
+                    combo.IsDropDownOpen = false;
+                else if (agentPanel != null)
+                    agentPanel.Close();
+                else
+                    Dismiss();
             }
         };
         PreviewMouseDown += (_, _) => agentPanel?.Close();
@@ -123,6 +142,7 @@ public partial class DashboardWindow : Window
             closed = true;
             ticker.Stop();
             agentTicker.Stop();
+            idleExit.Stop();
             lifetime.Cancel();
             lifetime.Dispose();
             agentGrid?.Dispose();
@@ -169,6 +189,7 @@ public partial class DashboardWindow : Window
         pageInitialized = true;
         currentPage = page;
         updatePage = null;
+        homeFavorites = null;
         foreach (var (key, button) in tabs)
         {
             button.Background = key == page ? Brush("#32C5A8FF") : Brushes.Transparent;

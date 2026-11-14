@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -74,6 +75,31 @@ internal static partial class AgentSessions
         (session.State == AgentState.Working && session.Updated < now.AddMinutes(-20)) ||
         (session.State == AgentState.Attention && session.Updated < now.AddHours(-2))
             ? session with { State = AgentState.Recent, Step = "Last status expired" } : session;
+
+    internal static AgentSession[] Rank(IEnumerable<AgentSession> sessions, AgentApproval[] approvals, bool codexBlocked)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var map = sessions.ToDictionary(session => (session.Provider, session.Id));
+        foreach (var approval in approvals)
+        {
+            var key = (approval.Provider, approval.SessionId);
+            var session = map.GetValueOrDefault(key) ?? new AgentSession(approval.Provider, approval.SessionId,
+                approval.Project, approval.Project, AgentState.Attention, "", approval.Expires.AddSeconds(-30),
+                ProjectPath: approval.WorkingDirectory);
+            map[key] = session with { State = AgentState.Attention, Step = "Approval for " + approval.Tool };
+        }
+        return map.Values.Select(session => session.Provider == AgentProvider.Codex && codexBlocked &&
+                session.State is AgentState.Recent or AgentState.Ready
+                    ? session with { State = AgentState.QuotaReached, Step = "Account usage limit reached" } : session)
+            .OrderBy(session => session.State switch
+            {
+                AgentState.Attention => 0,
+                AgentState.QuotaReached => 1,
+                AgentState.Working => 2,
+                AgentState.Finished when now - session.Updated < TimeSpan.FromMinutes(3) => 3,
+                _ => 4
+            }).ThenByDescending(session => session.Updated).ToArray();
+    }
 
     private static void ReadClaude(Dictionary<(AgentProvider, string), AgentSession> sessions)
     {
@@ -164,7 +190,7 @@ internal static partial class AgentSessions
                 AgentSession? latest = cached.Session is { State: not AgentState.Recent } previous ? previous : null;
                 string? model = null, effort = null, cwd = null;
                 var gotStatus = false;
-                foreach (var line in Tail(file, 768_000).Reverse())
+                foreach (var line in RecentStatusRecords(file))
                 {
                     if (model == null && line.Contains("\"turn_context\"", StringComparison.Ordinal))
                     {
@@ -346,6 +372,34 @@ internal static partial class AgentSessions
     }
 
     private static FileStream Open(string path) => new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+    private static IEnumerable<string> RecentStatusRecords(string path)
+    {
+        using var stream = Open(path);
+        var fileSize = stream.Length;
+        var length = (int)Math.Min(768_000, fileSize);
+        if (length == 0)
+            yield break;
+        var offset = fileSize - length;
+        stream.Position = offset;
+        var buffer = ArrayPool<byte>.Shared.Rent(length);
+        try
+        {
+            var end = stream.ReadAtLeast(buffer.AsSpan(0, length), length, false);
+            while (end > 0)
+            {
+                var start = Array.LastIndexOf(buffer, (byte)'\n', end - 1, end) + 1;
+                if (start == 0 && offset != 0)
+                    break;
+                if (end > start && (Contains(start, end, "\"turn_context\""u8) || Contains(start, end, "\"event_msg\""u8)))
+                    yield return Encoding.UTF8.GetString(buffer, start, end - start);
+                end = start - 1;
+            }
+        }
+        finally { ArrayPool<byte>.Shared.Return(buffer); }
+
+        bool Contains(int start, int end, ReadOnlySpan<byte> marker) => buffer.AsSpan(start, end - start).IndexOf(marker) >= 0;
+    }
 
     private static string[] Tail(string path, int bytes)
     {

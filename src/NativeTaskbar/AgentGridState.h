@@ -25,11 +25,12 @@ struct AgentGridState
     LONG revision;
     AgentGridTile tiles[4];
     AgentGridSelection selection;
+    int64_t codexBlockedUntil;
 };
 
 static_assert(sizeof(AgentGridTile) == 528);
 static_assert(sizeof(AgentGridSelection) == 204);
-static_assert(sizeof(AgentGridState) == 2320);
+static_assert(sizeof(AgentGridState) == 2328);
 
 struct UnmapAgentGrid
 {

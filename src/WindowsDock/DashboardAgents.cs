@@ -252,32 +252,15 @@ public partial class DashboardWindow
                 TimeSpan.FromMilliseconds(175)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
     }
 
-    private AgentSession[] RankedSessions(AgentApproval[] approvals)
-    {
-        var now = DateTimeOffset.UtcNow;
-        var map = agentSessions.ToDictionary(session => (session.Provider, session.Id));
-        foreach (var approval in approvals)
-        {
-            var key = (approval.Provider, approval.SessionId);
-            var session = map.GetValueOrDefault(key) ?? new AgentSession(approval.Provider, approval.SessionId,
-                approval.Project, approval.Project, AgentState.Attention, "", approval.Expires.AddSeconds(-30),
-                ProjectPath: approval.WorkingDirectory);
-            map[key] = session with { State = AgentState.Attention, Step = "Approval for " + approval.Tool };
-        }
-        return map.Values.Select(session => session.Provider == AgentProvider.Codex &&
-                session.State is AgentState.Recent or AgentState.Ready && codexPlan?.IsBlocked(now) == true
-                    ? session with { State = AgentState.QuotaReached, Step = "Account usage limit reached" } : session)
-            .OrderBy(session => session.State switch
-            {
-                AgentState.Attention => 0,
-                AgentState.QuotaReached => 1,
-                AgentState.Working => 2,
-                AgentState.Finished when now - session.Updated < TimeSpan.FromMinutes(3) => 3,
-                _ => 4
-            }).ThenByDescending(session => session.Updated).ToArray();
-    }
+    private AgentSession[] RankedSessions(AgentApproval[] approvals) =>
+        AgentSessions.Rank(agentSessions, approvals, codexPlan?.IsBlocked(DateTimeOffset.UtcNow) == true);
 
-    private void PublishAgentGrid() => agentGrid?.Publish(AgentSlots.Select(agentSlots, RankedSessions(pendingApprovals)));
+    private void PublishAgentGrid()
+    {
+        if (agentGrid == null || releaseWhenIdle)
+            return;
+        agentGrid.Publish(AgentSlots.Select(agentSlots, RankedSessions(pendingApprovals)));
+    }
 
     private Button AgentRow(AgentSession session, bool selected)
     {
