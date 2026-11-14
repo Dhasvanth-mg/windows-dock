@@ -51,12 +51,16 @@ public partial class DashboardWindow
         catch (OperationCanceledException) { }
     }
 
-    private void ShowReplySummary(AgentSession session)
+    private void ShowReplySummary(AgentSession session) => ShowTextSummary("Reply summary", session.Title,
+        "Reply to summarize", null, session);
+
+    private void ShowTextSummary(string title, string subtitle, string label, string? draft, AgentSession? session = null)
     {
-        var (window, content, cancellation) = CreateAgentPanel("Reply summary", session.Title, 468);
-        var sourceLabel = Text("Reply to summarize", 11, subdued, true);
-        var source = Field("Reply to summarize", AgentSessions.SummaryLimit);
-        source.Tag = "Paste a reply";
+        var (window, content, cancellation) = CreateAgentPanel(title, subtitle, 468);
+        var sourceLabel = Text(label, 11, subdued, true);
+        var source = Field(label, AgentSessions.SummaryLimit);
+        source.Tag = session == null ? "Paste notifications here" : "Paste a reply";
+        source.Text = draft ?? "";
         source.AcceptsReturn = true;
         source.TextWrapping = TextWrapping.Wrap;
         source.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
@@ -64,7 +68,7 @@ public partial class DashboardWindow
         source.Margin = new Thickness(0, 4, 0, 5);
         content.Children.Add(sourceLabel);
         content.Children.Add(source);
-        var sourceStatus = Text("Looking for the latest completed reply…", 10, subdued);
+        var sourceStatus = Text(session == null ? "Review the notifications before sending." : "Looking for the latest completed reply…", 10, subdued);
         sourceStatus.TextWrapping = TextWrapping.Wrap;
         content.Children.Add(sourceStatus);
 
@@ -97,20 +101,24 @@ public partial class DashboardWindow
         content.Children.Add(status);
 
         var actions = new WrapPanel();
-        var send = new Button { Style = (Style)FindResource("Chip") };
+        var send = ActionButton("Summarize");
         send.Click += async (_, _) => await SummarizeAsync();
         send.Background = Brush("#29466B");
         send.Margin = new Thickness(0, 0, 5, 3);
         actions.Children.Add(send);
-        var open = ActionButton("Open chat", () => { window.Close(); OpenAgent(session); });
-        open.Margin = new Thickness(0, 0, 5, 3);
-        actions.Children.Add(open);
+        if (session != null)
+        {
+            var open = ActionButton("Open chat", () => { window.Close(); OpenAgent(session); });
+            open.Margin = new Thickness(0, 0, 5, 3);
+            actions.Children.Add(open);
+        }
         content.Children.Add(actions);
         provider.SelectionChanged += (_, _) => ApplyProvider();
         window.Closed += (_, _) => key.Clear();
         ApplyProvider();
         window.Show();
-        _ = ReadSourceAsync();
+        if (session != null)
+            _ = ReadSourceAsync(session);
 
         StackPanel Labeled(string label, Control control)
         {
@@ -124,6 +132,8 @@ public partial class DashboardWindow
         void ApplyProvider()
         {
             var index = provider.SelectedIndex;
+            if (index is < 0 or > 1)
+                return;
             summaryGemini = index == 0;
             model.Text = summaryModels[index] ?? (summaryGemini ? TextModelClient.GeminiSummaryModel : TextModelClient.GroqSummaryModel);
             key.Clear();
@@ -135,12 +145,12 @@ public partial class DashboardWindow
                 status.Text += " A key is available.";
         }
 
-        async Task ReadSourceAsync()
+        async Task ReadSourceAsync(AgentSession chat)
         {
             try
             {
-                var reply = lastReplyPreview is { } cached && cached.Session == session ? cached.Reply :
-                    await Task.Run(() => AgentSessions.LatestReply(session, cancellation), cancellation);
+                var reply = lastReplyPreview is { } cached && cached.Session == chat ? cached.Reply :
+                    await Task.Run(() => AgentSessions.LatestReply(chat, cancellation), cancellation);
                 if (cancellation.IsCancellationRequested)
                     return;
                 if (source.Text.Length == 0)
@@ -159,6 +169,8 @@ public partial class DashboardWindow
         {
             var reply = source.Text;
             var index = provider.SelectedIndex;
+            if (index is < 0 or > 1)
+                return;
             var modelId = model.Text.Trim();
             var typed = key.Password.Trim();
             var apiKey = typed.Length == 0 ? ReadSessionKey(index) ?? EnvironmentKey(index) : typed;
@@ -180,7 +192,8 @@ public partial class DashboardWindow
             result.Visibility = Visibility.Collapsed;
             try
             {
-                var response = await TextModelClient.SummarizeAsync(index == 0, modelId, apiKey, reply, cancellation);
+            var response = await TextModelClient.SummarizeAsync(index == 0, modelId, apiKey, reply, cancellation,
+                notifications: session == null);
                 if (cancellation.IsCancellationRequested)
                     return;
                 if (string.IsNullOrWhiteSpace(response))
@@ -190,8 +203,10 @@ public partial class DashboardWindow
                 }
                 if (typed.Length > 0)
                 {
-                    summaryKeys[index]?.Dispose();
+                    var previousKey = summaryKeys[index];
                     summaryKeys[index] = key.SecurePassword;
+                    previousKey?.Dispose();
+                    key.Clear();
                 }
                 result.Text = response.Trim();
                 result.Visibility = Visibility.Visible;
@@ -443,9 +458,10 @@ public partial class DashboardWindow
         updateUsagePanel?.Invoke();
         try
         {
-            claudePlan = await Task.Run(AgentUsage.ReadClaudePlan, cancellation);
-            var codex = await CodexUsageClient.ReadAsync(cancellation);
-            codexPlan = codex ?? await Task.Run(AgentUsage.ReadCodexCache, cancellation);
+            var claude = Task.Run(AgentUsage.ReadClaudePlan, cancellation);
+            var codex = CodexUsageClient.ReadAsync(cancellation);
+            claudePlan = await claude;
+            codexPlan = await codex ?? await Task.Run(AgentUsage.ReadCodexCache, cancellation);
             if (!cancellation.IsCancellationRequested && !closed)
             {
                 nextUsageRefresh = DateTimeOffset.UtcNow.AddSeconds(30);
@@ -521,6 +537,19 @@ public partial class DashboardWindow
             agentPanel = null;
             modalOpen = false;
         };
+        if (SystemParameters.ClientAreaAnimation)
+        {
+            var offset = new TranslateTransform();
+            card.RenderTransform = offset;
+            window.Loaded += (_, _) => offset.BeginAnimation(TranslateTransform.YProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(12, 0, TimeSpan.FromMilliseconds(165))
+                {
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase
+                    {
+                        EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut
+                    }
+                });
+        }
         return (window, panel, cancellation);
 
         void Position()

@@ -40,13 +40,16 @@ public partial class DashboardWindow
         var grid = Columns(0.75, 2.45, 1.6);
         var today = DateTime.Today;
         var date = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
-        var heading = Text(today.ToString("ddd MMM"), 12, Brush("#FF8487"), true);
+        var heading = Text(today.ToString("dddd"), 11, accent, true);
         heading.HorizontalAlignment = HorizontalAlignment.Center;
         date.Children.Add(heading);
-        var day = Text(today.ToString("dd"), 32, strong: true);
+        var day = Text(today.ToString("d MMM"), 23, strong: true);
         day.HorizontalAlignment = HorizontalAlignment.Center;
         date.Children.Add(day);
-        date.Children.Add(Text($"Week {System.Globalization.ISOWeek.GetWeekOfYear(today)}", 10, muted));
+        var todayButton = ActionButton("Today", () => { calendarWeek = DateTime.Today; ShowPage(DashboardPage.Calendar); });
+        todayButton.HorizontalAlignment = HorizontalAlignment.Center;
+        todayButton.Margin = new Thickness(0, 6, 0, 0);
+        date.Children.Add(todayButton);
         Put(grid, Card(date), 0);
 
         var calendar = new StackPanel();
@@ -87,7 +90,7 @@ public partial class DashboardWindow
                 ShowPage(DashboardPage.Calendar);
             }));
             var button = (Button)values.Children[1];
-            button.Background = entry == today ? Brush("#B42E45") : Brushes.Transparent;
+            button.Background = entry == today ? Brush("#285488") : Brushes.Transparent;
             button.BorderBrush = Brushes.Transparent;
             button.Padding = new Thickness(4, 3, 4, 3);
             button.HorizontalAlignment = HorizontalAlignment.Center;
@@ -132,6 +135,11 @@ public partial class DashboardWindow
         toggle.Background = Brush("#795018");
         toggle.HorizontalAlignment = HorizontalAlignment.Left;
         controls.Children.Add(toggle);
+        var quiet = ActionButton("Windows Focus", () => OpenTarget("ms-settings:quiethours"));
+        quiet.ToolTip = "Start a Windows Focus session with Do Not Disturb";
+        quiet.HorizontalAlignment = HorizontalAlignment.Left;
+        quiet.Margin = new Thickness(0, 4, 0, 0);
+        controls.Children.Add(quiet);
         focus.Children.Add(controls);
         Put(grid, Card(focus), 2);
         updatePage = () =>
@@ -154,14 +162,22 @@ public partial class DashboardWindow
         input.Margin = new Thickness(0, 6, 0, 5);
         compose.Children.Add(input);
         var actions = new DockPanel();
-        var picker = new DatePicker { SelectedDate = reminderDate, Width = 134 };
-        System.Windows.Automation.AutomationProperties.SetName(picker, "Reminder date");
+        var picker = Field("Reminder date", 24);
+        picker.Text = reminderDate.ToString("d");
+        picker.ToolTip = "Enter a date in your local format";
+        picker.Width = 134;
         actions.Children.Add(picker);
         var add = ActionButton("Add", () =>
         {
             if (string.IsNullOrWhiteSpace(input.Text))
                 return;
-            reminderDate = picker.SelectedDate ?? DateTime.Today;
+            if (!DateTime.TryParse(picker.Text, out var chosen))
+            {
+                picker.Focus();
+                ShowOwnedMessage("Enter a valid reminder date.");
+                return;
+            }
+            reminderDate = chosen.Date;
             reminders.Add(new Reminder(input.Text.Trim(), reminderDate));
             WriteJson("reminders.json", reminders);
             ShowPage(DashboardPage.Calendar);
@@ -203,7 +219,8 @@ public partial class DashboardWindow
             focusEnds = saved.Ends > DateTimeOffset.Now ? saved.Ends : null;
         }
         focusTicker.Tick += (_, _) => CheckFocusTimer();
-        focusTicker.Start();
+        if (focusEnds.HasValue)
+            focusTicker.Start();
         Closed += (_, _) => focusTicker.Stop();
     }
 
@@ -218,7 +235,14 @@ public partial class DashboardWindow
             UpdateDashboard();
     }
 
-    private void PersistFocus() => WriteJson("focus.json", new FocusState(focusMinutes, focusEnds));
+    private void PersistFocus()
+    {
+        if (focusEnds.HasValue)
+            focusTicker.Start();
+        else
+            focusTicker.Stop();
+        WriteJson("focus.json", new FocusState(focusMinutes, focusEnds));
+    }
 
     private static string DataPath(string file) => Path.Combine(Environment.GetFolderPath(
         Environment.SpecialFolder.LocalApplicationData), "WindowsDock", "Dashboard", file);

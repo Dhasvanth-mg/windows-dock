@@ -111,6 +111,9 @@ internal static partial class AgentSessions
         }
     }
 
+    private static readonly Dictionary<string, (long Length, DateTime Modified, AgentSession Session)> CodexRolloutCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private static void ReadCodex(Dictionary<(AgentProvider, string), AgentSession> sessions)
     {
         var titles = new Dictionary<string, AgentSession>(StringComparer.Ordinal);
@@ -134,7 +137,10 @@ internal static partial class AgentSessions
         foreach (var (id, session) in titles.OrderByDescending(pair => pair.Value.Updated).Take(24))
             sessions[(AgentProvider.Codex, id)] = session;
 
-        foreach (var file in Files(Path.Combine(CodexHome, "sessions"), "rollout-*.jsonl", true, 12))
+        var files = Files(Path.Combine(CodexHome, "sessions"), "rollout-*.jsonl", true, 12).ToArray();
+        foreach (var stale in CodexRolloutCache.Keys.Except(files, StringComparer.OrdinalIgnoreCase).ToArray())
+            CodexRolloutCache.Remove(stale);
+        foreach (var file in files)
         {
             TryRead(() =>
             {
@@ -146,11 +152,18 @@ internal static partial class AgentSessions
                 var key = (AgentProvider.Codex, id);
                 if (!Guid.TryParse(id, out _) || !sessions.TryGetValue(key, out var session))
                     return;
+                var info = new FileInfo(file);
+                var length = info.Length;
+                var modified = info.LastWriteTimeUtc;
+                if (CodexRolloutCache.TryGetValue(file, out var cached) && cached.Length == length && cached.Modified == modified)
+                {
+                    sessions[key] = cached.Session with { Title = session.Title };
+                    return;
+                }
 
-                AgentSession? latest = null;
-                string? model = null;
-                string? effort = null;
-                string? cwd = null;
+                AgentSession? latest = cached.Session is { State: not AgentState.Recent } previous ? previous : null;
+                string? model = null, effort = null, cwd = null;
+                var gotStatus = false;
                 foreach (var line in Tail(file, 768_000).Reverse())
                 {
                     if (model == null && line.Contains("\"turn_context\"", StringComparison.Ordinal))
@@ -167,13 +180,15 @@ internal static partial class AgentSessions
                             }
                         });
                     }
-                    if (latest != null && model != null)
+                    if (gotStatus && model != null)
                         break;
-                    if (latest != null)
+                    if (gotStatus)
                         continue;
                     if (!line.Contains("\"event_msg\"", StringComparison.Ordinal) ||
                         !line.Contains("\"task_", StringComparison.Ordinal) &&
                         !line.Contains("\"turn_aborted\"", StringComparison.Ordinal) &&
+                        !line.Contains("\"turn_completed\"", StringComparison.Ordinal) &&
+                        !line.Contains("\"turn_started\"", StringComparison.Ordinal) &&
                         !line.Contains("\"usage_limit_reached\"", StringComparison.Ordinal))
                         continue;
                     TryRead(() =>
@@ -185,13 +200,17 @@ internal static partial class AgentSessions
                             return;
                         var state = String(payload, "type") switch
                         {
-                            "task_started" => AgentState.Working,
-                            "task_complete" => AgentState.Finished,
+                            "task_started" or "turn_started" => AgentState.Working,
+                            "task_complete" or "turn_completed" when IsCodexQuotaError(Property(payload, "error")) => AgentState.QuotaReached,
+                            "task_complete" or "turn_completed" when Property(payload, "error").ValueKind == JsonValueKind.Object => AgentState.Failed,
+                            "task_complete" or "turn_completed" => AgentState.Finished,
                             "turn_aborted" => AgentState.Interrupted,
                             "error" when IsCodexQuotaError(payload) => AgentState.QuotaReached,
                             _ => AgentState.Recent
                         };
                         if (state != AgentState.Recent)
+                        {
+                            gotStatus = true;
                             latest = session with
                             {
                                 State = state, Updated = at,
@@ -200,16 +219,22 @@ internal static partial class AgentSessions
                                     AgentState.Working => "Turn in progress",
                                     AgentState.Finished => "Reply ready",
                                     AgentState.QuotaReached => "Usage limit reached",
+                                    AgentState.Failed => "Turn failed",
                                     _ => "Turn stopped"
                                 }
                             };
+                        }
                     });
                 }
+                model ??= cached.Session?.Model;
+                effort ??= cached.Session?.Effort;
+                cwd ??= cached.Session?.ProjectPath;
                 sessions[key] = (latest ?? session) with
                 {
-                    Model = model, Effort = effort,
+                    Title = session.Title, Model = model, Effort = effort,
                     Project = cwd == null ? session.Project : ProjectName(cwd), ProjectPath = cwd
                 };
+                CodexRolloutCache[file] = (length, modified, sessions[key]);
             });
         }
     }
@@ -245,6 +270,8 @@ internal static partial class AgentSessions
             "Notification" when String(item, "notification_type") == "permission_prompt" => (AgentState.Attention, "Approval requested"),
             "PreToolUse" or "PostToolUse" or "PostToolUseFailure" => (AgentState.Working, ToolLabel(String(item, "tool_name"))),
             "Stop" => (AgentState.Finished, "Turn ended"),
+            "StopFailure" when (String(item, "error") ?? String(item, "error_type")) is "rate_limit" or "usage_limit" =>
+                (AgentState.QuotaReached, "Usage limit reached"),
             "StopFailure" => (AgentState.Failed, "Turn failed"),
             "Interrupt" => (AgentState.Interrupted, "Turn interrupted"),
             "SessionEnd" => (AgentState.Recent, "Session closed"),

@@ -12,11 +12,30 @@ The dashboard includes media sessions and volume, Windows settings shortcuts, a 
 
 ## Coding chats
 
-Open the dashboard and select **Coding chats** to see local Claude Code and Codex activity. The initial view reads local desktop metadata and Codex turn events. It never needs a terminal session or an API key. It can miss chats whose data is only available in the cloud.
+Hover over a square in the 2×2 grid beside the tray to see the chat and its status. Click the grid to open **Coding chats**. The panel brings an approval or recent reply to the front and keeps the chat list below it. **Assign slot** pins a chat, follows the latest matching chat in a project, or restores automatic selection. The grid reads local desktop metadata and turn events, so cloud-only chats may be missing.
 
 Under **Connections and defaults**, enable the provider hooks for live updates. Turn on **Allow or deny individual requests here** before enabling the hooks if you want the dock to handle one-time tool approvals. Codex requires you to review the new hooks in **Settings → Hooks**. Start or resume a Claude Code session for the new settings to take effect. Each supported request shows its tool, working directory, and arguments. After 30 seconds the dock yields to the provider's own approval flow. The dock stores status metadata locally and removes the approval payload when the request ends.
 
 **Save defaults** updates the provider's user configuration and creates a backup. These are defaults for new sessions when the provider loads its settings. Existing chats can have their own model and thinking overrides. Use **Remove dock hooks** to remove this integration from a provider.
+
+**Summarize reply** previews the selected chat's latest completed local reply. Choose Gemini or Groq, enter an API key, and click **Summarize** to send the editable text to that provider. You can also set `GEMINI_API_KEY` or `GROQ_API_KEY` in your Windows environment. Keys entered in the popup stay in memory for the current dock session. Paste a reply when a transcript is unavailable.
+
+**Usage** shows the selected chat's recorded token counts, Codex account usage and quota reset times, and Claude Desktop's last cached plan percentages. The Claude usage page opens from the panel for reset times that aren't in its local cache.
+
+## Widgets
+
+Open the dashboard with the larger grid button, then choose **Widgets** on the right. Press **Ctrl+K** while the dashboard is open to search installed desktop shortcuts, workspaces, and dock actions.
+
+- **Audio switchboard** changes the active output device and offers per-app volume and output routing. Some apps apply a new route when they reopen their audio stream.
+- **Meetings** reads a local `.ics` export and offers Join and Copy link for supported meeting providers.
+- **Clipboard and files** shows Windows clipboard history when it is enabled. Pin text, images, or files and drag them into other apps.
+- **GitHub checks** reads your PRs and review requests through the signed-in GitHub CLI. Enter a repository as `owner/repo`.
+- **Workspace shortcuts** group a folder, websites, and local app shortcuts into a single action.
+- **Downloads** shows recent files and partial browser downloads from the Downloads folder, alongside Windows background transfers. Browser progress is limited to what the partial files expose.
+- **Focus timer** runs locally. **Windows Focus** opens the system controls for a focus session with Do Not Disturb.
+- **Notifications** reads recent Windows alerts when access is allowed. Select alerts and review the draft before sending it to Gemini or Groq.
+
+In **Weather**, choose **Use my location** for automatic forecasts, or search for a city. The automatic option requests Windows location access and sends rounded coordinates to Open-Meteo when refreshing the forecast.
 
 ## Build the native dock
 

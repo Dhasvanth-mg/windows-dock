@@ -158,7 +158,11 @@
             </Grid.RowDefinitions>
             <Grid x:Name="DashboardHeader" Margin="1,0,1,4">
                 <StackPanel x:Name="PrimaryTabs" Orientation="Horizontal" VerticalAlignment="Center"/>
-                <TextBlock x:Name="HeaderClock" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <StackPanel x:Name="HeaderClock" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock x:Name="HeaderTime" FontSize="12" FontWeight="SemiBold"/>
+                    <Border Width="3" Height="3" CornerRadius="2" Background="#788492" Margin="8,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="HeaderDate" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                </StackPanel>
                 <StackPanel x:Name="SecondaryTabs" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"/>
             </Grid>
             <ContentControl Grid.Row="1" x:Name="PageHost" HorizontalContentAlignment="Stretch"/>

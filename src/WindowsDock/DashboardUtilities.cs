@@ -51,6 +51,8 @@ public partial class DashboardWindow
                 open.MaxWidth = 185;
                 open.Margin = new Thickness(0, 0, 5, 5);
                 open.ToolTip = path;
+                EnableDrag(open, () => File.Exists(path) || Directory.Exists(path)
+                    ? new DataObject(DataFormats.FileDrop, new[] { path }) : null);
                 var menu = new ContextMenu();
                 var remove = new MenuItem { Header = "Remove from shelf" };
                 remove.Click += (_, _) =>
@@ -226,8 +228,22 @@ public partial class DashboardWindow
         var summary = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var battery = System.Windows.Forms.SystemInformation.PowerStatus;
         var hasBattery = !battery.BatteryChargeStatus.HasFlag(System.Windows.Forms.BatteryChargeStatus.NoSystemBattery);
-        summary.Children.Add(Text(hasBattery ? "Battery" : "Power", 11, subdued, true));
-        summary.Children.Add(Text(hasBattery ? $"{battery.BatteryLifePercent:P0}" : "Plugged in", 28, strong: true));
+        var charge = Math.Clamp(battery.BatteryLifePercent, 0, 1);
+        var charging = battery.PowerLineStatus == System.Windows.Forms.PowerLineStatus.Online;
+        var chargeBrush = !charging && charge < .2 ? amber : green;
+        var badge = new Grid { Width = 38, Height = 18, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 7) };
+        badge.Children.Add(new Border { CornerRadius = new CornerRadius(5), BorderBrush = subdued,
+            BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 3, 0) });
+        badge.Children.Add(new Border { CornerRadius = new CornerRadius(1), Background = subdued, Width = 2, Height = 7,
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center });
+        if (hasBattery)
+        {
+            badge.Children.Add(new Border { Width = Math.Max(2, 29 * charge), CornerRadius = new CornerRadius(2), Background = chargeBrush,
+                Margin = new Thickness(3, 3, 0, 3), HorizontalAlignment = HorizontalAlignment.Left });
+            summary.Children.Add(badge);
+        }
+        summary.Children.Add(Text(hasBattery ? charging ? "Connected to power" : "On battery" : "Desktop power", 11, subdued, true));
+        summary.Children.Add(Text(hasBattery ? $"{charge:P0}" : "Plugged in", 28, strong: true));
         var uptime = TimeSpan.FromMilliseconds(Environment.TickCount64);
         summary.Children.Add(Text($"Uptime  {uptime.Days}d {uptime.Hours}h {uptime.Minutes}m", 11, muted));
         Put(row, Card(summary), 0);

@@ -85,6 +85,7 @@ public partial class DashboardWindow
         if (loadingWeather || weatherError != null)
         {
             status.Margin = new Thickness(0, 0, 0, 6);
+            status.TextWrapping = TextWrapping.Wrap;
             layout.Children.Add(status);
         }
         if (weatherLocationDenied)
@@ -168,7 +169,7 @@ public partial class DashboardWindow
             if (city != selected)
             {
                 city = selected;
-                WriteJson("weather-city.json", city);
+                WriteJson("weather-city.json", selected.Automatic ? selected with { Latitude = 0, Longitude = 0 } : selected);
             }
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
@@ -187,9 +188,17 @@ public partial class DashboardWindow
             return;
         loadingWeather = true;
         weatherUpdated = DateTimeOffset.UtcNow;
-        await SetCityAsync(city);
+        if (city.Automatic)
+        {
+            if (await DetectWeatherCityAsync() is { } current)
+                await SetCityAsync(current);
+            else if (weather == null)
+                weatherError = "Current location is unavailable. Search for a city or try location again.";
+        }
+        else
+            await SetCityAsync(city);
         loadingWeather = false;
-        if (!closed && IsVisible && currentPage is DashboardPage.Weather or DashboardPage.Home)
+        if (!closed && IsVisible && (currentPage is DashboardPage.Weather or DashboardPage.Home))
             ShowPage(currentPage);
     }
 
@@ -201,37 +210,44 @@ public partial class DashboardWindow
         weatherError = null;
         weatherLocationDenied = false;
         cityMatches = [];
+        var wasModal = modalOpen;
         ShowPage(DashboardPage.Weather);
         try
         {
             modalOpen = true;
-            var access = await Geolocator.RequestAccessAsync().AsTask(lifetime.Token);
-            modalOpen = false;
-            if (access != GeolocationAccessStatus.Allowed)
-            {
-                weatherLocationDenied = true;
-                weatherError = "Location is unavailable. Enable location for desktop apps or search for a city.";
-                return;
-            }
-            var locator = new Geolocator { DesiredAccuracyInMeters = 5000 };
-            var position = await locator.GetGeopositionAsync(TimeSpan.FromMinutes(15), TimeSpan.FromSeconds(10)).AsTask(lifetime.Token);
-            var coordinates = position.Coordinate.Point.Position;
-            await SetCityAsync(new City("Current location", null, null,
-                Math.Round(coordinates.Latitude, 2), Math.Round(coordinates.Longitude, 2)));
-        }
-        catch (OperationCanceledException) when (closed) { }
-        catch (Exception error) when (error is UnauthorizedAccessException or System.Runtime.InteropServices.COMException
-            or TimeoutException or OperationCanceledException)
-        {
-            weatherLocationDenied = error is UnauthorizedAccessException;
-            weatherError = "Windows could not locate this device. Search for a city to get the forecast.";
+            if (await DetectWeatherCityAsync() is { } current)
+                await SetCityAsync(current);
+            else
+                weatherError = "Windows could not locate this device. Check location access or search for a city.";
         }
         finally
         {
-            modalOpen = false;
+            modalOpen = wasModal;
             loadingWeather = false;
             if (!closed && currentPage == DashboardPage.Weather && IsVisible)
                 ShowPage(DashboardPage.Weather);
+        }
+    }
+
+    private async Task<City?> DetectWeatherCityAsync()
+    {
+        try
+        {
+            var access = await Geolocator.RequestAccessAsync().AsTask(lifetime.Token);
+            weatherLocationDenied = access == GeolocationAccessStatus.Denied;
+            if (access != GeolocationAccessStatus.Allowed)
+                return null;
+            var locator = new Geolocator { DesiredAccuracyInMeters = 5000 };
+            var position = await locator.GetGeopositionAsync(TimeSpan.FromMinutes(15), TimeSpan.FromSeconds(10)).AsTask(lifetime.Token);
+            var coordinates = position.Coordinate.Point.Position;
+            return new City("Current location", null, null, Math.Round(coordinates.Latitude, 2),
+                Math.Round(coordinates.Longitude, 2), Automatic: true);
+        }
+        catch (Exception error) when (error is UnauthorizedAccessException or System.Runtime.InteropServices.COMException or
+            TimeoutException or OperationCanceledException or InvalidOperationException)
+        {
+            weatherLocationDenied = error is UnauthorizedAccessException;
+            return null;
         }
     }
 
@@ -247,7 +263,7 @@ public partial class DashboardWindow
         >= 71 and <= 77 or 85 or 86 => "Snow", >= 95 => "Storm", _ => "Rain"
     };
 
-    private sealed record City(string Name, string? Region, string? Country, double Latitude, double Longitude)
+    private sealed record City(string Name, string? Region, string? Country, double Latitude, double Longitude, bool Automatic = false)
     {
         public string Label => string.Join(", ", new[] { Name, Region, Country }.Where(part => !string.IsNullOrWhiteSpace(part)));
     }

@@ -167,63 +167,82 @@
 
 ## Active chat controls and reply summaries
 
-- Status: In progress.
+- Status: Summary popup built and smoke-tested. Active desktop chat model changes remain open.
 - Scope: Investigate per-chat model and thinking controls and add a dock popup for summarizing recent assistant replies.
 - Acceptance criteria: Verify any supported active-chat controls, and keep summary requests explicit and scoped to the selected chat.
-- Remaining work: Implement and test reply loading, summarization, and the in-dock display. Verify which live chat controls the installed clients expose.
+- Outcome: The popup reads the selected chat's latest completed local reply or accepts pasted text. It previews the editable input, supports Gemini and Groq, and links back to the chat. Summary requests require an explicit click.
+- Verification: Windows popup and transcript fixtures passed for both providers. Gemini and Groq response fixtures passed.
+- Remaining work: Live summarization needs a provider key. The installed Codex desktop server uses private stdio, and its separately launched account server cannot control those turns. Its generated protocol exposes model and effort updates when connected to the host of a loaded chat. Claude Desktop applies per-session changes through its own picker. Existing desktop turns still require the provider's controls.
 
 ## Coding chat token usage and resets
 
-- Status: In progress.
+- Status: Built and verified with live Codex account data and local Claude metadata.
 - Scope: Add token usage and provider rate-limit reset times to the Coding chats dashboard.
 - Acceptance criteria: Show reported counts and reset times where available, label their scope and freshness, and verify behavior when a provider does not report them.
-- Remaining work: Identify what Codex and Claude Code expose to the dock, then implement and verify the display.
+- Outcome: Added the Usage panel with Codex account totals, quota percentages and reset countdowns, selected-chat token counts, and Claude Desktop's cached percentages. Claude transcript counts include input and cache usage where present.
+- Verification: The signed-in Codex app server returned two quota windows with reset timestamps. Fixtures verified current Codex token records, deduplicated Claude input counts, and missing fields.
+- Remaining work: Exact Claude reset times require the linked Claude usage page on this setup. Claude's local assistant records only expose placeholder output counts.
 
 ## Coucou-inspired coding agents
 
-- Status: In progress.
+- Status: Built. Native attachment and panel routing verified.
 - Scope: Review Coucou and redesign the Coding chats interaction around animated status, hover details, and slide-up actions.
 - Acceptance criteria: Recognizable states for working, approval required, finished, and quota reached. A mouse or keyboard user can reach chat actions, reply summaries, and usage without leaving the dock.
-- Remaining work: Verify the reference, implement the dock interaction and state visuals, and test on Windows.
+- Outcome: Coucou's compact status, hover, and click patterns informed four original status tiles. Working, approval, reply, and usage-limit states have distinct symbols, colors, and animation timing. Reduced-motion settings are respected.
+- Verification: The Explorer module attached, and the native event opened the centered slide-up panel. The four slots populated with local chats. Physical hover and animation capture were unavailable in the verification session.
 
 ### Minimal dock interface
 
-- Status: In progress.
+- Status: Built and smoke-tested.
 - Scope: Bring the new coding-agent experience into the existing native dock, drawing on Coucou's compact interaction and Hitodama's restrained styling.
 - Acceptance criteria: A small 2×2 grid on the native taskbar displays up to four chat states. Hover identifies the chat and its current status. Click opens the chat's actions in a compact panel from the dock.
-- Remaining work: Build and connect the native grid, then verify the live states, hover, clicks, and layout on Windows.
+- Outcome: The 2×2 grid occupies the existing taskbar surface beside the dashboard button. Clicking routes to a 506-pixel chat panel on the tested display. The dashboard page initializes on first open.
 
 ### Dock and tray refinement
 
-- Status: In progress.
+- Status: Built and smoke-tested on Windows 11 25H2.
 - Scope: Refine the dock surface, tray, date, clock, and calendar presentation while keeping Windows controls usable and background work small.
 - Acceptance criteria: Shared spacing and styling across the native dock and flyouts, with the clock and tray controls still using Windows interactions. Keep refresh and animation work scoped to what is visible or changing.
-- Remaining work: Build and test the native and managed layout together.
+- Outcome: Refined the glass rim, tray and clock treatment, calendar, and battery readout. The native tray can display a compact charge glyph inside the existing Quick Settings control when the expected battery element is present.
+- Verification: Both components built and the native controller attached to Explorer. The controller used about 3 MB private memory and the hidden dashboard about 55 MB before first open on the tested machine.
+- Remaining work: Native battery glyph and hover visuals could not be captured in this desktop session. Other screen sizes and Windows builds remain unverified.
 
 ### Grid previews, navigation, and assignments
 
-- Status: In progress.
+- Status: Built. Panel routing smoke-tested.
 - Scope: Show a quick preview when hovering over a tile. Open an all-chat menu from the grid, surface pending approvals and fresh replies, and provide a direct open action and saved chat or project assignments.
 - Acceptance criteria: Hover shows the tile's chat and status, click keeps all chats accessible and highlights an urgent or recently finished chat, and slot assignments survive a restart.
-- Remaining work: Implement the preview and routing, saved assignments, and Windows verification.
+- Outcome: Each tile exposes a hover preview. The slide-up list prioritizes a pending approval or recent reply, includes a direct chat action, and can save a chat or project assignment per slot.
+- Verification: The slot assignment, reply summary, and usage windows opened. The main and compact dashboard views reopened through the native event. A fixture confirmed that pinned chat and project slots retain their assigned positions.
+- Remaining work: Physical hover, deep-link handling in each provider, and persistence after a user changes a slot on the installed build remain to be checked.
 
 ### Automatic weather location and styled controls
 
-- Status: In progress.
+- Status: Built. Forecast service verified with sample coordinates and city search.
 - Scope: Add weather location detection and make the dashboard's controls visually consistent with the native dock.
 - Acceptance criteria: Weather can use the Windows location permission flow with city search still available. Custom inputs, selectors, buttons, and scrolling remain readable and usable by keyboard.
-- Remaining work: Implement the location flow and control styles, then verify both paths and the resulting Windows layout.
+- Outcome: Weather can request a Windows location fix, round the coordinates, and refresh when the dashboard is open. City search remains available. Dashboard buttons, selectors, scrollbars, checkboxes, fields, and menus use shared dark styles.
+- Remaining work: Windows location permission and a live device fix require an interactive check.
 
 ### Widget ideas
 
 - Status: Shortlist delivered. The owner selected all eight and asked for more ideas.
 - Scope: Suggest additional widgets that fit the dock.
 - Acceptance criteria: Provide a short list of useful, distinct widgets with the action each would make easier.
-- Outcome: Shared audio switching, a meeting card, a clipboard and file shelf, PR and build checks, workspace shortcuts, a download queue, a focus switch, and a command palette. The request is for ideas to review before choosing features to build.
+- Outcome: Shared the initial eight choices, then suggested mic/camera activity, saved window layouts, network status, a capture shelf, battery details, and a branch/worktree picker for a later selection.
 
 ### Selected widgets and notification summaries
 
-- Status: In progress.
+- Status: Built and smoke-tested. Account and device limitations remain.
 - Scope: Add the audio switchboard, meeting card, clipboard and file shelf, GitHub checks and reviews, workspace shortcuts, download queue, focus controls, command palette, and notification summaries. Suggest more widgets separately.
 - Acceptance criteria: Every enabled widget has a usable dock entry, operates on real local or connected data, and identifies any Windows or service limitations. Notification text leaves the device only when the user sends it for summarization.
-- Remaining work: Complete the dock and coding-agent build, extend the existing widgets, add the new widgets, and test the supported Windows and account flows.
+- Outcome: The Widgets launcher and Ctrl+K palette provide entry to the switchboard, meetings, clipboard and files, GitHub checks, workspace shortcuts, downloads, focus, and notifications. The digest reuses the editable Gemini/Groq summary popup.
+- Verification: Nine WPF panels opened and laid out. Recurring calendar import and meeting links passed with a fixture. Audio endpoints enumerated and an isolated process successfully changed and cleared its app route. Windows allowed clipboard and notification reads. The signed-in GitHub CLI returned this repository's current empty PR and review lists.
+- Remaining work: Verify a physical output switch between devices, notification summaries with a real API key, and actual review and transfer rows. Meetings currently use a local calendar export. Browser transfer details come from partial files, and system Do Not Disturb is controlled through Windows Focus.
+
+### Continue implementation and verification
+
+- Status: Native build published locally and restarted. Scoped limitations are recorded above.
+- Scope: Complete the queued native dock, coding chat, weather, and widget work, then publish a tested Windows build.
+- Acceptance criteria: Build and launch the native dock, smoke-test new UI flows, record remaining provider constraints, and push the commits.
+- Outcome: Release C++ and .NET builds passed. The final native controller and dashboard loaded, and repeated native signals switched between the compact chat list and full dashboard.

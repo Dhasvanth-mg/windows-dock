@@ -33,11 +33,12 @@ public partial class DashboardWindow : Window
     private bool closed;
     private bool positioning;
     private bool compactAgents;
+    private bool pageInitialized;
     private long lastReveal;
 
     public DashboardWindow() : this(0, null) { }
 
-    internal DashboardWindow(int controllerPid, string? initialPage)
+    internal DashboardWindow(int controllerPid, string? initialPage, bool deferPage = false)
     {
         InitializeComponent();
         this.controllerPid = controllerPid;
@@ -55,6 +56,7 @@ public partial class DashboardWindow : Window
         AddTab(SecondaryTabs, DashboardPage.Wallpapers, 0xE91B, "Wallpapers");
         AddTab(SecondaryTabs, DashboardPage.Power, 0xE7E8, "Power");
         AddTab(SecondaryTabs, DashboardPage.Settings, 0xE713, "Dashboard settings");
+        SecondaryTabs.Children.Add(IconButton(0xECAA, "Widgets", ShowWidgets));
         SecondaryTabs.Children.Add(IconButton(0xE711, "Close dashboard", Dismiss));
 
         Shell.RenderTransform = revealOffset;
@@ -87,12 +89,19 @@ public partial class DashboardWindow : Window
         DpiChanged += (_, _) => Dispatcher.BeginInvoke(() => { ConfigureWidth(); PositionAtTaskbar(); });
         PreviewKeyDown += (_, e) =>
         {
+            if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                e.Handled = true;
+                ShowCommandPalette();
+                return;
+            }
             if (e.Key == Key.Escape && !e.Handled)
             {
                 e.Handled = true;
                 Dismiss();
             }
         };
+        PreviewMouseDown += (_, _) => agentPanel?.Close();
         Deactivated += (_, _) => Dispatcher.BeginInvoke(() =>
         {
             if (!closed && IsVisible && !IsActive && !modalOpen && Mouse.Captured == null &&
@@ -107,6 +116,8 @@ public partial class DashboardWindow : Window
             lifetime.Cancel();
             lifetime.Dispose();
             agentGrid?.Dispose();
+            foreach (var key in summaryKeys)
+                key?.Dispose();
         };
         ticker.Tick += (_, _) => UpdateDashboard();
         if (agentGrid != null)
@@ -118,12 +129,14 @@ public partial class DashboardWindow : Window
         InitializeFocus();
         var page = Enum.TryParse<DashboardPage>(initialPage, true, out var initial) && Enum.IsDefined(initial)
             ? initial : DashboardPage.Home;
-        ShowPage(page);
         LoadSavedWeather();
+        if (!deferPage)
+            ShowPage(page);
     }
 
     private void Dismiss()
     {
+        agentPanel?.Close();
         if (controllerPid > 0)
             Hide();
         else
@@ -139,6 +152,7 @@ public partial class DashboardWindow : Window
 
     private void ShowPage(DashboardPage page)
     {
+        pageInitialized = true;
         currentPage = page;
         updatePage = null;
         foreach (var (key, button) in tabs)
@@ -163,13 +177,14 @@ public partial class DashboardWindow : Window
         };
 
         UpdateDashboard();
-        if (IsVisible && currentPage is DashboardPage.Weather or DashboardPage.Home)
+        if (IsVisible && (currentPage is DashboardPage.Weather or DashboardPage.Home))
             _ = RefreshSavedWeatherAsync();
     }
     private void UpdateDashboard()
     {
         var now = DateTime.Now;
-        HeaderClock.Text = now.ToString("t") + "   " + now.ToString("dddd, MMMM d");
+        HeaderTime.Text = now.ToString("t");
+        HeaderDate.Text = now.ToString("ddd, MMM d");
         var pending = AgentApprovals.Read();
         pendingApprovals = pending;
         RefreshVisibleUsage();
@@ -202,7 +217,7 @@ public partial class DashboardWindow : Window
             var width = ActualWidth * dpi.DpiScaleX;
             var height = ActualHeight * dpi.DpiScaleY;
             var x = screen.Bounds.Left + (screen.Bounds.Width - width) / 2;
-            var bottom = compactAgents ? screen.Bounds.Bottom - 51 * dpi.DpiScaleY : screen.Bounds.Bottom - 5 * dpi.DpiScaleY;
+            var bottom = screen.Bounds.Bottom - 51 * dpi.DpiScaleY;
             MoveWindowWithoutActivation(source.Handle, (int)x, (int)Math.Max(screen.Bounds.Top, bottom - height));
         }
         finally { positioning = false; }
@@ -210,7 +225,8 @@ public partial class DashboardWindow : Window
 
     internal void OpenMainDashboard()
     {
-        if (!compactAgents)
+        agentPanel?.Close();
+        if (!compactAgents && pageInitialized)
             return;
         compactAgents = false;
         ConfigureWidth();
@@ -249,9 +265,9 @@ public partial class DashboardWindow : Window
         grid.Children.Add(element);
     }
 
-    private Button ActionButton(string label, Action action) => MakeButton(label, label, action);
+    private Button ActionButton(string label, Action? action = null) => MakeButton(label, label, action);
 
-    private Button IconButton(int icon, string label, Action action)
+    private Button IconButton(int icon, string label, Action? action = null)
     {
         var glyph = new TextBlock
         {
@@ -268,11 +284,12 @@ public partial class DashboardWindow : Window
         return button;
     }
 
-    private Button MakeButton(object content, string name, Action action)
+    private Button MakeButton(object content, string name, Action? action)
     {
         var button = new Button { Content = content, Style = (Style)FindResource("Chip"), ToolTip = name };
         AutomationProperties.SetName(button, name);
-        button.Click += (_, _) => action();
+        if (action != null)
+            button.Click += (_, _) => action();
         return button;
     }
 

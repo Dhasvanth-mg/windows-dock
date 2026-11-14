@@ -43,7 +43,7 @@ internal static class AgentUsage
         if (Count(root, "version") != 2 || samples.ValueKind != JsonValueKind.Array)
             return null;
         var latest = samples.EnumerateArray().Where(sample => Count(sample, "t") <= now.AddMinutes(2).ToUnixTimeMilliseconds())
-            .MaxBy(sample => Count(sample, "t"));
+            .DefaultIfEmpty().MaxBy(sample => Count(sample, "t"));
         if (Count(latest, "t") is not { } stamp)
             return null;
         var usage = Property(latest, "u");
@@ -85,12 +85,16 @@ internal static class AgentUsage
                         !DateTimeOffset.TryParse(String(doc.RootElement, "timestamp"), out var at))
                         continue;
                     var id = String(bucket, "limit_id") ?? "codex";
-                    if (!buckets.Add(id))
+                    if (buckets.Contains(id))
                         continue;
                     var count = windows.Count;
                     AddCodexBucket(windows, bucket, id, local: true);
-                    if (windows.Count > count && at > seen)
-                        seen = at;
+                    if (windows.Count > count)
+                    {
+                        buckets.Add(id);
+                        if (at > seen)
+                            seen = at;
+                    }
                 }
                 if (windows.Count > 0)
                     break;

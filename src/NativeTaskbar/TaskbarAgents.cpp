@@ -86,7 +86,7 @@ void TaskbarStyle::AddAgentGrid()
         button.RequestedTheme(xaml::ElementTheme::Dark);
         controls::TextBlock face;
         face.FontFamily(xaml::Media::FontFamily(L"Segoe UI Variable Text"));
-        face.FontSize(9);
+        face.FontSize(10);
         face.IsHitTestVisible(false);
         face.VerticalAlignment(xaml::VerticalAlignment::Center);
         button.Content(face);
@@ -115,7 +115,7 @@ void TaskbarStyle::AddAgentGrid()
     agentTimer.Interval(std::chrono::milliseconds(750));
     agentTick = agentTimer.Tick([this](auto&&, auto&&)
     {
-        try { RefreshAgentGrid(); } catch (...) {}
+        try { RefreshAgentGrid(); RefreshBattery(); } catch (...) {}
     });
     agentTimer.Start();
 }
@@ -172,10 +172,11 @@ void TaskbarStyle::RefreshAgentGrid()
         {
             motion::Storyboard storyboard;
             motion::DoubleAnimation pulse;
-            pulse.From(tile.state == Finished ? 0.36 : 0.47);
+            pulse.From(tile.state == Finished ? 0.42 : tile.state == QuotaReached ? 0.62 : 0.48);
             pulse.To(1.0);
-            pulse.Duration(xaml::Duration{std::chrono::milliseconds(tile.state == Finished ? 300 : 800),
-                xaml::DurationType::TimeSpan});
+            const auto duration = tile.state == Finished ? 300 : tile.state == Approval ? 470 :
+                tile.state == QuotaReached ? 1050 : 760;
+            pulse.Duration(xaml::Duration{std::chrono::milliseconds(duration), xaml::DurationType::TimeSpan});
             pulse.AutoReverse(tile.state != Finished);
             if (tile.state != Finished)
                 pulse.RepeatBehavior({0, {}, motion::RepeatBehaviorType::Forever});

@@ -50,6 +50,7 @@ private:
     void AddAgentGrid();
     void RefreshAgentGrid();
     void StyleTray(xaml::FrameworkElement const& tray);
+    void RefreshBattery();
 
     controls::Grid root;
     HANDLE dashboard;
@@ -63,6 +64,12 @@ private:
     controls::Border divider{nullptr};
     controls::Button dashboardButton{nullptr};
     controls::Grid dockControls{nullptr};
+    controls::Border batteryFill{nullptr};
+    controls::TextBlock batteryBolt{nullptr};
+    controls::Grid batteryBadge{nullptr};
+    DWORD batteryRefreshed{};
+    BYTE batteryLevel{255};
+    BYTE batteryFlags{255};
     controls::Button agentButtons[4]{nullptr, nullptr, nullptr, nullptr};
     controls::TextBlock agentFaces[4]{nullptr, nullptr, nullptr, nullptr};
     xaml::Media::Animation::Storyboard agentAnimations[4]{nullptr, nullptr, nullptr, nullptr};

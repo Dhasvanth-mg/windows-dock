@@ -37,8 +37,9 @@ public partial class App : Application
                 }
                 ShutdownMode = ShutdownMode.OnExplicitShutdown;
             }
-            MainWindow = new DashboardWindow(controller, initialPage);
-            if (e.Args.Length < 3 || e.Args[2] != "--hidden")
+            var hidden = e.Args.Length == 3 && e.Args[2] == "--hidden";
+            MainWindow = new DashboardWindow(controller, initialPage, hidden);
+            if (!hidden)
                 ShowDashboard(false);
             return;
 

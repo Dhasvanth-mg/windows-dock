@@ -164,13 +164,15 @@ public partial class DashboardWindow
 
     internal void OpenAgentGrid()
     {
+        agentPanel?.Close();
         compactAgents = true;
         agentSetup = false;
         showAgentList = true;
         agentFilter = null;
         var selection = agentGrid?.ReadSelection() ?? (-1, (AgentProvider?)null, "");
         agentSlot = selection.Item1;
-        var ranked = RankedSessions(pendingApprovals);
+        pendingApprovals = AgentApprovals.Read();
+        var ranked = RankedSessions(pendingApprovals.Where(request => !sentApprovals.Contains(request.Id)).ToArray());
         var urgent = ranked.FirstOrDefault(session => session.State == AgentState.Attention);
         var clicked = ranked.FirstOrDefault(session => session.Provider == selection.Item2 && session.Id == selection.Item3);
         var finished = ranked.FirstOrDefault(session => session.State == AgentState.Finished &&
@@ -280,6 +282,8 @@ public partial class DashboardWindow
         var actions = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
         AddAction(approval == null ? "Summarize reply" : "Last reply", () => ShowReplySummary(session));
         AddAction("Open chat", () => OpenAgent(session));
+        if (session.State == AgentState.QuotaReached)
+            AddAction("Token usage", ShowAgentUsage);
         AddAction("Assign slot", () => ShowAgentAssignments(session));
         panel.Children.Add(actions);
         return Card(panel);

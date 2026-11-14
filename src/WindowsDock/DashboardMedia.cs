@@ -2,6 +2,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -44,7 +45,7 @@ public partial class DashboardWindow
         forecast.Children.Add(Text("Weather", 11, muted, true));
         var temperature = Text(weather == null ? "—" : $"{weather.Temperature:0}°", 27, strong: true);
         forecast.Children.Add(temperature);
-        var weatherLink = ActionButton(weather?.City ?? "Choose city", () => ShowPage(DashboardPage.Weather));
+        var weatherLink = ActionButton(weather?.City ?? "Weather options", () => ShowPage(DashboardPage.Weather));
         weatherLink.Padding = new Thickness(6, 3, 6, 3);
         weatherLink.HorizontalAlignment = HorizontalAlignment.Left;
         forecast.Children.Add(weatherLink);
@@ -322,56 +323,177 @@ public partial class DashboardWindow
         var external = IconButton(0xE8A7, "Open Windows volume mixer", () => OpenTarget("ms-settings:apps-volume"));
         DockPanel.SetDock(external, Dock.Right);
         top.Children.Add(external);
-        top.Children.Add(Text("Volume mixer", 13, strong: true));
+        var refresh = IconButton(0xE72C, "Refresh audio devices and apps");
+        DockPanel.SetDock(refresh, Dock.Right);
+        top.Children.Add(refresh);
+        top.Children.Add(Text("Audio switchboard", 13, strong: true));
         body.Children.Add(top);
-        body.Children.Add(OutputSlider());
+        var outputs = new ComboBox { Margin = new Thickness(0, 0, 0, 6), DisplayMemberPath = nameof(AudioOutput.Name) };
+        AutomationProperties.SetName(outputs, "Audio output");
+        var status = Text("", 11, subdued);
+        status.TextWrapping = TextWrapping.Wrap;
+        var system = new DockPanel();
+        var mute = ActionButton("Mute output");
+        mute.Margin = new Thickness(6, 0, 0, 0);
+        DockPanel.SetDock(mute, Dock.Right);
+        system.Children.Add(mute);
+        var volume = new ContentControl { VerticalAlignment = VerticalAlignment.Center, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        system.Children.Add(volume);
+        body.Children.Add(outputs);
+        body.Children.Add(system);
+        body.Children.Add(status);
         var sessions = new StackPanel();
-        body.Children.Add(new ScrollViewer { Content = sessions, MaxHeight = 110, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        try
+        body.Children.Add(new ScrollViewer { Content = sessions, MaxHeight = 154, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Margin = new Thickness(0, 6, 0, 0) });
+        AudioOutput[] devices = [];
+        var populating = false;
+        refresh.Click += (_, _) => Reload();
+        mute.Click += (_, _) =>
         {
-            AudioDevice(device =>
+            try
             {
-                var active = device.AudioSessionManager.Sessions;
-                for (var index = 0; index < active.Count; index++)
+                AudioDevice(device =>
                 {
-                    using var session = active[index];
-                    if (session.State == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateExpired)
-                        continue;
-                    var id = session.GetSessionInstanceIdentifier;
-                    var name = session.IsSystemSoundsSession ? "System sounds" : AudioSessionName(session);
-                    var row = Columns(1, 1.2);
-                    row.Margin = new Thickness(0, 3, 0, 0);
-                    Put(row, Text(name, 11, subdued), 0);
-                    var level = Range(name + " volume", 100, session.SimpleAudioVolume.Volume * 100);
-                    level.ValueChanged += (_, e) =>
-                    {
-                        try
-                        {
-                            AudioDevice(current =>
-                            {
-                                var candidates = current.AudioSessionManager.Sessions;
-                                for (var i = 0; i < candidates.Count; i++)
-                                {
-                                    using var candidate = candidates[i];
-                                    if (candidate.GetSessionInstanceIdentifier != id)
-                                        continue;
-                                    candidate.SimpleAudioVolume.Volume = (float)(e.NewValue / 100);
-                                    break;
-                                }
-                            });
-                        }
-                        catch (COMException) { level.IsEnabled = false; }
-                    };
-                    Put(row, level, 1);
-                    sessions.Children.Add(row);
-                }
-            });
-        }
-        catch (COMException) { }
-        if (sessions.Children.Count == 0)
-            sessions.Children.Add(Text("No app audio sessions", 11, muted));
+                    using var endpoint = device.AudioEndpointVolume;
+                    endpoint.Mute = !endpoint.Mute;
+                });
+                Reload();
+            }
+            catch (COMException) { status.Text = "The output is unavailable."; }
+        };
+        outputs.SelectionChanged += (_, _) =>
+        {
+            if (populating || outputs.SelectedItem is not AudioOutput selection)
+                return;
+            try
+            {
+                AudioRouting.SetDefault(selection.Id);
+                Reload();
+            }
+            catch (Exception error) when (error is COMException or InvalidCastException or UnauthorizedAccessException)
+            {
+                Reload();
+                status.Text = "Windows could not switch the output.";
+            }
+        };
+        Reload();
         return Card(body);
+
+        void Reload()
+        {
+            populating = true;
+            sessions.Children.Clear();
+            status.Text = "";
+            volume.Content = OutputSlider();
+            try
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                var list = new List<AudioOutput>();
+                foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
+                {
+                    using (device)
+                        list.Add(new(device.ID, device.FriendlyName));
+                }
+                devices = list.ToArray();
+                outputs.ItemsSource = devices;
+                using var current = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                outputs.SelectedItem = devices.FirstOrDefault(item => item.Id == current.ID);
+                using var endpoint = current.AudioEndpointVolume;
+                mute.Content = endpoint.Mute ? "Unmute output" : "Mute output";
+                AutomationProperties.SetName(mute, (string)mute.Content);
+                foreach (var output in devices)
+                {
+                    using var device = enumerator.GetDevice(output.Id);
+                    var active = device.AudioSessionManager.Sessions;
+                    for (var index = 0; index < active.Count && sessions.Children.Count < 24; index++)
+                    {
+                        using var session = active[index];
+                        if (session.State != NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateExpired)
+                            AddSession(output, session);
+                    }
+                }
+            }
+            catch (COMException) { status.Text = "No active audio output."; }
+            finally { populating = false; }
+            outputs.IsEnabled = mute.IsEnabled = devices.Length > 0;
+            if (sessions.Children.Count == 0)
+                sessions.Children.Add(Text("No app audio sessions", 11, muted));
+        }
+
+        void AddSession(AudioOutput output, AudioSessionControl session)
+        {
+            var id = session.GetSessionInstanceIdentifier;
+            var pid = session.GetProcessID;
+            var name = session.IsSystemSoundsSession ? "System sounds" : AudioSessionName(session);
+            var row = Columns(1.05, 1, 0.85);
+            row.Margin = new Thickness(0, 3, 0, 0);
+            var label = Text(name, 11, subdued);
+            label.VerticalAlignment = VerticalAlignment.Center;
+            label.ToolTip = output.Name;
+            Put(row, label, 0);
+            var level = Range(name + " volume", 100, session.SimpleAudioVolume.Volume * 100);
+            level.ValueChanged += (_, e) =>
+            {
+                try
+                {
+                    using var enumerator = new MMDeviceEnumerator();
+                    using var device = enumerator.GetDevice(output.Id);
+                    var candidates = device.AudioSessionManager.Sessions;
+                    for (var index = 0; index < candidates.Count; index++)
+                    {
+                        using var candidate = candidates[index];
+                        if (candidate.GetSessionInstanceIdentifier != id)
+                            continue;
+                        candidate.SimpleAudioVolume.Volume = (float)(e.NewValue / 100);
+                        break;
+                    }
+                }
+                catch (COMException) { level.IsEnabled = false; }
+            };
+            Put(row, level, 1);
+            if (pid != 0 && !session.IsSystemSoundsSession)
+            {
+                var automatic = new AudioOutput("", "System default");
+                var choice = new ComboBox
+                {
+                    ItemsSource = new[] { automatic }.Concat(devices).ToArray(),
+                    DisplayMemberPath = nameof(AudioOutput.Name), MinWidth = 75,
+                    ToolTip = "Route " + name + " to an output"
+                };
+                AutomationProperties.SetName(choice, name + " output");
+                AudioOutput? selected = null;
+                try
+                {
+                    var route = AudioRouting.AppRoute(pid);
+                    selected = route == null ? automatic : devices.FirstOrDefault(device => device.Id == route);
+                }
+                catch (Exception error) when (error is COMException or UnauthorizedAccessException)
+                {
+                    choice.IsEnabled = false;
+                    choice.ToolTip = "Per-app routing is unavailable on this build.";
+                }
+                choice.SelectedItem = selected ?? devices.FirstOrDefault(device => device.Id == output.Id);
+                choice.SelectionChanged += (_, _) =>
+                {
+                    if (choice.SelectedItem is not AudioOutput target)
+                        return;
+                    try
+                    {
+                        AudioRouting.RouteApp(pid, string.IsNullOrEmpty(target.Id) ? null : target.Id);
+                        status.Text = $"{name} routed to {target.Name}.";
+                    }
+                    catch (Exception error) when (error is COMException or InvalidCastException or UnauthorizedAccessException)
+                    {
+                        status.Text = "Windows could not route this app.";
+                    }
+                };
+                Put(row, choice, 2);
+            }
+            sessions.Children.Add(row);
+        }
     }
+
+    private sealed record AudioOutput(string Id, string Name);
 
     private static string AudioSessionName(AudioSessionControl session)
     {

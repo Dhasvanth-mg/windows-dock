@@ -8,9 +8,11 @@
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <UseWindowsForms>true</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Ical.Net" Version="5.2.4" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="Tomlyn" Version="0.19.0" />
   </ItemGroup>

@@ -212,6 +212,88 @@ void TaskbarStyle::StyleTray(FrameworkElement const& tray)
         Set(date, controls::TextBlock::FontSizeProperty(), 10.0);
         Set(date, controls::TextBlock::ForegroundProperty(), Solid(255, 185, 191, 205));
     }
+    for (const auto name : {L"ControlCenterButton", L"NotificationCenterButton", L"ChevronIconView"})
+    {
+        if (const auto button = Find(tray, name).try_as<controls::Control>())
+            Set(button, controls::Control::CornerRadiusProperty(), xaml::CornerRadius{8, 8, 8, 8});
+    }
+    const auto controlCenter = Find(tray, L"ControlCenterButton");
+    if (!controlCenter)
+        return;
+    const auto findBattery = [&](auto&& self, xaml::DependencyObject const& item) -> FrameworkElement
+    {
+        if (winrt::get_class_name(item) == L"SystemTray.BatteryIconContent")
+            return item.try_as<FrameworkElement>();
+        const auto count = media::VisualTreeHelper::GetChildrenCount(item);
+        for (int index = 0; index < count; ++index)
+            if (auto result = self(self, media::VisualTreeHelper::GetChild(item, index)))
+                return result;
+        return nullptr;
+    };
+    const auto battery = findBattery(findBattery, controlCenter);
+    SYSTEM_POWER_STATUS power{};
+    if (!battery || !GetSystemPowerStatus(&power) || power.BatteryLifePercent > 100)
+        return;
+    const auto parent = media::VisualTreeHelper::GetParent(battery).try_as<controls::Grid>();
+    if (!parent)
+        return;
+    batteryBadge = controls::Grid();
+    batteryBadge.Name(L"WindowsDockBattery");
+    batteryBadge.Width(17);
+    batteryBadge.Height(9);
+    batteryBadge.IsHitTestVisible(false);
+    batteryBadge.HorizontalAlignment(xaml::HorizontalAlignment::Center);
+    batteryBadge.VerticalAlignment(xaml::VerticalAlignment::Center);
+    controls::Border outline;
+    outline.BorderBrush(Solid(230, 235, 241, 250));
+    outline.BorderThickness({1, 1, 1, 1});
+    outline.CornerRadius({2.5, 2.5, 2.5, 2.5});
+    outline.Margin({0, 0, 2, 0});
+    batteryBadge.Children().Append(outline);
+    controls::Border cap;
+    cap.Width(1.5);
+    cap.Height(4);
+    cap.HorizontalAlignment(xaml::HorizontalAlignment::Right);
+    cap.VerticalAlignment(xaml::VerticalAlignment::Center);
+    cap.Background(Solid(225, 235, 241, 250));
+    batteryBadge.Children().Append(cap);
+    batteryFill = controls::Border();
+    batteryFill.Margin({2, 2, 0, 2});
+    batteryFill.HorizontalAlignment(xaml::HorizontalAlignment::Left);
+    batteryFill.CornerRadius({1, 1, 1, 1});
+    batteryBadge.Children().Append(batteryFill);
+    batteryBolt = controls::TextBlock();
+    batteryBolt.Text(L"\u26A1");
+    batteryBolt.FontSize(7);
+    batteryBolt.HorizontalAlignment(xaml::HorizontalAlignment::Center);
+    batteryBolt.VerticalAlignment(xaml::VerticalAlignment::Center);
+    batteryBadge.Children().Append(batteryBolt);
+    controls::Grid::SetRow(batteryBadge, controls::Grid::GetRow(battery));
+    controls::Grid::SetColumn(batteryBadge, controls::Grid::GetColumn(battery));
+    parent.Children().Append(batteryBadge);
+    Set(battery, xaml::UIElement::OpacityProperty(), 0.0);
+    RefreshBattery();
+}
+
+void TaskbarStyle::RefreshBattery()
+{
+    if (!batteryBadge)
+        return;
+    const auto tick = GetTickCount();
+    if (batteryRefreshed != 0 && tick - batteryRefreshed < 15000)
+        return;
+    batteryRefreshed = tick;
+    SYSTEM_POWER_STATUS power{};
+    if (!GetSystemPowerStatus(&power) || power.BatteryLifePercent > 100 ||
+        (power.BatteryLifePercent == batteryLevel && power.BatteryFlag == batteryFlags))
+        return;
+    batteryLevel = power.BatteryLifePercent;
+    batteryFlags = power.BatteryFlag;
+    const auto charging = (batteryFlags & 8) != 0;
+    batteryFill.Width(11.0 * batteryLevel / 100);
+    batteryFill.Background(charging ? Solid(255, 115, 227, 174) : batteryLevel <= 20
+        ? Solid(255, 251, 180, 101) : Solid(240, 221, 232, 245));
+    batteryBolt.Visibility(charging ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
 }
 
 void TaskbarStyle::FitApps()
@@ -279,6 +361,15 @@ void TaskbarStyle::Restore() noexcept
             uint32_t position = 0;
             if (item && children.IndexOf(item, position))
                 children.RemoveAt(position);
+        }
+        if (batteryBadge)
+        {
+            if (const auto parent = media::VisualTreeHelper::GetParent(batteryBadge).try_as<Grid>())
+            {
+                uint32_t position = 0;
+                if (parent.Children().IndexOf(batteryBadge, position))
+                    parent.Children().RemoveAt(position);
+            }
         }
     }
     catch (...) {}

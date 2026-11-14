@@ -80,7 +80,8 @@ internal static partial class AgentSessions
             cancellation.ThrowIfCancellationRequested();
             var line = lines[index];
             if (!line.Contains("\"final_answer\"", StringComparison.Ordinal) &&
-                !line.Contains("\"task_complete\"", StringComparison.Ordinal))
+                !line.Contains("\"task_complete\"", StringComparison.Ordinal) &&
+                !line.Contains("\"turn_completed\"", StringComparison.Ordinal))
                 continue;
             using var doc = ParseTranscriptRecord(line);
             if (doc == null)
@@ -94,7 +95,7 @@ internal static partial class AgentSessions
                 if (ClipReply(VisibleText(payload, "output_text")) is { } reply)
                     return reply;
             }
-            if (type == "event_msg" && String(payload, "type") == "task_complete" &&
+            if (type == "event_msg" && (String(payload, "type") is "task_complete" or "turn_completed") &&
                 ClipReply(String(payload, "last_agent_message")) is { } completed)
                 return completed;
         }
@@ -137,15 +138,19 @@ internal static partial class AgentSessions
         {
             cancellation.ThrowIfCancellationRequested();
             var line = lines[index];
-            if (!line.Contains("\"token_count\"", StringComparison.Ordinal))
+            if (!line.Contains("\"token_count\"", StringComparison.Ordinal) &&
+                !line.Contains("\"token_usage_record\"", StringComparison.Ordinal))
                 continue;
             using var doc = ParseTranscriptRecord(line);
-            if (doc == null || String(doc.RootElement, "type") != "event_msg")
+            if (doc == null)
                 continue;
             var payload = Property(doc.RootElement, "payload");
-            if (String(payload, "type") != "token_count")
-                continue;
-            var usage = Property(Property(payload, "info"), "total_token_usage");
+            var usage = String(doc.RootElement, "type") switch
+            {
+                "token_usage_record" => Property(payload, "thread_token_usage"),
+                "event_msg" when String(payload, "type") == "token_count" => Property(Property(payload, "info"), "total_token_usage"),
+                _ => default
+            };
             if (Count(usage, "total_tokens") is not { } total)
                 continue;
             return new(Count(usage, "input_tokens") ?? 0, Count(usage, "cached_input_tokens") ?? 0,

@@ -10,7 +10,10 @@ internal sealed record AgentSlot(AgentProvider Provider, string? ChatId, string?
 {
     internal bool Matches(AgentSession session) => Provider == session.Provider &&
         (ChatId != null ? string.Equals(ChatId, session.DesktopId ?? session.Id, StringComparison.OrdinalIgnoreCase)
-            : string.Equals(ProjectPath, session.ProjectPath, StringComparison.OrdinalIgnoreCase));
+            : ProjectPath != null && session.ProjectPath != null &&
+              string.Equals(Normalize(ProjectPath), Normalize(session.ProjectPath), StringComparison.OrdinalIgnoreCase));
+
+    private static string Normalize(string path) => path.Replace('/', '\\').TrimEnd('\\');
 }
 
 internal sealed record AgentGridTile(AgentSession? Session, string Title, string Step);
