@@ -1,12 +1,14 @@
 # Windows Dock
 
-Windows Dock styles Explorer's taskbar in place on Windows 11 x64 25H2 (build 26200). It centers the native app list, tray, and clock on one frosted glass surface. The Windows Dock button opens Widgets and the adjoining 2×2 grid shows live coding chat states. Native app switching, jump lists, window previews, Start, notifications, and Quick Settings remain Explorer features.
+Windows Dock styles Explorer's taskbar in place on Windows 11 x64 25H2 (build 26200). It centers the native app list, tray, and clock on one frosted glass surface. The Windows Dock button opens Dashboard and the adjoining 2×2 grid shows live coding chat states. Native app switching, jump lists, window previews, Start, notifications, and Quick Settings remain Explorer features.
 
 ## Run the native dock
 
-Keep the contents of the native publish directory together and run NativeTaskbar.exe. Click or pull up on the silver-and-amber Windows Dock icon to open Widgets. Click the icon again to close Widgets. Use the Windows Dock notification-area menu, the dashboard's Settings page, or `--restore <controller PID>` to restore the normal appearance.
+Keep the contents of the native publish directory together and run NativeTaskbar.exe. Click or pull up on the silver-and-amber Windows Dock icon to open Dashboard. Click the icon again to close Dashboard. Use the Windows Dock notification-area menu, the dashboard's Settings page, or `--restore <controller PID>` to restore the normal appearance.
 
-At the bottom of Widgets, Coding chats, and Assistants, click a section or drag the handle sideways to switch. A horizontal scroll over that handle also switches sections. Drag down to close the panel. On a tool or conversation with a Back button, drag the handle right to go back. The full Dashboard opens from Widgets.
+Swipe sideways with two fingers over Dashboard to switch one tab at a time. Scroll up with two fingers to open Widgets. If the content under the pointer can scroll up, finish scrolling to the top and start a fresh upward gesture. Choose **Dashboard** in Widgets to return to your selected tab.
+
+At the bottom of Widgets, Coding chats, and Assistants, click a section or drag the handle sideways to switch. A horizontal scroll over that handle also switches sections. Drag down to close the panel. On a tool or conversation with a Back button, drag the handle right to go back.
 
 Use one taskbar appearance module at a time. The native controller exits if it cannot find the expected taskbar layout. Panels open just above the taskbar. Windows Dock holds auto-hide off while a panel is open and restores the previous setting when the panel closes. If Explorer restarts, run the controller again.
 
@@ -16,7 +18,7 @@ The dashboard includes media sessions and volume, Windows settings shortcuts, a 
 
 ## Use with Hitodama
 
-With Windows Dock's native styling stopped, run `NativeTaskbar.exe --tray` to keep the dashboard and coding chats available while Hitodama styles the taskbar. For a normal Windows taskbar pin in this mode, create a shortcut to `WindowsDock.exe --open` and pin it through Windows. That command opens Widgets and starts the companion controller if needed. **Ctrl+Alt+D** opens Coding chats in either mode.
+With Windows Dock's native styling stopped, run `NativeTaskbar.exe --tray` to keep the dashboard and coding chats available while Hitodama styles the taskbar. For a normal Windows taskbar pin in this mode, create a shortcut to `WindowsDock.exe --open` and pin it through Windows. That command opens Dashboard and starts the companion controller if needed. **Ctrl+Alt+D** opens Coding chats in either mode.
 
 In either mode, **Ctrl+Alt+A** or **Open assistant** in the tray menu opens the 2×2 assistant picker. Use **1–4** to open a character, or search for their name with **Ctrl+K**. On battery, the controller sends Windows notifications at 25%, 20%, 15%, 10%, and 5%. Reconnecting power resets the alert sequence.
 

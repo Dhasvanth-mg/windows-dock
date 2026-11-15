@@ -77,7 +77,12 @@ public partial class DashboardWindow : Window
 
         Shell.RenderTransform = revealOffset;
         ConfigureWidth();
-        SourceInitialized += (_, _) => ConfigureWidth();
+        SourceInitialized += (_, _) =>
+        {
+            ConfigureWidth();
+            if (PresentationSource.FromVisual(this) is HwndSource source)
+                source.AddHook(HandleDashboardWheel);
+        };
         Loaded += (_, _) =>
         {
             PositionAtTaskbar();
@@ -188,25 +193,22 @@ public partial class DashboardWindow : Window
             Show();
     }
 
-    internal void ToggleDockLauncher()
+    internal void ToggleDockDashboard()
     {
-        if (agentPanel is { Title: "Widgets", IsVisible: true })
+        if (DashboardReceivesGestures)
         {
             Dismiss();
             return;
         }
-        OpenDockLauncher();
+        ShowDockDashboard();
     }
 
-    internal void OpenDockLauncher()
+    internal void ShowDockDashboard()
     {
-        if (agentPanel is { Title: "Widgets", IsVisible: true } launcher)
-        {
-            launcher.Activate();
-            return;
-        }
-        ShowDockPanelHost();
-        ShowWidgets();
+        OpenMainDashboard();
+        if (!IsVisible)
+            Show();
+        Activate();
     }
 
     private void SetDashboardSurface(bool visible)
@@ -236,6 +238,8 @@ public partial class DashboardWindow : Window
             PageScroll.ScrollToTop();
         pageInitialized = true;
         currentPage = page;
+        if (!compactAgents)
+            lastDashboardPage = page;
         updatePage = null;
         homeFavorites = null;
         foreach (var (key, button) in tabs)
@@ -325,7 +329,7 @@ public partial class DashboardWindow : Window
             return;
         compactAgents = false;
         ConfigureWidth();
-        ShowPage(DashboardPage.Home);
+        ShowPage(lastDashboardPage);
     }
 
     private static Forms.Screen TaskbarScreen()
@@ -398,6 +402,7 @@ public partial class DashboardWindow : Window
     private Button WidgetLauncherButton()
     {
         var button = AccentButton("Widgets", 0xECAA, purple, ShowWidgets);
+        button.ToolTip = "Open Widgets or scroll up at the top of Dashboard";
         button.Padding = new Thickness(8, 4, 8, 4);
         button.Margin = new Thickness(3, 0, 3, 0);
         return button;

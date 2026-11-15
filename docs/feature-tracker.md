@@ -420,3 +420,12 @@
 - Outcome: The native taskbar icon accepts an upward pull to open Widgets. Widgets, Coding chats, and Assistants share a bottom section switcher. The handle accepts mouse and touch swipes and horizontal wheel input for section changes. Dragging down dismisses the panel. In panels with a Back button, dragging right follows the same route. Section changes use a directional transition and respect the Windows animation preference.
 - Verification: Release, x64 publish, Windows smoke, and screenshot review passed. The gesture fixture checked axis thresholds, small and diagonal rejection, horizontal wheel routing and accumulation on the handle, clicks between sections, and all twelve launcher routes. The native module loaded in Explorer and the installed launcher started from its open command.
 - Remaining work: Live pointer and hardware touch tests could not be completed. Computer Use received access denied from GetCursorPos and the available capture showed the display idle screen. Verify an upward pull on the Explorer button and physical touch and touchpad input on an unlocked desktop.
+
+##### Dashboard-first trackpad navigation
+
+- Status: Built, verified with Windows wheel messages, and running in native mode.
+- Scope: Make Dashboard the dock's default entry. An upward scroll opens Widgets, and a sideways swipe moves between Dashboard tabs.
+- Acceptance criteria: Taskbar activation opens Dashboard, trackpad gestures work across its surface, and a single swipe moves only one tab. Scrollable content can still scroll to its top, and coming back from Widgets preserves the selected tab.
+- Outcome: The taskbar launcher and `--open` open Dashboard. A fresh upward scroll over its header or content opens Widgets when the content under the pointer has reached the top. Horizontal navigation follows the visible tab order and consumes the momentum of each gesture. Returning from Widgets or compact coding chats restores the last Dashboard tab.
+- Verification: Native Release, x64 publish, and Windows smoke checks passed. The fixture tested partial wheel deltas, momentum, tab boundaries, nested scrolling, and tab preservation. The installed build opened Dashboard, switched to Audio with a horizontal wheel message, opened Widgets with an upward wheel message, and returned to Audio from the Explorer taskbar button. Explorer was restarted after the old shell session refused to reload the native integration.
+- Remaining work: Physical touchpad input was not exercised. Windows wheel messages verified the input routing.

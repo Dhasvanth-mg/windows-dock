@@ -108,7 +108,7 @@ void DockTray::Explain() const
     if (hasHotkey)
         std::fputws(L"Press Ctrl+Alt+D to open coding chats.\n", stdout);
     if (!trayMode)
-        std::fputws(L"Click the Windows Dock button on the taskbar to open widgets.\n", stdout);
+        std::fputws(L"Click the Windows Dock button on the taskbar to open Dashboard.\n", stdout);
     if (hasAssistantHotkey)
         std::fputws(L"Press Ctrl+Alt+A to open the assistant.\n", stdout);
 }
@@ -183,7 +183,7 @@ void DockTray::ShowMenu()
         return;
     AppendMenuW(menu, MF_STRING, ChatsCommand, L"Coding chats");
     AppendMenuW(menu, MF_STRING, AssistantCommand, L"Open assistant");
-    AppendMenuW(menu, MF_STRING, DashboardCommand, L"Dashboard and widgets");
+    AppendMenuW(menu, MF_STRING, DashboardCommand, L"Dashboard");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, ExitCommand, trayMode ? L"Exit Windows Dock" : L"Restore Windows taskbar");
     POINT anchor{};

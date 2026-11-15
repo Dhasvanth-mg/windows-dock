@@ -179,7 +179,7 @@ void TaskbarStyle::AddDashboardButton()
     dashboardButton.VerticalAlignment(xaml::VerticalAlignment::Center);
     dashboardButton.RequestedTheme(xaml::ElementTheme::Dark);
     xaml::Automation::AutomationProperties::SetName(dashboardButton, L"Open Windows Dock");
-    xaml::Automation::AutomationProperties::SetHelpText(dashboardButton, L"Click or pull up to show Widgets");
+    xaml::Automation::AutomationProperties::SetHelpText(dashboardButton, L"Click or pull up to show Dashboard");
     SetDashboardIcon();
     dashboardButton.Click([event = dashboard](auto&&, auto&&) { SetEvent(event); });
     if (launcherEvent)

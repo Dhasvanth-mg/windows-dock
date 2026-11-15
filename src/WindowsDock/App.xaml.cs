@@ -20,10 +20,10 @@ public partial class App : Application
             if (controller > 0)
             {
                 dashboardSession = NativeDashboardSession.Connect(controller,
-                    () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.ToggleDockLauncher()),
+                    () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.ToggleDockDashboard()),
                     () => Dispatcher.BeginInvoke(() => ShowDashboard(true)),
                     () => Dispatcher.BeginInvoke(() => ShowAssistant()),
-                    () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.OpenDockLauncher()),
+                    () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.ShowDockDashboard()),
                     () => Dispatcher.InvokeAsync(() => Shutdown()));
                 if (dashboardSession == null)
                 {

@@ -12,10 +12,93 @@ public partial class DashboardWindow
 {
     private enum DockSection { Widgets, Chats, Assistants }
     private enum DockSwipe { None, Left, Right, Down }
+    private static readonly DashboardPage[] dashboardTabOrder = Enum.GetValues<DashboardPage>();
+    private readonly TranslateTransform dashboardPageSlide = new();
+    private DashboardPage lastDashboardPage = DashboardPage.Home;
+    private long dashboardWheelAt;
+    private int dashboardWheelTravel;
+    private bool dashboardWheelIsHorizontal;
+    private bool dashboardWheelFinished;
     private int nextDockSlide;
     private int wheelTravel;
     private long lastWheel;
     private long wheelLockedUntil;
+
+    private bool DashboardReceivesGestures =>
+        IsVisible && IsHitTestVisible && !compactAgents && !modalOpen && agentPanel == null;
+
+    private nint HandleDashboardWheel(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
+    {
+        const int verticalWheel = 0x020A;
+        const int horizontalWheel = 0x020E;
+        if (message is not (verticalWheel or horizontalWheel) || !DashboardReceivesGestures ||
+            Mouse.Captured != null || (wParam.ToInt64() & 0xFFFF) != 0 ||
+            Keyboard.Modifiers != ModifierKeys.None || OpenComboBox(Keyboard.FocusedElement) != null)
+            return 0;
+
+        var coordinates = lParam.ToInt64();
+        var point = PointFromScreen(new Point((short)(coordinates & 0xFFFF), (short)(coordinates >> 16)));
+        if (InputHitTest(point) is not DependencyObject target || OpenComboBox(target) != null)
+            return 0;
+
+        var delta = (short)(wParam.ToInt64() >> 16);
+        var horizontal = message == horizontalWheel;
+        var now = Environment.TickCount64;
+        if (now - dashboardWheelAt > 220)
+        {
+            dashboardWheelTravel = 0;
+            dashboardWheelFinished = false;
+        }
+        dashboardWheelAt = now;
+
+        if (!horizontal && (delta <= 0 || CanScrollUp(target)))
+        {
+            // A scroll through content should finish there, even if its inertia reaches the top.
+            dashboardWheelFinished = true;
+            return 0;
+        }
+
+        handled = true;
+        if (dashboardWheelFinished)
+            return 0;
+        if (dashboardWheelIsHorizontal != horizontal || Math.Sign(dashboardWheelTravel) != Math.Sign(delta))
+            dashboardWheelTravel = 0;
+        dashboardWheelIsHorizontal = horizontal;
+        dashboardWheelTravel += delta;
+        if (Math.Abs(dashboardWheelTravel) < 120)
+            return 0;
+
+        dashboardWheelFinished = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!DashboardReceivesGestures)
+                return;
+            if (!horizontal)
+            {
+                ShowWidgets();
+                return;
+            }
+
+            var direction = Math.Sign(delta);
+            var index = Array.IndexOf(dashboardTabOrder, currentPage) + direction;
+            if (index < 0 || index >= dashboardTabOrder.Length)
+                return;
+            ShowPage(dashboardTabOrder[index]);
+            dashboardWheelAt = Environment.TickCount64;
+            PageHost.RenderTransform = dashboardPageSlide;
+            SlideDockSurface(dashboardPageSlide, direction, 0);
+        });
+        return 0;
+    }
+
+    private static bool CanScrollUp(DependencyObject target)
+    {
+        for (var element = target; element != null;
+            element = element is Visual visual ? VisualTreeHelper.GetParent(visual) : LogicalTreeHelper.GetParent(element))
+            if (element is ScrollViewer { VerticalOffset: > 0, VerticalScrollBarVisibility: not ScrollBarVisibility.Disabled })
+                return true;
+        return false;
+    }
 
     private FrameworkElement DockNavigation(Window window, DockSection selected)
     {
