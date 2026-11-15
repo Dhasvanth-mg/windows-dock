@@ -114,3 +114,5 @@ Keep the complete publish directory together. Run with `--safe-mode` to load def
 The companion Studio edits dividers and custom shortcuts for the companion bar. Native mode uses Windows app pins and the dashboard's Workspace shortcuts.
 
 See the [architecture and feasibility matrix](docs/ARCHITECTURE.md) and [roadmap](ROADMAP.md) for the remaining product milestones.
+
+Use the [engineering handoff](docs/engineering-handoff.md) and [review and redesign prompt](docs/review-redesign-prompt.md) to brief a new contributor on the current implementation.

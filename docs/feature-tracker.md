@@ -1,5 +1,15 @@
 # Feature tracker
 
+## Code review and UI redesign handoff
+
+- Status: Complete.
+- Scope: Document the current Windows Dock functions and implementation for a new agent performing a code review and UI redesign.
+- Acceptance criteria: Provide a source-linked handoff that covers entry points, features, architecture, limitations, and verification. Provide a separate prompt ready to paste into a fresh agent chat, with review and redesign deliverables and user preferences.
+- Implementation: Added the engineering handoff and paste-ready review and redesign prompt, and linked both from the README. The handoff inventories all eleven Dashboard tabs, all twelve widgets, the native and tray entry points, Coding chats, persona providers and jobs, and the persistence and permission boundaries.
+- Verification: Audited the source and the recorded `7ceca1b` smoke and installed checks. Rebuilt managed and native Release targets, produced a self-contained x64 staging publish, and verified the internal document links and table structure.
+- Limitations: This work documents prior live results and open hardware, account, and compatibility checks. The new agent performs the review and redesign.
+- Remaining work: None for the handoff.
+
 ## Repository initialization
 
 - Status: Complete.
