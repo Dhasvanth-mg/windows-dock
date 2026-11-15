@@ -17,25 +17,36 @@ public partial class DashboardWindow
     private void ShowAssistantJobs()
     {
         var (window, content, cancellation) = CreateDockPanel("Assistant jobs", "", 500, 0xE823, AssistantInk, widget: true);
-        BuildPinnedJobs(window, content, cancellation);
+        BuildPinnedJobs(content, cancellation);
         window.Show();
     }
 
-    private void BuildPinnedJobs(Window window, StackPanel content, CancellationToken cancellation)
+    private void BuildPinnedJobs(StackPanel content, CancellationToken cancellation) =>
+        BuildJobsPanel(content, cancellation, ComposeCodingJob, ShowJobDetails, () => OpenAssistantConversation(3));
+
+    private void BuildJobsPanel(StackPanel content, CancellationToken cancellation, Action createJob,
+        Action<Guid> openJob, Action? askOrbit = null)
     {
         var tools = new WrapPanel { Margin = new Thickness(0, 0, 0, 7) };
-        var code = ActionButton("New coding job", ComposeCodingJob);
+        var code = ActionButton("New coding job", createJob);
         code.Margin = new Thickness(0, 0, 5, 0);
         tools.Children.Add(code);
-        var orbit = ActionButton("Ask Orbit", () => OpenAssistantConversation(3));
-        orbit.Margin = new Thickness(0, 0, 5, 0);
-        tools.Children.Add(orbit);
+        if (askOrbit != null)
+        {
+            var orbit = ActionButton("Ask Orbit", askOrbit);
+            orbit.Margin = new Thickness(0, 0, 5, 0);
+            tools.Children.Add(orbit);
+        }
         tools.Children.Add(IconButton(0xE72C, "Refresh jobs", () => updateJobsPanel?.Invoke()));
         content.Children.Add(tools);
         var rows = new StackPanel();
         content.Children.Add(rows);
         updateJobsPanel = Render;
-        cancellation.Register(() => updateJobsPanel = null);
+        cancellation.Register(() =>
+        {
+            if (updateJobsPanel == Render)
+                updateJobsPanel = null;
+        });
         Render();
 
         void Render()
@@ -50,7 +61,7 @@ public partial class DashboardWindow
                 if (label.Length > 50)
                     label = label[..49] + "…";
                 var row = WidgetTile(new(label, $"{job.Specialist} · {state}", "", 0xE823, AssistantSecondary,
-                    () => ShowJobDetails(job.Id)));
+                    () => openJob(job.Id)));
                 row.Margin = new Thickness(0, 0, 0, 4);
                 rows.Children.Add(row);
             }
@@ -63,6 +74,12 @@ public partial class DashboardWindow
     {
         var (window, content, _) = CreateDockPanel("New coding job", "Bolt", 472, 0xE943, AssistantInk,
             backAction: ShowAssistantJobs, backLabel: "Back to jobs");
+        BuildCodingJobForm(window, content, ShowAssistantJobs);
+        window.Show();
+    }
+
+    private void BuildCodingJobForm(Window owner, StackPanel content, Action started)
+    {
         var task = Field("Coding task", AssistantMessageLimit);
         task.Tag = "Describe what Bolt should change";
         task.AcceptsReturn = true;
@@ -79,7 +96,7 @@ public partial class DashboardWindow
         var choices = new WrapPanel();
         var choose = ActionButton("Choose project…", () =>
         {
-            var folder = PickCodingWorkspace(window);
+            var folder = PickCodingWorkspace(owner);
             if (folder != null)
             {
                 directory = folder;
@@ -98,13 +115,12 @@ public partial class DashboardWindow
             try
             {
                 QueueAssistantJob(new("coding", task.Text.Trim()), directory, null);
-                ShowAssistantJobs();
+                started();
             }
             catch (Exception error) when (DockActions.IsActionError(error)) { status.Text = error.Message; }
         }));
         content.Children.Add(choices);
         content.Children.Add(status);
-        window.Show();
     }
 
     private string? PickCodingWorkspace(Window parent)
@@ -183,6 +199,13 @@ public partial class DashboardWindow
             return;
         var (window, content, token) = CreateDockPanel("Job details", job.Specialist, 506, 0xE823, AssistantInk,
             backAction: ShowAssistantJobs, backLabel: "Back to jobs");
+        BuildJobDetails(window, content, job, token, () => ShowJobDetails(id));
+        window.Show();
+    }
+
+    private void BuildJobDetails(Window owner, StackPanel content, DockJob job, CancellationToken token, Action refresh)
+    {
+        var id = job.Id;
         var task = Text(job.Task, 12, AssistantSecondary);
         task.TextWrapping = TextWrapping.Wrap;
         content.Children.Add(new ScrollViewer { Content = task, MaxHeight = 116, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
@@ -215,8 +238,13 @@ public partial class DashboardWindow
             });
             cancel.IsEnabled = !running.IsCancellationRequested;
             actions.Children.Add(cancel);
-            updateJobsPanel = () => { if (!runningJobs.ContainsKey(id)) ShowJobDetails(id); };
-            token.Register(() => updateJobsPanel = null);
+            Action update = () => { if (!runningJobs.ContainsKey(id)) refresh(); };
+            updateJobsPanel = update;
+            token.Register(() =>
+            {
+                if (updateJobsPanel == update)
+                    updateJobsPanel = null;
+            });
         }
         if (job.Result.Length > 0)
         {
@@ -228,7 +256,7 @@ public partial class DashboardWindow
             actions.Children.Add(ActionButton("Save as Markdown…", () =>
             {
                 var dialog = new SaveFileDialog { Filter = "Markdown|*.md", FileName = $"dock-{job.Role}.md" };
-                if (dialog.ShowDialog(window) != true)
+                if (dialog.ShowDialog(owner) != true)
                     return;
                 try { File.WriteAllText(dialog.FileName, job.Result); status.Text = "Saved."; }
                 catch (Exception error) when (DockActions.IsActionError(error)) { status.Text = error.Message; }
@@ -254,7 +282,7 @@ public partial class DashboardWindow
                         job = job with { Result = applied };
                         DockJobs.Save(job);
                         if (!token.IsCancellationRequested)
-                            ShowJobDetails(id);
+                            refresh();
                     }
                     catch (Exception error) when (DockActions.IsActionError(error)) { status.Text = error.Message; }
                 };
@@ -263,7 +291,6 @@ public partial class DashboardWindow
             catch (Exception error) when (DockActions.IsActionError(error)) { status.Text = error.Message; }
         }
         content.Children.Add(actions);
-        window.Show();
     }
 
     private static async Task<string> RunDockChangesAsync(IEnumerable<DockAction> actions, CancellationToken token)

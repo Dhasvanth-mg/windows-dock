@@ -18,179 +18,10 @@ public partial class DashboardWindow
     private bool readingAgents;
     private DateTime nextAgentRead;
     private AgentApproval[] pendingApprovals = [];
-    private AgentProvider? agentFilter;
-    private AgentProvider? agentSettingsFirst;
-    private bool agentSetup;
     private int agentSlot = -1;
     private (AgentProvider Provider, string Id)? selectedAgent;
     private readonly HashSet<Guid> sentApprovals = [];
     private string agentMessage = "";
-
-    private UIElement AgentsPage()
-    {
-        var layout = new StackPanel { Margin = new Thickness(5, 3, 5, 2) };
-        var toolbar = new DockPanel { Margin = new Thickness(1, 0, 1, 9) };
-        if (compactAgents)
-        {
-            var close = IconButton(0xE711, "Close coding chats", Dismiss);
-            DockPanel.SetDock(close, Dock.Right);
-            toolbar.Children.Add(close);
-        }
-        var setup = ActionButton(agentSetup ? "Back to chats" : "Setup", () =>
-        {
-            agentSetup = !agentSetup;
-            agentSettingsFirst = selectedAgent?.Provider;
-            PageScroll.ScrollToTop();
-            RefreshAgentPage();
-        });
-        setup.ToolTip = "Connections, approval hooks, and model defaults";
-        DockPanel.SetDock(setup, Dock.Right);
-        toolbar.Children.Add(setup);
-        var usage = ActionButton("Usage", ShowAgentUsage);
-        DockPanel.SetDock(usage, Dock.Right);
-        usage.Margin = new Thickness(0, 0, 6, 0);
-        toolbar.Children.Add(usage);
-        var jobs = ActionButton("Jobs", ShowAssistantJobs);
-        jobs.Margin = new Thickness(0, 0, 5, 0);
-        DockPanel.SetDock(jobs, Dock.Right);
-        toolbar.Children.Add(jobs);
-        var inbox = IconButton(0xEA8F, "Activity inbox", ShowActivityInbox);
-        DockPanel.SetDock(inbox, Dock.Right);
-        toolbar.Children.Add(inbox);
-        var heading = Text(agentSetup ? "Setup" : "Coding chats", 20, strong: true);
-        heading.VerticalAlignment = VerticalAlignment.Center;
-        toolbar.Children.Add(heading);
-        layout.Children.Add(toolbar);
-
-        if (agentSetup)
-        {
-            var settings = new StackPanel();
-            var first = agentSettingsFirst ?? AgentProvider.Codex;
-            foreach (var provider in new[] { first, first == AgentProvider.Codex ? AgentProvider.Claude : AgentProvider.Codex })
-            {
-                var card = AgentSettingsCard(provider);
-                card.Margin = new Thickness(0, 0, 0, 6);
-                settings.Children.Add(card);
-            }
-            layout.Children.Add(settings);
-            return layout;
-        }
-
-        var detail = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch };
-        layout.Children.Add(detail);
-        var filterRow = new DockPanel { Margin = new Thickness(0, 12, 0, 5) };
-        var filters = new StackPanel { Orientation = Orientation.Horizontal };
-        DockPanel.SetDock(filters, Dock.Right);
-        filterRow.Children.Add(filters);
-        foreach (var (label, provider) in new (string, AgentProvider?)[]
-                 { ("All", null), ("Codex", AgentProvider.Codex), ("Claude", AgentProvider.Claude) })
-        {
-            var filter = ActionButton(label, () =>
-            {
-                agentFilter = provider;
-                RefreshAgentPage();
-            });
-            filter.Margin = new Thickness(4, 0, 0, 0);
-            filter.Background = agentFilter == provider ? Brush("#25FFFFFF") : Brushes.Transparent;
-            AutomationProperties.SetItemStatus(filter, agentFilter == provider ? "Selected" : "");
-            filters.Children.Add(filter);
-        }
-        var recent = Text("Recent chats", 13, AssistantInk, true);
-        recent.VerticalAlignment = VerticalAlignment.Center;
-        filterRow.Children.Add(recent);
-        layout.Children.Add(filterRow);
-        var activity = new WrapPanel { Margin = new Thickness(0, 0, 0, 5), Visibility = Visibility.Collapsed };
-        layout.Children.Add(activity);
-
-        var notice = Text(agentMessage, 11, subdued);
-        notice.TextWrapping = TextWrapping.Wrap;
-        layout.Children.Add(notice);
-        var cards = new StackPanel();
-        layout.Children.Add(cards);
-        AgentSession[]? shown = null;
-        AgentApproval? detailApproval = null;
-        AgentSession? detailSession = null;
-        (AgentProvider Provider, string Id)? selectedRow = null;
-        (int Working, int Waiting, int Replies, int Limited)? lastActivity = null;
-        updatePage = () =>
-        {
-            sentApprovals.RemoveWhere(id => !pendingApprovals.Any(request => request.Id == id));
-            _ = RefreshAgentsAsync();
-            var approval = pendingApprovals.Where(request => !sentApprovals.Contains(request.Id)).ToArray();
-            var ordered = RankedSessions(approval);
-            var visible = ordered.Where(session => !agentFilter.HasValue || session.Provider == agentFilter).ToArray();
-            var focused = selectedAgent is { } key
-                ? visible.FirstOrDefault(session => session.Provider == key.Provider && session.Id == key.Id) ?? visible.FirstOrDefault()
-                : visible.FirstOrDefault();
-            notice.Text = agentMessage;
-            notice.Visibility = string.IsNullOrEmpty(agentMessage) ? Visibility.Collapsed : Visibility.Visible;
-            var now = DateTimeOffset.UtcNow;
-            var counts = (Working: ordered.Count(session => session.State == AgentState.Working),
-                Waiting: ordered.Count(session => session.State == AgentState.Attention),
-                Replies: ordered.Count(session => session.State == AgentState.Finished && now - session.Updated < TimeSpan.FromMinutes(3)),
-                Limited: ordered.Count(session => session.State == AgentState.QuotaReached));
-            if (counts != lastActivity)
-            {
-                lastActivity = counts;
-                activity.Children.Clear();
-                AddActivity(counts.Waiting, "need approval", AgentState.Attention);
-                AddActivity(counts.Working, "working", AgentState.Working);
-                AddActivity(counts.Replies, counts.Replies == 1 ? "reply ready" : "replies ready", AgentState.Finished);
-                AddActivity(counts.Limited, "at limit", AgentState.QuotaReached);
-                activity.Visibility = activity.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-            }
-            var focusedApproval = approval.FirstOrDefault(item => focused != null &&
-                item.Provider == focused.Provider && item.SessionId == focused.Id);
-            if (detail.Content == null || detailSession != focused || detailApproval != focusedApproval)
-            {
-                detailSession = focused;
-                detailApproval = focusedApproval;
-                detail.Content = focused == null
-                    ? Card(Text("No local coding chats yet.", 13, subdued))
-                    : AgentDetail(focused, focusedApproval);
-            }
-            var focus = focused == null ? ((AgentProvider, string)?)null : (focused.Provider, focused.Id);
-            if (selectedRow == focus && shown != null && shown.SequenceEqual(visible))
-                return;
-            selectedRow = focus;
-            shown = visible;
-            cards.Children.Clear();
-            foreach (var session in visible.Take(40))
-            {
-                var row = AgentRow(session, focus == (session.Provider, session.Id));
-                row.Margin = new Thickness(0, 0, 0, 4);
-                cards.Children.Add(row);
-            }
-            if (visible.Length == 0)
-                cards.Children.Add(Text("No chats for this provider.", 12, subdued));
-        };
-        return layout;
-
-        void AddActivity(int count, string label, AgentState state)
-        {
-            if (count == 0)
-                return;
-            var tint = AgentArt.Tint(state);
-            var button = ActionButton($"{count} {label}", () =>
-            {
-                var match = RankedSessions(pendingApprovals.Where(request => !sentApprovals.Contains(request.Id)).ToArray())
-                    .FirstOrDefault(session => session.State == state);
-                if (match == null)
-                    return;
-                selectedAgent = (match.Provider, match.Id);
-                agentFilter = null;
-                PageScroll.ScrollToTop();
-                RefreshAgentPage();
-            });
-            button.Background = AgentArt.Wash(tint, 26);
-            button.BorderBrush = AgentArt.Wash(tint, 57);
-            button.Foreground = tint;
-            button.FontSize = 11;
-            button.Padding = new Thickness(9, 4, 9, 4);
-            button.Margin = new Thickness(0, 0, 5, 3);
-            activity.Children.Add(button);
-        }
-    }
 
     private async Task RefreshAgentsAsync()
     {
@@ -219,11 +50,6 @@ public partial class DashboardWindow
 
     internal void OpenAgentGrid()
     {
-        agentPanel?.Close();
-        SetDashboardSurface(true);
-        compactAgents = true;
-        agentSetup = false;
-        agentFilter = null;
         var selection = agentGrid?.ReadSelection() ?? (-1, (AgentProvider?)null, "");
         agentSlot = selection.Item1;
         pendingApprovals = AgentApprovals.Read();
@@ -233,14 +59,16 @@ public partial class DashboardWindow
         var finished = ranked.FirstOrDefault(session => session.State == AgentState.Finished &&
             DateTimeOffset.UtcNow - session.Updated < TimeSpan.FromMinutes(3));
         var focused = urgent ?? (clicked?.State == AgentState.Finished ? clicked : finished) ?? clicked;
-        selectedAgent = focused == null ? null : (focused.Provider, focused.Id);
-        ConfigureWidth();
-        RefreshAgentPage();
+        if (selection is (_, { } provider, { Length: > 0 } id) && focused == null)
+            selectedAgent = (provider, id);
+        var workspace = ShowCodingWorkspace(compact: true);
+        if (focused != null)
+            workspace.Select(focused);
+        else
+            workspace.Refresh();
         PositionAtTaskbar();
         RevealAgentPage();
     }
-
-    private void RefreshAgentPage() => ShowPage(DashboardPage.Agents);
 
     private void RevealAgentPage()
     {
@@ -258,113 +86,12 @@ public partial class DashboardWindow
         agentGrid.Publish(AgentSlots.Select(agentSlots, RankedSessions(pendingApprovals)));
     }
 
-    private Button AgentRow(AgentSession session, bool selected)
-    {
-        var line = new DockPanel();
-        var (label, color) = StateBadge(session.State);
-        var state = Text(label, 10.5, color, true);
-        state.Margin = new Thickness(8, 0, 0, 0);
-        state.VerticalAlignment = VerticalAlignment.Center;
-        DockPanel.SetDock(state, Dock.Right);
-        line.Children.Add(state);
-        var face = AgentAvatar(session.State, small: true);
-        face.Margin = new Thickness(0, 0, 8, 0);
-        line.Children.Add(face);
-        var title = Text(session.Title, 12, strong: selected);
-        title.VerticalAlignment = VerticalAlignment.Center;
-        line.Children.Add(title);
-        var button = MakeButton(line, session.Title + ", " + label, () =>
-        {
-            selectedAgent = (session.Provider, session.Id);
-            PageScroll.ScrollToTop();
-            RefreshAgentPage();
-        });
-        button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        button.Padding = new Thickness(8, 4, 10, 4);
-        button.Background = selected ? assistantInset : Brushes.Transparent;
-        button.BorderBrush = selected ? AgentArt.Wash(color, 105) : AssistantRule;
-        button.ToolTip = AgentTooltip(session);
-        return button;
-    }
-
-    private Border AgentDetail(AgentSession session, AgentApproval? approval)
-    {
-        var panel = new StackPanel();
-        var hero = new DockPanel { Margin = new Thickness(0, 0, 0, 3) };
-        var face = AgentAvatar(session.State);
-        face.Margin = new Thickness(0, 0, 13, 0);
-        hero.Children.Add(face);
-        var description = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        var title = Text(session.Title, 17, strong: true);
-        title.TextTrimming = TextTrimming.CharacterEllipsis;
-        title.ToolTip = session.Title;
-        description.Children.Add(title);
-        var (label, color) = StateBadge(session.State);
-        var status = Text(ProviderName(session.Provider) + "  ·  " + label, 11, color, true);
-        status.Margin = new Thickness(0, 3, 0, 0);
-        description.Children.Add(status);
-        hero.Children.Add(description);
-        panel.Children.Add(hero);
-        var step = string.Equals(session.Step, label, StringComparison.OrdinalIgnoreCase) ? null : session.Step;
-        var info = string.Join("  ·  ", new[] { session.Project, step, session.Model, session.Effort }
-            .Where(value => !string.IsNullOrWhiteSpace(value)));
-        var details = Text(info, 11, subdued);
-        details.TextTrimming = TextTrimming.CharacterEllipsis;
-        details.ToolTip = AgentTooltip(session);
-        if (info.Length > 0)
-        {
-            details.Margin = new Thickness(0, 3, 0, 0);
-            panel.Children.Add(details);
-        }
-
-        if (approval != null)
-        {
-            var review = ApprovalCard(approval);
-            review.Margin = new Thickness(0, 7, 0, 0);
-            panel.Children.Add(review);
-        }
-        else if (session.State == AgentState.Finished)
-        {
-            var preview = Text("", 11, subdued);
-            preview.MaxHeight = 48;
-            preview.TextWrapping = TextWrapping.Wrap;
-            preview.Margin = new Thickness(0, 7, 0, 0);
-            preview.Visibility = Visibility.Collapsed;
-            panel.Children.Add(preview);
-            _ = LoadReplyPreviewAsync(session, preview);
-        }
-        var actions = new WrapPanel { Margin = new Thickness(0, 11, 0, 0) };
-        AddAction(approval == null ? "Summarize reply" : "Last reply", 0xEAB7, () => ShowReplySummary(session),
-            approval == null);
-        AddAction("Open chat", 0xE8A7, () => OpenAgent(session));
-        if (session.State == AgentState.QuotaReached)
-            AddAction("Token usage", 0xE9D9, ShowAgentUsage, true);
-        AddAction("Assign slot", 0xE718, () => ShowAgentAssignments(session));
-        var copy = IconButton(0xE8C8, "Copy latest reply");
-        copy.Click += async (_, _) => await CopyLatestReplyAsync(session);
-        actions.Children.Add(copy);
-        panel.Children.Add(actions);
-        var card = Card(panel);
-        card.Padding = new Thickness(13);
-        card.BorderBrush = SystemParameters.HighContrast ? AssistantRule : AgentArt.Wash(color, 65);
-        return card;
-
-        void AddAction(string text, int icon, Action action, bool primary = false)
-        {
-            var button = MakeButton(IconLabel(text, icon, primary ? color : subdued), text, action);
-            button.Background = primary ? AgentArt.Wash(color, 40) : Brush("#13FFFFFF");
-            button.BorderBrush = primary ? AgentArt.Wash(color, 76) : Brush("#17FFFFFF");
-            button.Margin = new Thickness(0, 0, 5, 3);
-            actions.Children.Add(button);
-        }
-    }
-
-    private async Task CopyLatestReplyAsync(AgentSession session)
+    private async Task CopyLatestReplyAsync(AgentSession session, System.Threading.CancellationToken cancellation)
     {
         try
         {
-            var reply = await Task.Run(() => AgentSessions.LatestReply(session, lifetime.Token), lifetime.Token);
-            if (closed)
+            var reply = await ReadAgentReplyAsync(session, cancellation);
+            if (cancellation.IsCancellationRequested)
                 return;
             if (reply == null)
                 agentMessage = "This chat has no readable completed reply.";
@@ -448,7 +175,7 @@ public partial class DashboardWindow
         };
     }
 
-    private Border ApprovalCard(AgentApproval request)
+    private UIElement ApprovalDetails(AgentApproval request)
     {
         var panel = new StackPanel();
         panel.Children.Add(Text($"{ProviderName(request.Provider)} · {request.Project} · {request.Tool}", 13, amber, true));
@@ -476,7 +203,7 @@ public partial class DashboardWindow
         actions.Children.Add(allow);
         actions.Children.Add(deny);
         panel.Children.Add(actions);
-        return Card(panel);
+        return panel;
 
         async Task Decide(bool allowRequest)
         {
@@ -490,10 +217,9 @@ public partial class DashboardWindow
         }
     }
 
-    private Border AgentSettingsCard(AgentProvider provider)
+    private UIElement BuildAgentSettings(AgentProvider provider)
     {
         var card = new StackPanel();
-        card.Children.Add(Text(ProviderName(provider), 15, strong: true));
         var status = Text("", 11, subdued);
         status.TextWrapping = TextWrapping.Wrap;
         status.Margin = new Thickness(0, 7, 0, 0);
@@ -551,7 +277,7 @@ public partial class DashboardWindow
         save.HorizontalAlignment = HorizontalAlignment.Left;
         card.Children.Add(save);
         card.Children.Add(status);
-        return Card(card);
+        return card;
 
         void Apply(Action change, string success)
         {

@@ -93,6 +93,7 @@ public partial class DashboardWindow : Window
         {
             if (!IsVisible)
             {
+                codingWorkspace?.Suspend();
                 ReportDockVisibility(false);
                 ticker.Stop();
                 if (releaseWhenIdle && runningJobs.Count == 0)
@@ -138,6 +139,8 @@ public partial class DashboardWindow : Window
                     combo.IsDropDownOpen = false;
                 else if (agentPanel != null)
                     agentPanel.Close();
+                else if (codingWorkspace?.Back() == true)
+                    return;
                 else
                     Dismiss();
             }
@@ -156,6 +159,7 @@ public partial class DashboardWindow : Window
             ticker.Stop();
             agentTicker.Stop();
             idleExit.Stop();
+            codingWorkspace?.Dispose();
             lifetime.Cancel();
             lifetime.Dispose();
             agentGrid?.Dispose();
@@ -246,6 +250,13 @@ public partial class DashboardWindow : Window
             PageScroll.ScrollToTop();
         pageInitialized = true;
         currentPage = page;
+        if (page != DashboardPage.Agents)
+        {
+            codingWorkspace?.Dispose();
+            codingWorkspace = null;
+        }
+        PageScroll.VerticalScrollBarVisibility = page == DashboardPage.Agents ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Hidden;
+        PageScroll.PanningMode = page == DashboardPage.Agents ? PanningMode.None : PanningMode.VerticalOnly;
         if (!compactAgents)
             lastDashboardPage = page;
         updatePage = null;
@@ -303,7 +314,7 @@ public partial class DashboardWindow : Window
     {
         var screen = TaskbarScreen();
         var dpi = VisualTreeHelper.GetDpi(this);
-        Width = Math.Min(compactAgents ? 506 : 960, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
+        Width = Math.Min(compactAgents ? 764 : 960, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
         MaxHeight = Math.Max(200, (DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - screen.Bounds.Top) /
             dpi.DpiScaleY - 12);
         Height = Math.Min(compactAgents ? 454 : 412, MaxHeight);

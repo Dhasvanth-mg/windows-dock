@@ -538,6 +538,16 @@
 - Verification: Windows rendered the redesigned Coding chats panel and verified existing chat navigation. Invoking a native slot opened the installed 506 by 454 pixel panel with Jobs and Setup visible.
 - Remaining work: None.
 
+##### Single-window Coding chats workspace
+
+- Status: Implemented, verified, and installed in native taskbar mode.
+- Scope: Replace the stacked Coding chats layout with a conversation rail and a work pane. Keep reply summaries and related controls inside the Coding chats window.
+- Acceptance criteria: The native taskbar slots and the Dashboard Chats tab open the new layout. Selecting a conversation keeps its summary, approvals, slot assignment, usage, provider settings, jobs, and activity accessible from the same window. One click uses the saved summary provider and model. Navigation keeps the window size and selected conversation stable.
+- Implementation: Added a searchable conversation rail, inline original reply and summary views, and same-window controls for approvals, slots, usage, provider setup, jobs, and activity. The compact view uses a width of 764 DIP. At narrow widths, a conversation selector replaces the rail. Both panes scroll independently.
+- Verification: Release build and widget smoke tests passed, including narrow layout, inline navigation, and saved provider settings. A live Codex request summarized a synthetic reply and retained the result across slot and usage navigation. The installed native taskbar opened the workspace from its four-slot grid and kept the same window handle and dimensions when opening Agent slot.
+- Limitations: Summaries use completed replies available in local provider history. Provider setup and approval controls use the provider's existing integrations.
+- Remaining work: None for this request.
+
 ##### Coding providers for summaries
 
 - Status: Built and installed. Codex verified live. Claude Code sign-in required on this machine.

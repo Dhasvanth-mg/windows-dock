@@ -175,7 +175,7 @@ public partial class DashboardWindow
             case "focus": BuildPinnedFocus(content, cancellation); break;
             case "notifications": BuildPinnedNotifications(content, cancellation); break;
             case "activity": BuildPinnedActivity(window, content, cancellation); break;
-            case "jobs": BuildPinnedJobs(window, content, cancellation); break;
+            case "jobs": BuildPinnedJobs(content, cancellation); break;
             case "assistant":
                 var grid = Columns(1, 1);
                 for (var index = 0; index < AssistantPersonas.All.Length; index++)
@@ -428,12 +428,8 @@ public partial class DashboardWindow
 
     private void OpenPaletteChat(AgentSession chat)
     {
-        agentPanel?.Close();
-        selectedAgent = (chat.Provider, chat.Id);
-        agentSetup = false;
-        agentFilter = null;
         agentSlot = -1;
-        RefreshAgentPage();
+        ShowCodingWorkspace().Select(chat);
     }
 
     private sealed record WidgetAction(string Label, string Detail, string Keywords, int Icon,

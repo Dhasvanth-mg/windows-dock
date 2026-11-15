@@ -15,6 +15,26 @@ public partial class DashboardWindow
     }
 
     private void BuildPinnedActivity(Window window, StackPanel content, System.Threading.CancellationToken cancellation)
+        => BuildActivity(content, cancellation, item =>
+        {
+            if (item.ChatId.Length == 0)
+            {
+                ShowAgentUsage();
+                return;
+            }
+            var current = RankedSessions(pendingApprovals).FirstOrDefault(chat =>
+                chat.Provider == item.Provider && chat.Id == item.ChatId);
+            if (current != null)
+                OpenPaletteChat(current);
+            else
+            {
+                window.Close();
+                OpenAgent(new(item.Provider, item.ChatId, item.Title, item.Project, item.State, StateBadge(item.State).Label,
+                    item.At, item.DesktopId));
+            }
+        });
+
+    private void BuildActivity(StackPanel content, System.Threading.CancellationToken cancellation, Action<InboxItem> openItem)
     {
         var seen = DockData.Read<DateTimeOffset>("activity-seen.json");
         var unreadOnly = false;
@@ -78,24 +98,7 @@ public partial class DashboardWindow
                     AgentState.Attention => 0xEA8F,
                     AgentState.QuotaReached => 0xE916,
                     _ => 0xE73E
-                }, tint, () =>
-                {
-                    if (item.ChatId.Length == 0)
-                    {
-                        ShowAgentUsage();
-                        return;
-                    }
-                    var current = RankedSessions(pendingApprovals).FirstOrDefault(chat =>
-                        chat.Provider == item.Provider && chat.Id == item.ChatId);
-                    if (current != null)
-                        OpenPaletteChat(current);
-                    else
-                    {
-                        window.Close();
-                        OpenAgent(new(item.Provider, item.ChatId, item.Title, item.Project, item.State, label,
-                            item.At, item.DesktopId));
-                    }
-                }));
+                }, tint, () => openItem(item)));
                 if (item.At > seen)
                     button.BorderBrush = AgentArt.Wash(tint, 115);
                 button.Margin = new Thickness(0, 0, 0, 5);

@@ -34,40 +34,30 @@ public partial class DashboardWindow
     ];
     private readonly System.Security.SecureString?[] summaryKeys = new System.Security.SecureString?[SummarySources.Length];
     private (AgentSession Session, AgentReply? Reply)? lastReplyPreview;
-    private Task<AgentReply?>? pendingReplyPreview;
-    private AgentSession? previewSession;
 
-    private async Task LoadReplyPreviewAsync(AgentSession session, TextBlock preview)
+    private async Task<AgentReply?> ReadAgentReplyAsync(AgentSession session, CancellationToken cancellation)
     {
-        try
-        {
-            if (lastReplyPreview is not { } cached || cached.Session != session)
-            {
-                if (previewSession != session || pendingReplyPreview == null)
-                {
-                    previewSession = session;
-                    pendingReplyPreview = Task.Run(() => AgentSessions.LatestReply(session, lifetime.Token), lifetime.Token);
-                }
-                var result = await pendingReplyPreview;
-                if (previewSession == session)
-                    lastReplyPreview = (session, result);
-            }
-            var reply = lastReplyPreview is { } latest && latest.Session == session ? latest.Reply : null;
-            preview.Text = reply?.Text[..Math.Min(210, reply.Text.Length)] ?? "";
-            preview.Visibility = reply == null ? Visibility.Collapsed : Visibility.Visible;
-        }
-        catch (OperationCanceledException) { }
+        if (lastReplyPreview is { } cached && cached.Session == session)
+            return cached.Reply;
+        var reply = await Task.Run(() => AgentSessions.LatestReply(session, cancellation), cancellation);
+        cancellation.ThrowIfCancellationRequested();
+        lastReplyPreview = (session, reply);
+        return reply;
     }
-
-    private void ShowReplySummary(AgentSession session) => ShowTextSummary("Reply summary", session.Title,
-        "Reply to summarize", null, session);
 
     private static bool IsSummaryModelId(string value) => value.Length <= 128 &&
         value.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.' or '/' or ':');
 
-    private void ShowTextSummary(string title, string subtitle, string label, string? draft, AgentSession? session = null)
+    private void ShowTextSummary(string title, string subtitle, string label, string? draft)
     {
         var (window, content, cancellation) = CreateDockPanel(title, subtitle, 468, 0xEAB7, AssistantInk);
+        BuildTextSummary(content, label, draft, null, cancellation);
+        window.Show();
+    }
+
+    private Action BuildTextSummary(StackPanel content, string label, string? draft, AgentSession? session,
+        CancellationToken cancellation)
+    {
         var preferences = DockData.Read<SummaryPreferences>(SummaryPreferencesFile);
         var activeSource = SummarySources.FirstOrDefault(source => source.Provider.ToString() == preferences?.Provider)
             ?? SummarySources[2];
@@ -76,7 +66,8 @@ public partial class DashboardWindow
         var modelChanged = false;
         var autoPending = session != null;
         var options = new StackPanel { Visibility = autoPending ? Visibility.Collapsed : Visibility.Visible };
-        content.Children.Add(options);
+        if (session == null)
+            content.Children.Add(options);
         var sourceLabel = Text(label, 11, AssistantSecondary, true);
         var source = Field(label, AgentSessions.SummaryLimit);
         source.Tag = session == null ? "Paste notifications here" : "Paste a reply";
@@ -105,6 +96,7 @@ public partial class DashboardWindow
         options.Children.Add(fields);
         var key = new PasswordBox { MaxLength = 512 };
         var status = Text("", 11, AssistantSecondary);
+        AutomationProperties.SetName(status, "Summary status");
         AutomationProperties.SetName(key, "Summary API key");
         var keyField = Labeled("API key · saved on this Windows account", key);
         keyField.Margin = new Thickness(0, 7, 0, 0);
@@ -136,11 +128,17 @@ public partial class DashboardWindow
         var result = Field("Generated summary", 0);
         result.IsReadOnly = true;
         result.TextWrapping = TextWrapping.Wrap;
-        result.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        result.MinHeight = 44;
-        result.MaxHeight = session == null ? 134 : 177;
+        result.VerticalScrollBarVisibility = session == null ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
+        result.MaxHeight = session == null ? 134 : double.PositiveInfinity;
+        if (session != null)
+        {
+            result.Background = Brushes.Transparent;
+            result.BorderBrush = Brushes.Transparent;
+            result.Padding = new Thickness(0);
+            result.FontSize = 13;
+        }
         result.Visibility = Visibility.Collapsed;
-        result.Margin = new Thickness(0, 9, 0, 0);
+        result.Margin = new Thickness(0, session == null ? 9 : 0, 0, 0);
         content.Children.Add(result);
         status.TextWrapping = TextWrapping.Wrap;
         status.Margin = new Thickness(0, 8, 0, 6);
@@ -148,21 +146,32 @@ public partial class DashboardWindow
 
         var actions = new WrapPanel();
         Button? edit = null;
+        Button? copy = null;
         var send = AccentButton("Summarize", 0xEAB7, AssistantInk);
         send.Click += async (_, _) => await SummarizeAsync();
         send.Margin = new Thickness(0, 0, 5, 3);
         actions.Children.Add(send);
         if (session != null)
         {
-            var open = ActionButton("Open chat", () => { window.Close(); OpenAgent(session); });
-            open.Margin = new Thickness(0, 0, 5, 3);
-            actions.Children.Add(open);
+            copy = ActionButton("Copy summary", () =>
+            {
+                try { Clipboard.SetText(result.Text); status.Text = "Summary copied."; }
+                catch (System.Runtime.InteropServices.ExternalException) { status.Text = "The clipboard is busy."; }
+            });
+            copy.IsEnabled = false;
+            copy.Margin = new Thickness(0, 0, 5, 3);
+            actions.Children.Add(copy);
             edit = ActionButton("Source & provider");
             edit.Click += (_, _) => ShowOptions(options.Visibility != Visibility.Visible);
             edit.Margin = new Thickness(0, 0, 5, 3);
             actions.Children.Add(edit);
         }
         content.Children.Add(actions);
+        if (session != null)
+        {
+            options.Margin = new Thickness(0, 10, 0, 0);
+            content.Children.Add(options);
+        }
         provider.SelectionChanged += (_, _) =>
         {
             if (provider.SelectedItem is not SummarySource selected)
@@ -173,20 +182,20 @@ public partial class DashboardWindow
             SaveChoices();
         };
         model.LostKeyboardFocus += (_, _) => SaveModel();
-        window.Closing += (_, _) => SaveModel();
-        window.Closed += (_, _) => key.Clear();
+        cancellation.Register(() =>
+        {
+            SaveModel();
+            key.Clear();
+        });
         ApplyProvider();
         if (autoPending)
             status.Text = "Reading the latest completed reply…";
-        window.Show();
-        if (session != null)
-            _ = ReadSourceAsync(session);
+        return () => { if (session != null) _ = ReadSourceAsync(session); };
 
         void ShowOptions(bool visible)
         {
             autoPending = false;
             options.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-            result.MaxHeight = visible ? 134 : 177;
             if (edit == null)
                 return;
             var labelText = visible ? "Hide source & provider" : "Source & provider";
@@ -271,8 +280,7 @@ public partial class DashboardWindow
         {
             try
             {
-                var reply = lastReplyPreview is { } cached && cached.Session == chat ? cached.Reply :
-                    await Task.Run(() => AgentSessions.LatestReply(chat, cancellation), cancellation);
+                var reply = await ReadAgentReplyAsync(chat, cancellation);
                 if (cancellation.IsCancellationRequested)
                     return;
                 if (source.Text.Length == 0)
@@ -328,6 +336,8 @@ public partial class DashboardWindow
                 return;
             }
             send.IsEnabled = provider.IsEnabled = model.IsEnabled = key.IsEnabled = false;
+            if (copy != null)
+                copy.IsEnabled = false;
             source.IsReadOnly = true;
             status.Text = "Summarizing…";
             result.Visibility = Visibility.Collapsed;
@@ -352,6 +362,12 @@ public partial class DashboardWindow
                 }
                 result.Text = response.Trim();
                 result.Visibility = Visibility.Visible;
+                if (copy != null)
+                {
+                    copy.IsEnabled = true;
+                    send.Content = "Regenerate";
+                    AutomationProperties.SetName(send, "Regenerate summary");
+                }
                 status.Text = $"Summary generated by {selected.Label}." + (saved ? "" : " Windows could not save the key.");
             }
             catch (CodingSummaryException error)
@@ -416,15 +432,35 @@ public partial class DashboardWindow
             : Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User)?.Trim();
     }
 
-    private void ShowAgentAssignments(AgentSession session)
+    private void BuildAgentAssignments(StackPanel content, AgentSession session)
     {
-        var (window, content, _) = CreateDockPanel("Assign agent slot", session.Title, 428, 0xE718, purple);
-        var items = new ComboBox { ItemsSource = Enumerable.Range(1, 4).Select(index => $"Slot {index}").ToArray(),
-            SelectedIndex = Math.Clamp(agentSlot, 0, 3) };
-        AutomationProperties.SetName(items, "Agent slot");
-        content.Children.Add(items);
-        var binding = Text("", 11, subdued);
-        binding.Margin = new Thickness(0, 6, 0, 9);
+        agentSlots = AgentSlots.Load();
+        var slots = Columns(1, 1, 1, 1);
+        var selected = Math.Clamp(agentSlot, 0, 3);
+        var buttons = new Button[4];
+        var labels = new TextBlock[4];
+        var binding = Text("", 12, subdued);
+        binding.TextWrapping = TextWrapping.Wrap;
+        binding.Margin = new Thickness(0, 9, 0, 8);
+        for (var index = 0; index < buttons.Length; index++)
+        {
+            var position = index;
+            var body = new StackPanel();
+            body.Children.Add(Text($"Slot {position + 1}", 12, strong: true));
+            var description = Text("", 11, subdued);
+            body.Children.Add(description);
+            labels[position] = description;
+            var button = MakeButton(body, $"Slot {position + 1}", () =>
+            {
+                selected = position;
+                Describe();
+            });
+            button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+            button.Height = 53;
+            buttons[position] = button;
+            Put(slots, button, position);
+        }
+        content.Children.Add(slots);
         content.Children.Add(binding);
         var actions = new WrapPanel();
         var pin = ActionButton("Pin this chat", () => Save(new(session.Provider, session.DesktopId ?? session.Id, null, session.Title)));
@@ -436,32 +472,39 @@ public partial class DashboardWindow
         actions.Children.Add(project);
         actions.Children.Add(ActionButton("Set to automatic", () => Save(null)));
         content.Children.Add(actions);
-        items.SelectionChanged += (_, _) => Describe();
         Describe();
-        window.Show();
 
-        void Describe() => binding.Text = agentSlots[items.SelectedIndex] is { } slot
-            ? (slot.ChatId == null ? "Following " : "Pinned to ") + slot.Label : "Automatic · follows chat activity";
+        void Describe()
+        {
+            for (var i = 0; i < buttons.Length; i++)
+            {
+                labels[i].Text = agentSlots[i]?.Label ?? "Automatic";
+                buttons[i].BorderBrush = i == selected ? AssistantInk : AssistantRule;
+                AutomationProperties.SetItemStatus(buttons[i], i == selected ? "Selected" : "");
+            }
+            binding.Text = agentSlots[selected] is { } slot
+                ? (slot.ChatId == null ? "Following " : "Pinned to ") + slot.Label : "Automatic · follows chat activity";
+        }
 
         void Save(AgentSlot? slot)
         {
-            var candidate = (AgentSlot?[])agentSlots.Clone();
+            var candidate = AgentSlots.Load();
             if (slot != null)
                 for (var i = 0; i < candidate.Length; i++)
                     if (candidate[i] is { } existing && existing.Provider == slot.Provider &&
                         string.Equals(existing.ChatId, slot.ChatId, StringComparison.OrdinalIgnoreCase) &&
                         string.Equals(existing.ProjectPath, slot.ProjectPath, StringComparison.OrdinalIgnoreCase))
                         candidate[i] = null;
-            candidate[items.SelectedIndex] = slot;
+            candidate[selected] = slot;
             try
             {
                 AgentSlots.Save(candidate);
                 agentSlots = candidate;
                 PublishAgentGrid();
                 Describe();
-                agentMessage = $"Slot {items.SelectedIndex + 1} updated.";
-                window.Close();
-                UpdateDashboard();
+                agentSlot = selected;
+                agentMessage = $"Slot {selected + 1} updated.";
+                updatePage?.Invoke();
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
@@ -470,23 +513,23 @@ public partial class DashboardWindow
         }
     }
 
-    private void ShowAgentUsage()
+    private void BuildAgentUsage(StackPanel content, AgentSession? selected, CancellationToken cancellation)
     {
-        var (window, content, cancellation) = CreateDockPanel("Token usage", "", 468, 0xE9D9, accent);
         var body = new StackPanel();
-        content.Children.Add(body);
-        var actions = new WrapPanel { Margin = new Thickness(0, 9, 0, 0) };
+        var actions = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
         var refresh = ActionButton("Refresh", () => _ = RefreshUsageAsync(cancellation));
         refresh.Margin = new Thickness(0, 0, 6, 4);
         actions.Children.Add(refresh);
         content.Children.Add(actions);
-        var selected = selectedAgent is { } id ? agentSessions.FirstOrDefault(session => session.Provider == id.Provider &&
-            session.Id == id.Id) : RankedSessions(pendingApprovals).FirstOrDefault();
+        content.Children.Add(body);
         AgentTokenUsage? chatUsage = null;
         var loadedChat = selected == null;
         updateUsagePanel = Render;
-        window.Closed += (_, _) => updateUsagePanel = null;
-        window.Show();
+        cancellation.Register(() =>
+        {
+            if (updateUsagePanel == Render)
+                updateUsagePanel = null;
+        });
         Render();
         _ = RefreshUsageAsync(cancellation);
         if (selected != null)
@@ -509,24 +552,23 @@ public partial class DashboardWindow
         {
             body.Children.Clear();
             refresh.IsEnabled = !refreshingUsage;
+            if (selected != null)
+            {
+                var local = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
+                local.Children.Add(Text("This chat", 13, strong: true));
+                if (chatUsage is { } tokens)
+                {
+                    local.Children.Add(Text(tokens.Total is { } total ? $"{total:N0} total · {tokens.Output:N0} output" :
+                        $"{tokens.Input:N0} input tokens" + (tokens.Partial ? " · recent transcript" : " · local transcript"), 12, subdued));
+                    if (tokens.CachedInput > 0)
+                        local.Children.Add(Text($"{tokens.CachedInput:N0} cached input", 11, muted));
+                }
+                else
+                    local.Children.Add(Text(loadedChat ? "Local chat counts unavailable." : "Reading chat tokens…", 11, muted));
+                body.Children.Add(local);
+            }
             AddPlan("Codex", codexPlan, AgentUsage.CodexUsageUrl);
             AddPlan("Claude", claudePlan, AgentUsage.ClaudeUsageUrl);
-            if (selected == null)
-                return;
-            var local = new StackPanel();
-            local.Children.Add(Text(selected.Title, 12, strong: true));
-            if (chatUsage is { } tokens)
-            {
-                local.Children.Add(Text(tokens.Total is { } total ? $"{total:N0} total · {tokens.Output:N0} output" :
-                    $"{tokens.Input:N0} input tokens" + (tokens.Partial ? " · recent transcript" : " · local transcript"), 12, subdued));
-                if (tokens.CachedInput > 0)
-                    local.Children.Add(Text($"{tokens.CachedInput:N0} cached input", 11, muted));
-            }
-            else
-                local.Children.Add(Text(loadedChat ? "Local chat counts unavailable." : "Reading chat tokens…", 11, muted));
-            var card = Card(local);
-            card.Margin = new Thickness(0, 6, 0, 0);
-            body.Children.Add(card);
         }
 
         void AddPlan(string name, AgentPlanUsage? plan, string url)
@@ -554,9 +596,8 @@ public partial class DashboardWindow
                     panel.Children.Add(Text("Included usage is limited", 11, Brush("#FF879E"), true));
                 panel.Children.Add(Text($"{plan.Source} · {plan.Observed.LocalDateTime:g}", 10, muted));
             }
-            var border = Card(panel);
-            border.Margin = new Thickness(0, 0, 0, 6);
-            body.Children.Add(border);
+            body.Children.Add(new Border { BorderBrush = AssistantRule, BorderThickness = new Thickness(0, 1, 0, 0),
+                Padding = new Thickness(0, 8, 0, 8), Child = panel });
         }
     }
 
@@ -684,7 +725,6 @@ public partial class DashboardWindow
         {
             "Assistants" => 302,
             "Widgets" => 558,
-            "Reply summary" => 350,
             "Notification summary" => 468,
             "Focus timer" => 218,
             _ => 436

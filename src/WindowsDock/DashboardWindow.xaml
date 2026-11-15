@@ -90,6 +90,41 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="CodingConversationRow" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="8,6,6,6"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Row" Background="{TemplateBinding Background}" CornerRadius="5"
+                                BorderBrush="Transparent" BorderThickness="1" Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                <Border x:Name="Selection" Width="2" HorizontalAlignment="Left" Margin="-7,0,0,0"
+                                        Background="{DynamicResource TextPrimary}" CornerRadius="1" Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource InputItemHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource InputItemSelected}"/>
+                                <Setter TargetName="Selection" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource ControlFocus}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="Field" TargetType="TextBox">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
             <Setter Property="Background" Value="{DynamicResource FieldSurface}"/>
@@ -207,7 +242,7 @@
                 <Border Height="1" Margin="0,4,0,0" Background="{DynamicResource DockStroke}"/>
             </StackPanel>
             <ScrollViewer x:Name="PageScroll" Grid.Row="1" VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
-                <ContentControl x:Name="PageHost" HorizontalContentAlignment="Stretch"/>
+                <ContentControl x:Name="PageHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
             </ScrollViewer>
             <ContentControl x:Name="DockNavigationHost" Grid.Row="2" HorizontalContentAlignment="Stretch"
                             Visibility="Collapsed"/>
