@@ -19,10 +19,10 @@ public partial class DashboardWindow
     private DateTime nextAgentRead;
     private AgentApproval[] pendingApprovals = [];
     private AgentProvider? agentFilter;
+    private AgentProvider? agentSettingsFirst;
     private bool agentSetup;
     private int agentSlot = -1;
     private (AgentProvider Provider, string Id)? selectedAgent;
-    private bool showAgentList;
     private readonly HashSet<Guid> sentApprovals = [];
     private string agentMessage = "";
 
@@ -36,21 +36,28 @@ public partial class DashboardWindow
             DockPanel.SetDock(close, Dock.Right);
             toolbar.Children.Add(close);
         }
-        var setup = IconButton(0xE713, agentSetup ? "Back to chats" : "Connections and defaults", () =>
+        var setup = ActionButton(agentSetup ? "Back to chats" : "Setup", () =>
         {
             agentSetup = !agentSetup;
+            agentSettingsFirst = selectedAgent?.Provider;
+            PageScroll.ScrollToTop();
             RefreshAgentPage();
         });
+        setup.ToolTip = "Connections, approval hooks, and model defaults";
         DockPanel.SetDock(setup, Dock.Right);
         toolbar.Children.Add(setup);
         var usage = ActionButton("Usage", ShowAgentUsage);
         DockPanel.SetDock(usage, Dock.Right);
         usage.Margin = new Thickness(0, 0, 6, 0);
         toolbar.Children.Add(usage);
+        var jobs = ActionButton("Jobs", ShowAssistantJobs);
+        jobs.Margin = new Thickness(0, 0, 5, 0);
+        DockPanel.SetDock(jobs, Dock.Right);
+        toolbar.Children.Add(jobs);
         var inbox = IconButton(0xEA8F, "Activity inbox", ShowActivityInbox);
         DockPanel.SetDock(inbox, Dock.Right);
         toolbar.Children.Add(inbox);
-        var heading = Text(agentSetup ? "Connections" : "Coding chats", 20, strong: true);
+        var heading = Text(agentSetup ? "Setup" : "Coding chats", 20, strong: true);
         heading.VerticalAlignment = VerticalAlignment.Center;
         toolbar.Children.Add(heading);
         layout.Children.Add(toolbar);
@@ -58,55 +65,52 @@ public partial class DashboardWindow
         if (agentSetup)
         {
             var settings = new StackPanel();
-            settings.Children.Add(AgentSettingsCard(AgentProvider.Claude));
-            var codex = AgentSettingsCard(AgentProvider.Codex);
-            codex.Margin = new Thickness(0, 6, 0, 0);
-            settings.Children.Add(codex);
-            layout.Children.Add(new ScrollViewer
+            var first = agentSettingsFirst ?? AgentProvider.Codex;
+            foreach (var provider in new[] { first, first == AgentProvider.Codex ? AgentProvider.Claude : AgentProvider.Codex })
             {
-                Content = settings, MaxHeight = 415, VerticalScrollBarVisibility = ScrollBarVisibility.Auto
-            });
+                var card = AgentSettingsCard(provider);
+                card.Margin = new Thickness(0, 0, 0, 6);
+                settings.Children.Add(card);
+            }
+            layout.Children.Add(settings);
             return layout;
         }
 
-        var activity = new WrapPanel { Margin = new Thickness(0, 0, 0, 8), Visibility = Visibility.Collapsed };
-        layout.Children.Add(activity);
         var detail = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch };
         layout.Children.Add(detail);
-        var filters = new WrapPanel { Margin = new Thickness(0, 8, 0, 4) };
-        var all = ActionButton(showAgentList ? "Hide chats" : "All chats", () =>
-        {
-            showAgentList = !showAgentList;
-            RefreshAgentPage();
-        });
-        filters.Children.Add(all);
-        foreach (var (label, provider) in new[] { ("Claude", AgentProvider.Claude), ("Codex", AgentProvider.Codex) })
+        var filterRow = new DockPanel { Margin = new Thickness(0, 12, 0, 5) };
+        var filters = new StackPanel { Orientation = Orientation.Horizontal };
+        DockPanel.SetDock(filters, Dock.Right);
+        filterRow.Children.Add(filters);
+        foreach (var (label, provider) in new (string, AgentProvider?)[]
+                 { ("All", null), ("Codex", AgentProvider.Codex), ("Claude", AgentProvider.Claude) })
         {
             var filter = ActionButton(label, () =>
             {
-                agentFilter = agentFilter == provider ? null : provider;
-                showAgentList = true;
+                agentFilter = provider;
                 RefreshAgentPage();
             });
             filter.Margin = new Thickness(4, 0, 0, 0);
-            filter.Background = agentFilter == provider && showAgentList ? Brush("#38FFFFFF") : Brushes.Transparent;
+            filter.Background = agentFilter == provider ? Brush("#25FFFFFF") : Brushes.Transparent;
+            AutomationProperties.SetItemStatus(filter, agentFilter == provider ? "Selected" : "");
             filters.Children.Add(filter);
         }
-        layout.Children.Add(filters);
+        var recent = Text("Recent chats", 13, AssistantInk, true);
+        recent.VerticalAlignment = VerticalAlignment.Center;
+        filterRow.Children.Add(recent);
+        layout.Children.Add(filterRow);
+        var activity = new WrapPanel { Margin = new Thickness(0, 0, 0, 5), Visibility = Visibility.Collapsed };
+        layout.Children.Add(activity);
 
         var notice = Text(agentMessage, 11, subdued);
         notice.TextWrapping = TextWrapping.Wrap;
         layout.Children.Add(notice);
         var cards = new StackPanel();
-        layout.Children.Add(new ScrollViewer
-        {
-            Content = cards, MaxHeight = 194, VerticalScrollBarVisibility = ScrollBarVisibility.Auto
-        });
+        layout.Children.Add(cards);
         AgentSession[]? shown = null;
         AgentApproval? detailApproval = null;
         AgentSession? detailSession = null;
         (AgentProvider Provider, string Id)? selectedRow = null;
-        var listDrawn = false;
         (int Working, int Waiting, int Replies, int Limited)? lastActivity = null;
         updatePage = () =>
         {
@@ -114,10 +118,10 @@ public partial class DashboardWindow
             _ = RefreshAgentsAsync();
             var approval = pendingApprovals.Where(request => !sentApprovals.Contains(request.Id)).ToArray();
             var ordered = RankedSessions(approval);
-            var focused = selectedAgent is { } key
-                ? ordered.FirstOrDefault(session => session.Provider == key.Provider && session.Id == key.Id) ?? ordered.FirstOrDefault()
-                : ordered.FirstOrDefault();
             var visible = ordered.Where(session => !agentFilter.HasValue || session.Provider == agentFilter).ToArray();
+            var focused = selectedAgent is { } key
+                ? visible.FirstOrDefault(session => session.Provider == key.Provider && session.Id == key.Id) ?? visible.FirstOrDefault()
+                : visible.FirstOrDefault();
             notice.Text = agentMessage;
             notice.Visibility = string.IsNullOrEmpty(agentMessage) ? Visibility.Collapsed : Visibility.Visible;
             var now = DateTimeOffset.UtcNow;
@@ -146,15 +150,12 @@ public partial class DashboardWindow
                     : AgentDetail(focused, focusedApproval);
             }
             var focus = focused == null ? ((AgentProvider, string)?)null : (focused.Provider, focused.Id);
-            if (listDrawn == showAgentList && selectedRow == focus && shown != null && shown.SequenceEqual(visible))
+            if (selectedRow == focus && shown != null && shown.SequenceEqual(visible))
                 return;
-            listDrawn = showAgentList;
             selectedRow = focus;
             shown = visible;
             cards.Children.Clear();
-            if (!showAgentList)
-                return;
-            foreach (var session in visible)
+            foreach (var session in visible.Take(40))
             {
                 var row = AgentRow(session, focus == (session.Provider, session.Id));
                 row.Margin = new Thickness(0, 0, 0, 4);
@@ -177,8 +178,8 @@ public partial class DashboardWindow
                 if (match == null)
                     return;
                 selectedAgent = (match.Provider, match.Id);
-                showAgentList = true;
                 agentFilter = null;
+                PageScroll.ScrollToTop();
                 RefreshAgentPage();
             });
             button.Background = AgentArt.Wash(tint, 26);
@@ -222,7 +223,6 @@ public partial class DashboardWindow
         SetDashboardSurface(true);
         compactAgents = true;
         agentSetup = false;
-        showAgentList = true;
         agentFilter = null;
         var selection = agentGrid?.ReadSelection() ?? (-1, (AgentProvider?)null, "");
         agentSlot = selection.Item1;
@@ -276,6 +276,7 @@ public partial class DashboardWindow
         var button = MakeButton(line, session.Title + ", " + label, () =>
         {
             selectedAgent = (session.Provider, session.Id);
+            PageScroll.ScrollToTop();
             RefreshAgentPage();
         });
         button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
@@ -295,6 +296,7 @@ public partial class DashboardWindow
         hero.Children.Add(face);
         var description = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var title = Text(session.Title, 17, strong: true);
+        title.TextTrimming = TextTrimming.CharacterEllipsis;
         title.ToolTip = session.Title;
         description.Children.Add(title);
         var (label, color) = StateBadge(session.State);
@@ -307,6 +309,7 @@ public partial class DashboardWindow
         var info = string.Join("  ·  ", new[] { session.Project, step, session.Model, session.Effort }
             .Where(value => !string.IsNullOrWhiteSpace(value)));
         var details = Text(info, 11, subdued);
+        details.TextTrimming = TextTrimming.CharacterEllipsis;
         details.ToolTip = AgentTooltip(session);
         if (info.Length > 0)
         {
@@ -332,11 +335,14 @@ public partial class DashboardWindow
         }
         var actions = new WrapPanel { Margin = new Thickness(0, 11, 0, 0) };
         AddAction(approval == null ? "Summarize reply" : "Last reply", 0xEAB7, () => ShowReplySummary(session),
-            approval == null && session.State == AgentState.Finished);
+            approval == null);
         AddAction("Open chat", 0xE8A7, () => OpenAgent(session));
         if (session.State == AgentState.QuotaReached)
             AddAction("Token usage", 0xE9D9, ShowAgentUsage, true);
         AddAction("Assign slot", 0xE718, () => ShowAgentAssignments(session));
+        var copy = IconButton(0xE8C8, "Copy latest reply");
+        copy.Click += async (_, _) => await CopyLatestReplyAsync(session);
+        actions.Children.Add(copy);
         panel.Children.Add(actions);
         var card = Card(panel);
         card.Padding = new Thickness(13);
@@ -351,6 +357,27 @@ public partial class DashboardWindow
             button.Margin = new Thickness(0, 0, 5, 3);
             actions.Children.Add(button);
         }
+    }
+
+    private async Task CopyLatestReplyAsync(AgentSession session)
+    {
+        try
+        {
+            var reply = await Task.Run(() => AgentSessions.LatestReply(session, lifetime.Token), lifetime.Token);
+            if (closed)
+                return;
+            if (reply == null)
+                agentMessage = "This chat has no readable completed reply.";
+            else
+            {
+                Clipboard.SetText(reply.Text);
+                agentMessage = "Latest reply copied.";
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (System.Runtime.InteropServices.ExternalException) { agentMessage = "The clipboard is busy."; }
+        if (!closed && currentPage == DashboardPage.Agents)
+            updatePage?.Invoke();
     }
 
     private string AgentTooltip(AgentSession session) => string.Join("\n", new[]

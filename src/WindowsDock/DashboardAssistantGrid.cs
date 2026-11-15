@@ -37,6 +37,11 @@ public partial class DashboardWindow
         window.Resources["ChipHover"] = window.Resources["InputItemHover"] = hover;
         window.Resources["InputItemSelected"] = window.Resources["InputChecked"] = selected;
         window.Resources["ControlFocus"] = window.Resources["InputFocus"] = focus;
+        if (!contrast)
+        {
+            window.Resources[SystemParameters.VerticalScrollBarWidthKey] = 6.0;
+            window.Resources[SystemParameters.HorizontalScrollBarHeightKey] = 6.0;
+        }
     }
 
     internal void ShowAssistantPicker()

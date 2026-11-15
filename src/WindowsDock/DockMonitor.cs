@@ -43,7 +43,15 @@ internal static class DockMonitor
                     var nextInbox = AgentInbox.Merge(inbox, chats, approvals, quotaSince, DateTimeOffset.UtcNow);
                     if (!inbox.SequenceEqual(nextInbox))
                     {
-                        try { DockData.Save("activity-inbox.json", nextInbox); inbox = nextInbox; }
+                        try
+                        {
+                            var completed = nextInbox.Any(item => item.State == AgentState.Finished && item.At >= started &&
+                                !inbox.Any(previous => previous.Key == item.Key));
+                            DockData.Save("activity-inbox.json", nextInbox);
+                            inbox = nextInbox;
+                            if (completed)
+                                DockCompletion.Signal(controllerPid);
+                        }
                         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
                     }
                     nextScan = DateTime.UtcNow.AddSeconds(6);

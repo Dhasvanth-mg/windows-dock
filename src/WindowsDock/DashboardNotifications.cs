@@ -12,6 +12,12 @@ public partial class DashboardWindow
     private void ShowNotificationWidget()
     {
         var (window, content, cancellation) = CreateDockPanel("Notifications", "", 466, 0xEA8F, pink, widget: true);
+        BuildPinnedNotifications(content, cancellation);
+        window.Show();
+    }
+
+    private void BuildPinnedNotifications(StackPanel content, System.Threading.CancellationToken cancellation)
+    {
         var status = Text("", 11, subdued);
         status.TextWrapping = TextWrapping.Wrap;
         content.Children.Add(status);
@@ -29,7 +35,6 @@ public partial class DashboardWindow
         var notifications = new List<(string Text, CheckBox Check)>();
         fetch.Click += (_, _) => _ = LoadAsync(true);
         digest.Click += (_, _) => Summarize();
-        window.Show();
         _ = LoadAsync(false);
 
         async Task LoadAsync(bool requestPermission)

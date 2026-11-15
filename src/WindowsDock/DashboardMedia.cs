@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using NAudio.CoreAudioApi;
+using Windows.Devices.Radios;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
 
@@ -24,57 +25,80 @@ public partial class DashboardWindow
     private UIElement HomePage()
     {
         var grid = Columns(1.55, 1);
-        var media = MediaCard(false, out var updateMedia);
+        var media = MediaCard(false, out var updateMedia, overview: true);
         Put(grid, media, 0);
         Put(grid, QuickCard(), 1);
 
-        var date = new StackPanel();
-        date.Children.Add(CardHeading("Calendar", 0xE787, amber));
+        var date = new DockPanel();
         var today = DateTime.Today;
-        var dateLabel = Text(today.ToString("dddd"), 12, subdued);
-        var dateNumber = Text(today.ToString("d MMM"), 23, strong: true);
-        date.Children.Add(dateNumber);
-        date.Children.Add(dateLabel);
+        var dateNumber = Text(today.Day.ToString(), 24, amber, true);
+        var dayTile = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var month = Text(today.ToString("MMM").ToUpperInvariant(), 9, amber, true);
+        month.HorizontalAlignment = dateNumber.HorizontalAlignment = HorizontalAlignment.Center;
+        dayTile.Children.Add(month);
+        dayTile.Children.Add(dateNumber);
+        var badge = new Border { Width = 53, Height = 60, Child = dayTile, CornerRadius = new CornerRadius(9),
+            Background = AgentArt.Wash(amber, 31), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 11, 0) };
+        date.Children.Add(badge);
+        var calendarInfo = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var dateLabel = Text(today.ToString("dddd"), 13, strong: true);
+        calendarInfo.Children.Add(dateLabel);
         var calendar = ActionButton("Open calendar", () => ShowPage(DashboardPage.Calendar));
         calendar.Padding = new Thickness(7, 4, 7, 4);
         calendar.Margin = new Thickness(0, 5, 0, 0);
         calendar.HorizontalAlignment = HorizontalAlignment.Left;
-        date.Children.Add(calendar);
+        calendarInfo.Children.Add(calendar);
+        date.Children.Add(calendarInfo);
 
-        var forecast = new StackPanel();
-        forecast.Children.Add(CardHeading("Weather", 0xE753, accent));
+        var forecast = new DockPanel();
+        var weatherArt = WeatherIllustration(weather?.Code);
+        DockPanel.SetDock(weatherArt, Dock.Right);
+        forecast.Children.Add(weatherArt);
+        var weatherInfo = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         if (weather is { } currentWeather)
         {
-            forecast.Children.Add(Text($"{currentWeather.Temperature:0}°F", 23, strong: true));
-            forecast.Children.Add(Text(currentWeather.City, 11, subdued));
+            weatherInfo.Children.Add(Text(DisplayTemperature(currentWeather.Temperature), 24, strong: true));
+            var location = Text(currentWeather.City, 11, subdued);
+            location.TextTrimming = TextTrimming.CharacterEllipsis;
+            weatherInfo.Children.Add(location);
         }
+        else
+            weatherInfo.Children.Add(Text(city?.Name ?? "Weather", 13, strong: true));
         var weatherLink = ActionButton(weather == null ? "Set location" : "View forecast",
             () => ShowPage(DashboardPage.Weather));
         weatherLink.Padding = new Thickness(7, 4, 7, 4);
         weatherLink.Margin = new Thickness(0, 5, 0, 0);
         weatherLink.HorizontalAlignment = HorizontalAlignment.Left;
-        forecast.Children.Add(weatherLink);
+        weatherInfo.Children.Add(weatherLink);
+        forecast.Children.Add(weatherInfo);
 
         var overview = new StackPanel();
         var details = ActionButton("Details", () => ShowPage(DashboardPage.Stats));
         details.Padding = new Thickness(7, 4, 7, 4);
-        overview.Children.Add(CardHeading("System stats", 0xE9D9, green, details));
-        var cpu = MetricBar(overview, "CPU", green);
-        var memory = MetricBar(overview, "Memory", accent);
-        var sections = Columns(1, 1, 1.35);
-        Put(sections, date, 0);
-        Put(sections, OverviewSection(forecast), 1);
-        Put(sections, OverviewSection(overview), 2);
-        Put(grid, Card(sections), 1, 0, 2);
+        details.VerticalAlignment = VerticalAlignment.Center;
+        var readings = new DockPanel { VerticalAlignment = VerticalAlignment.Center };
+        DockPanel.SetDock(details, Dock.Right);
+        readings.Children.Add(details);
+        var meters = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        meters.Children.Add(OverviewGauge("CPU", green, out var cpu));
+        meters.Children.Add(OverviewGauge("RAM", accent, out var memory));
+        readings.Children.Add(meters);
+        overview.Children.Add(readings);
+        var sections = Columns(1, 1.1, 1.18);
+        Put(sections, Card(date), 0);
+        Put(sections, Card(forecast), 1);
+        Put(sections, Card(overview), 2);
+        Put(grid, sections, 1, 0, 2);
         updatePage = () =>
         {
             updateMedia();
             var current = DateTime.Today;
             dateLabel.Text = current.ToString("dddd");
-            dateNumber.Text = current.ToString("d MMM");
+            month.Text = current.ToString("MMM").ToUpperInvariant();
+            dateNumber.Text = current.Day.ToString();
             var snapshot = ReadMetrics();
-            cpu(snapshot.Cpu, $"{snapshot.Cpu:0}%");
-            memory(snapshot.Memory, $"{snapshot.Memory:0}%");
+            cpu(snapshot.Cpu);
+            memory(snapshot.Memory);
         };
         var content = new StackPanel();
         homeFavorites = new WrapPanel { Margin = new Thickness(1, 0, 0, 4) };
@@ -82,12 +106,6 @@ public partial class DashboardWindow
         content.Children.Add(homeFavorites);
         content.Children.Add(grid);
         return content;
-
-        Border OverviewSection(UIElement child) => new()
-        {
-            BorderBrush = AssistantRule, BorderThickness = new Thickness(1, 0, 0, 0),
-            Padding = new Thickness(12, 0, 0, 0), Child = child
-        };
     }
 
     private UIElement MediaPage()
@@ -110,22 +128,27 @@ public partial class DashboardWindow
 
     private void ShowAudioWidget()
     {
-        var (window, content, _) = CreateDockPanel("Audio switchboard", "", 524, 0xE767, purple, widget: true);
-        var playbackCard = MediaCard(true, out var refresh, widget: true);
-        playbackCard.Margin = new Thickness(0, 0, 0, 7);
-        content.Children.Add(playbackCard);
-        content.Children.Add(MixerCard());
-        updateAudioWidget = refresh;
-        window.Closed += (_, _) => updateAudioWidget = null;
-        refresh();
+        var (window, content, cancellation) = CreateDockPanel("Audio switchboard", "", 524, 0xE767, purple, widget: true);
+        BuildPinnedAudio(content, cancellation);
         window.Show();
     }
 
-    private Border MediaCard(bool expanded, out Action refresh, bool widget = false)
+    private void BuildPinnedAudio(StackPanel content, System.Threading.CancellationToken cancellation, bool compact = false)
+    {
+        var playbackCard = MediaCard(!compact, out var refresh, widget: true);
+        playbackCard.Margin = new Thickness(0, 0, 0, 7);
+        content.Children.Add(playbackCard);
+        content.Children.Add(compact ? OutputSlider() : MixerCard());
+        updateAudioWidget = refresh;
+        cancellation.Register(() => updateAudioWidget = null);
+        refresh();
+    }
+
+    private Border MediaCard(bool expanded, out Action refresh, bool widget = false, bool overview = false)
     {
         var body = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var row = new DockPanel { LastChildFill = true };
-        var artSize = expanded ? 60 : 43;
+        var artSize = overview ? 76 : expanded ? 66 : 45;
         var artwork = new Image { Width = artSize, Height = artSize, Stretch = Stretch.UniformToFill };
         var icon = DockGlyph(0xE8D6, 22, purple);
         icon.HorizontalAlignment = HorizontalAlignment.Center;
@@ -156,8 +179,9 @@ public partial class DashboardWindow
             transport.Children.Add(lyrics);
         }
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) };
-        var title = Text("Nothing playing", expanded ? 19 : 14, strong: true);
+        var title = Text("Nothing playing", expanded || overview ? 17 : 14, strong: true);
         var artist = Text("Windows media", 11, subdued);
+        title.TextTrimming = artist.TextTrimming = TextTrimming.CharacterEllipsis;
         labels.Children.Add(Text("Now playing", 10, purple, true));
         labels.Children.Add(title);
         labels.Children.Add(artist);
@@ -279,16 +303,24 @@ public partial class DashboardWindow
             (0xE706, "Display", "ms-settings:display")
         })
         {
-            var button = AccentButton(label, symbol, accent, () => OpenTarget(target));
+            var button = AccentButton(label, symbol, accent, () =>
+            {
+                if (label is "Wi-Fi" or "Bluetooth")
+                    ShowPage(DashboardPage.Controls);
+                else
+                    OpenTarget(target);
+            });
             button.Padding = new Thickness(6, 4, 6, 4);
             button.Margin = new Thickness(0, 0, 3, 3);
             row.Children.Add(button);
         }
         controls.Children.Add(row);
-        var slider = OutputSlider();
-        slider.Margin = new Thickness(0, 3, 0, 0);
-        controls.Children.Add(slider);
-        controls.Children.Add(Text("Output volume", 10, subdued));
+        var volumeRow = new DockPanel { Margin = new Thickness(0, 4, 0, 0) };
+        var speaker = DockGlyph(0xE767, 13, accent);
+        speaker.Margin = new Thickness(0, 0, 7, 0);
+        volumeRow.Children.Add(speaker);
+        volumeRow.Children.Add(OutputSlider());
+        controls.Children.Add(volumeRow);
         return Card(controls, accent);
     }
 
@@ -297,13 +329,15 @@ public partial class DashboardWindow
         var grid = Columns(1, 1);
         foreach (var (index, label, symbol, tint, settings) in new[]
         {
-            (0, "Network", 0xE701, accent, new[] { ("Wi-Fi", "network-wifi"), ("Ethernet", "network-ethernet"), ("Bluetooth", "bluetooth") }),
+            (0, "Network", 0xE701, accent, new[] { ("Wi-Fi networks", "network-wifi"), ("Ethernet", "network-ethernet"), ("Bluetooth devices", "bluetooth") }),
             (1, "Display", 0xE706, amber, new[] { ("Display", "display"), ("Night light", "nightlight"), ("Accessibility", "easeofaccess") }),
             (2, "Windows alerts", 0xEA8F, pink, new[] { ("Notification settings", "notifications"), ("Windows Focus", "quiethours") })
         })
         {
             var stack = new StackPanel();
             stack.Children.Add(CardHeading(label, symbol, tint));
+            if (index == 0)
+                stack.Children.Add(RadioControls());
             var links = new WrapPanel();
             foreach (var (name, path) in settings)
             {
@@ -327,16 +361,52 @@ public partial class DashboardWindow
         return grid;
     }
 
+    private UIElement RadioControls()
+    {
+        var body = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
+        var row = Columns(1, 1);
+        var status = Text("", 11, AssistantSecondary);
+        status.TextWrapping = TextWrapping.Wrap;
+        body.Children.Add(row);
+        body.Children.Add(status);
+        foreach (var (kind, column) in new[] { (RadioKind.WiFi, 0), (RadioKind.Bluetooth, 1) })
+        {
+            var name = DockRadios.Label(kind);
+            var toggle = ActionButton(name + " · Checking");
+            toggle.IsEnabled = false;
+            var on = false;
+            toggle.Loaded += async (_, _) => await Refresh();
+            toggle.Click += async (_, _) =>
+            {
+                toggle.IsEnabled = false;
+                try { status.Text = await DockRadios.SetAsync(kind, !on, lifetime.Token); }
+                catch (OperationCanceledException) { }
+                catch (Exception error) when (DockActions.IsActionError(error)) { status.Text = error.Message; }
+                finally { await Refresh(); }
+            };
+            Put(row, toggle, column);
+
+            async Task Refresh()
+            {
+                var state = "unavailable";
+                try { state = await DockRadios.StateAsync(kind, lifetime.Token); }
+                catch (OperationCanceledException) { }
+                catch (Exception error) when (DockActions.IsActionError(error)) { }
+                on = state == "On";
+                toggle.Content = name + " · " + state;
+                toggle.IsEnabled = state is not ("unavailable" or "Disabled");
+                AutomationProperties.SetName(toggle, $"{name}. {state}. Turn {(on ? "off" : "on")}");
+            }
+        }
+        return body;
+    }
+
     private Slider OutputSlider()
     {
         var slider = Range("Output volume", 100, 0);
         try
         {
-            AudioDevice(device =>
-            {
-                using var endpoint = device.AudioEndpointVolume;
-                slider.Value = endpoint.MasterVolumeLevelScalar * 100;
-            });
+            slider.Value = DockAudio.Output().Percent;
         }
         catch (COMException)
         {
@@ -348,11 +418,7 @@ public partial class DashboardWindow
         {
             try
             {
-                AudioDevice(device =>
-                {
-                    using var endpoint = device.AudioEndpointVolume;
-                    endpoint.MasterVolumeLevelScalar = (float)(e.NewValue / 100);
-                });
+                DockAudio.SetVolume(e.NewValue);
             }
             catch (COMException) { slider.IsEnabled = false; }
         };
@@ -484,7 +550,14 @@ public partial class DashboardWindow
             var label = Text(name, 11, subdued, true);
             label.VerticalAlignment = VerticalAlignment.Center;
             label.ToolTip = output.Name;
-            Put(row, label, 0);
+            label.TextTrimming = TextTrimming.CharacterEllipsis;
+            var labels = new StackPanel();
+            labels.Children.Add(label);
+            var endpointLabel = Text(output.Name, 10, subdued);
+            endpointLabel.TextTrimming = TextTrimming.CharacterEllipsis;
+            endpointLabel.ToolTip = output.Name;
+            labels.Children.Add(endpointLabel);
+            Put(row, labels, 0);
             var level = Range(name + " volume", 100, session.SimpleAudioVolume.Volume * 100);
             level.ValueChanged += (_, e) =>
             {
@@ -527,19 +600,42 @@ public partial class DashboardWindow
                     choice.ToolTip = "Per-app routing is unavailable on this build.";
                 }
                 choice.SelectedItem = selected ?? devices.FirstOrDefault(device => device.Id == output.Id);
-                choice.SelectionChanged += (_, _) =>
+                choice.SelectionChanged += async (_, _) =>
                 {
                     if (choice.SelectedItem is not AudioOutput target)
                         return;
+                    choice.IsEnabled = false;
                     try
                     {
-                        AudioRouting.RouteApp(pid, string.IsNullOrEmpty(target.Id) ? null : target.Id);
-                        status.Text = $"{name} routed to {target.Name}.";
+                        var explicitOutput = string.IsNullOrEmpty(target.Id) ? null : target.Id;
+                        var path = AudioRouting.RouteApplication(pid, explicitOutput);
+                        var deviceId = explicitOutput;
+                        if (deviceId == null)
+                            AudioDevice(device => deviceId = device.ID);
+                        status.Text = $"Checking {name} on {target.Name}…";
+                        for (var attempt = 0; attempt < 8 && choice.IsLoaded; attempt++)
+                        {
+                            var actual = AudioRouting.PlayingOutputs(pid, path);
+                            if (actual.Length == 0 || actual.All(id => id == deviceId))
+                            {
+                                Reload();
+                                status.Text = actual.Length == 0
+                                    ? $"{name}: {target.Name} saved for the next playback."
+                                    : $"{name} is playing on {target.Name}.";
+                                return;
+                            }
+                            await Task.Delay(450, lifetime.Token);
+                        }
+                        if (choice.IsLoaded)
+                            status.Text = $"{name}: {target.Name} saved. Resume playback or reload the player to move its open stream.";
                     }
-                    catch (Exception error) when (error is COMException or InvalidCastException or UnauthorizedAccessException)
+                    catch (OperationCanceledException) { }
+                    catch (Exception error) when (DockActions.IsActionError(error) || error is InvalidCastException)
                     {
-                        status.Text = "Windows could not route this app.";
+                        Reload();
+                        status.Text = $"Windows could not route {name}: {error.Message}";
                     }
+                    finally { choice.IsEnabled = true; }
                 };
                 Put(row, choice, 2);
             }

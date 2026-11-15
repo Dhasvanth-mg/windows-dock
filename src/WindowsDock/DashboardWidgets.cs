@@ -12,7 +12,6 @@ namespace WindowsDock;
 public partial class DashboardWindow
 {
     private List<WorkspaceShortcut>? workspaceShortcuts;
-    private HashSet<string>? favoriteWidgets;
     private TextBox? commandInput;
     private WrapPanel? homeFavorites;
 
@@ -20,106 +19,180 @@ public partial class DashboardWindow
     {
         var (window, content, _) = CreateDockPanel("Widgets", "", 492, 0, AssistantInk,
             portrait: DockTaskbar.IconBadge(), section: DockSection.Widgets);
-        var searchRow = new DockPanel();
-        var keyboard = new Border
-        {
-            BorderBrush = AssistantRule, BorderThickness = new Thickness(1),
-            Padding = new Thickness(6, 2, 6, 2), CornerRadius = new CornerRadius(4), Child = Text("Ctrl+K", 10, AssistantSecondary)
-        };
-        DockPanel.SetDock(keyboard, Dock.Right);
-        searchRow.Children.Add(keyboard);
-        searchRow.Children.Add(IconLabel("Search apps and actions", 0xE721, AssistantSecondary));
-        var search = MakeButton(searchRow, "Search apps and actions", ShowCommandPalette);
-        ToolTipService.SetIsEnabled(search, false);
-        search.HorizontalAlignment = HorizontalAlignment.Stretch;
-        search.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         var toolbar = Columns(3, 1);
         toolbar.Margin = new Thickness(0, 0, 0, 10);
+        var search = MakeButton(IconLabel("Search apps and actions", 0xE721, AssistantSecondary),
+            "Search apps and actions", ShowCommandPalette);
+        search.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         Put(toolbar, search, 0);
-        var dashboard = MakeButton("Dashboard", "Dashboard", OpenMainDashboard);
-        Put(toolbar, dashboard, 1);
+        Put(toolbar, MakeButton("Dashboard", "Dashboard", OpenMainDashboard), 1);
         content.Children.Add(toolbar);
-        var tiles = new StackPanel();
-        content.Children.Add(tiles);
+
         var widgets = WidgetActions();
-        RenderWidgets();
+        var layout = DockWidgetLayout.Load();
+        var pinPicker = new ComboBox { ItemsSource = widgets, DisplayMemberPath = nameof(WidgetAction.Label),
+            SelectedItem = widgets.First(item => item.Id == layout.Pinned), MinWidth = 145 };
+        AutomationProperties.SetName(pinPicker, "Pinned widget");
+        var pinRow = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+        var expand = IconButton(0xE8A7, "Open pinned widget", () => (pinPicker.SelectedItem as WidgetAction)?.Action());
+        expand.Margin = new Thickness(4, 0, 0, 0);
+        DockPanel.SetDock(expand, Dock.Right);
+        pinRow.Children.Add(expand);
+        DockPanel.SetDock(pinPicker, Dock.Right);
+        pinRow.Children.Add(pinPicker);
+        pinRow.Children.Add(IconLabel("Pinned", 0xE718, AssistantSecondary));
+        content.Children.Add(pinRow);
+        var pinned = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            MaxHeight = Math.Clamp(window.Height * .28, 90, 180) };
+        content.Children.Add(new Border { Child = pinned, BorderBrush = AssistantRule, BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(9), Padding = new Thickness(7), Margin = new Thickness(0, 0, 0, 11) });
+        var favoritesHeading = Text("", 11, AssistantSecondary, true);
+        content.Children.Add(favoritesHeading);
+        var favorites = new StackPanel { Margin = new Thickness(0, 4, 0, 8) };
+        content.Children.Add(favorites);
+        var allHeading = Text("Other widgets", 11, AssistantSecondary, true);
+        content.Children.Add(allHeading);
+        var catalog = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            MaxHeight = Math.Clamp(window.Height - 398, 75, 220), Margin = new Thickness(0, 4, 0, 0) };
+        content.Children.Add(catalog);
+        var status = Text("", 11, AssistantSecondary);
+        status.TextWrapping = TextWrapping.Wrap;
+        content.Children.Add(status);
+
+        System.Threading.CancellationTokenSource? mounted = null;
+        window.Closed += (_, _) => ReleasePinned();
+        pinPicker.SelectionChanged += (_, _) =>
+        {
+            if (pinPicker.SelectedItem is not WidgetAction selected || selected.Id == layout.Pinned)
+                return;
+            try
+            {
+                layout = DockWidgetLayout.Pin(selected.Id);
+                status.Text = "";
+                MountPinned();
+                RenderShortcuts();
+                RenderHomeFavorites();
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                pinPicker.SelectedItem = widgets.First(item => item.Id == layout.Pinned);
+                status.Text = "Could not save the pinned widget.";
+            }
+        };
+
+        MountPinned();
+        RenderShortcuts();
         window.Loaded += (_, _) => search.Focus();
         window.Show();
 
-        void RenderWidgets(string? focused = null)
+        void ReleasePinned()
         {
-            tiles.Children.Clear();
-            var favorites = FavoriteWidgets();
-            var pinned = widgets.Where(item => favorites.Contains(item.Id)).ToArray();
-            if (pinned.Length > 0)
-                AddGroup(pinned, "Favorites");
-            AddGroup(widgets.Where(item => !favorites.Contains(item.Id)).ToArray(), pinned.Length > 0 ? "Other widgets" : null);
+            mounted?.Cancel();
+            mounted?.Dispose();
+        }
 
-            void AddGroup(WidgetAction[] group, string? title)
+        void MountPinned()
+        {
+            ReleasePinned();
+            mounted = new();
+            var body = new StackPanel();
+            pinned.Content = body;
+            BuildPinnedWidget(layout.Pinned, window, body, mounted.Token);
+            pinned.ScrollToTop();
+        }
+
+        void RenderShortcuts(string? focused = null)
+        {
+            favorites.Children.Clear();
+            favoritesHeading.Text = $"Favorites   {layout.Favorites.Length}/{DockWidgetLayout.FavoriteLimit}";
+            if (layout.Favorites.Length == 0)
+                favorites.Children.Add(Text("Star a widget below to move it here.", 11, AssistantSecondary));
+            else
+                favorites.Children.Add(Group(layout.Favorites.Select(id => widgets.First(item => item.Id == id)), true));
+            catalog.Content = Group(widgets.Where(item => item.Id != layout.Pinned && !layout.Favorites.Contains(item.Id)), false);
+
+            Grid Group(IEnumerable<WidgetAction> group, bool favorite)
             {
-                if (group.Length == 0)
-                    return;
-                if (title != null)
-                {
-                    var heading = Text(title, 11, AssistantSecondary, true);
-                    heading.Margin = new Thickness(1, 1, 0, 5);
-                    tiles.Children.Add(heading);
-                }
                 var items = Columns(1, 1);
-                var row = 0;
-                var column = 0;
+                var index = 0;
                 foreach (var item in group)
                 {
-                    var isFavorite = favorites.Contains(item.Id);
-                    var wide = item.Wide && !isFavorite;
-                    if (wide && column != 0)
+                    var button = favorite
+                        ? MakeButton(IconLabel(item.Label, item.Icon, item.Color), item.Label, item.Action)
+                        : WidgetTile(item, showArrow: false);
+                    button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+                    button.Padding = new Thickness(8, favorite ? 7 : 5, 33, favorite ? 7 : 5);
+                    if (!favorite)
                     {
-                        row++;
-                        column = 0;
+                        button.Background = Brushes.Transparent;
+                        button.BorderBrush = Brushes.Transparent;
                     }
-                    var button = WidgetTile(item, showArrow: false);
                     ToolTipService.SetIsEnabled(button, false);
-                    button.Background = Brushes.Transparent;
-                    button.BorderBrush = Brushes.Transparent;
-                    var star = IconButton(isFavorite ? 0xE735 : 0xE734,
-                        (isFavorite ? "Remove favorite " : "Favorite ") + item.Label, () =>
+                    var star = IconButton(favorite ? 0xE735 : 0xE734,
+                        (favorite ? "Remove favorite " : "Favorite ") + item.Label, () =>
                         {
-                            if (!favorites.Remove(item.Id))
-                                favorites.Add(item.Id);
-                            WriteJson("widget-favorites.json", favorites);
-                            RenderWidgets(item.Id);
-                            if (currentPage == DashboardPage.Home)
+                            try
+                            {
+                                layout = DockWidgetLayout.SetFavorite(item.Id, !favorite);
+                                status.Text = !favorite && !layout.Favorites.Contains(item.Id)
+                                    ? "Remove a favorite to make room." : "";
+                                RenderShortcuts(item.Id);
                                 RenderHomeFavorites();
+                            }
+                            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                            {
+                                status.Text = "Could not save favorites.";
+                            }
                         });
-                    star.Foreground = isFavorite ? amber : AssistantSecondary;
-                    ((TextBlock)star.Content).Foreground = star.Foreground;
-                    ToolTipService.SetIsEnabled(star, false);
-                    star.Margin = new Thickness(0, 0, 4, 0);
-                    var tile = new Grid();
-                    tile.Children.Add(button);
+                    ((TextBlock)star.Content).Foreground = favorite ? amber : AssistantSecondary;
                     star.HorizontalAlignment = HorizontalAlignment.Right;
-                    tile.Children.Add(star);
-                    button.Padding = new Thickness(8, 5, 33, 5);
-                    var divider = new Border { BorderThickness = new Thickness(0, 0, 0, 1),
-                        BorderBrush = AssistantRule, Padding = new Thickness(0, 0, 0, 3), Child = tile };
-                    Put(items, divider, row, column, wide ? 2 : 1);
+                    star.VerticalAlignment = VerticalAlignment.Center;
+                    star.Margin = new Thickness(0, 0, 3, 0);
+                    var row = new Grid();
+                    row.Children.Add(button);
+                    row.Children.Add(star);
                     if (item.Id == focused)
                         window.Dispatcher.BeginInvoke(() => star.Focus(), System.Windows.Threading.DispatcherPriority.Input);
-                    if (wide || column == 1)
-                    {
-                        row++;
-                        column = 0;
-                    }
-                    else
-                        column++;
+                    Put(items, row, index / 2, index % 2);
+                    index++;
                 }
-                items.Margin = new Thickness(0, 0, 0, 6);
-                tiles.Children.Add(items);
+                return items;
             }
         }
     }
 
-    private HashSet<string> FavoriteWidgets() => favoriteWidgets ??= ReadJson<HashSet<string>>("widget-favorites.json") ?? [];
+    private void BuildPinnedWidget(string id, Window window, StackPanel content, System.Threading.CancellationToken cancellation)
+    {
+        switch (id)
+        {
+            case "audio": BuildPinnedAudio(content, cancellation, compact: true); break;
+            case "audio-presets": BuildPinnedAudioPresets(content); break;
+            case "meetings": BuildPinnedMeetings(window, content, cancellation); break;
+            case "clipboard": BuildPinnedClipboard(content, cancellation); break;
+            case "github": BuildPinnedGitHub(content, cancellation); break;
+            case "workspaces": BuildPinnedWorkspaces(window, content); break;
+            case "downloads": BuildPinnedDownloads(window, content, cancellation); break;
+            case "focus": BuildPinnedFocus(content, cancellation); break;
+            case "notifications": BuildPinnedNotifications(content, cancellation); break;
+            case "activity": BuildPinnedActivity(window, content, cancellation); break;
+            case "jobs": BuildPinnedJobs(window, content, cancellation); break;
+            case "assistant":
+                var grid = Columns(1, 1);
+                for (var index = 0; index < AssistantPersonas.All.Length; index++)
+                {
+                    var slot = index;
+                    var persona = AssistantPersonas.All[slot];
+                    var button = MakeButton(IconLabel(persona.Label, 0xEAB7, PersonaTint(persona)), persona.Label,
+                        () => OpenAssistantConversation(slot));
+                    button.HorizontalContentAlignment = HorizontalAlignment.Left;
+                    Put(grid, button, slot / 2, slot % 2);
+                }
+                content.Children.Add(grid);
+                break;
+        }
+    }
+
+    private static string[] FavoriteWidgets() => DockWidgetLayout.Load().Favorites;
 
     private void RenderHomeFavorites()
     {
@@ -149,7 +222,8 @@ public partial class DashboardWindow
         new("Focus timer", "Sessions and breaks", "timer break do not disturb", 0xE916, green, ShowFocusWidget, "focus"),
         new("Notifications", "Review and summarize alerts", "alerts summary digest", 0xEA8F, pink, ShowNotificationWidget, "notifications"),
         new("Assistant", "Choose a character", "AI model provider message research planning coding casual", 0xEAB7, purple, ShowAssistantPicker, "assistant"),
-        new("Activity inbox", "Replies, approvals, and limits", "unread status finished quota", 0xEA8F, pink, ShowActivityInbox, "activity")
+        new("Activity inbox", "Replies, approvals, and limits", "unread status finished quota", 0xEA8F, pink, ShowActivityInbox, "activity"),
+        new("Assistant jobs", "Running tasks and saved results", "background delegate coding writing Scribe research", 0xE823, amber, ShowAssistantJobs, "jobs")
     ];
 
     private Button WidgetTile(WidgetAction widget, bool showArrow = true)
@@ -357,7 +431,6 @@ public partial class DashboardWindow
         agentPanel?.Close();
         selectedAgent = (chat.Provider, chat.Id);
         agentSetup = false;
-        showAgentList = true;
         agentFilter = null;
         agentSlot = -1;
         RefreshAgentPage();
@@ -395,6 +468,12 @@ public partial class DashboardWindow
     private void ShowWorkspaceWidget()
     {
         var (window, content, _) = CreateDockPanel("Workspaces", "", 470, 0xE8B7, amber, widget: true);
+        BuildPinnedWorkspaces(window, content);
+        window.Show();
+    }
+
+    private void BuildPinnedWorkspaces(Window window, StackPanel content)
+    {
         var list = new StackPanel();
         var editor = new StackPanel { Visibility = Visibility.Collapsed };
         var message = Text("", 11, subdued);
@@ -407,7 +486,6 @@ public partial class DashboardWindow
         content.Children.Add(add);
         content.Children.Add(editor);
         Render();
-        window.Show();
 
         void Render()
         {

@@ -209,6 +209,22 @@ public partial class DashboardWindow
             }));
         }
         general.Children.Add(actions);
+        var signIn = ActionButton(DockStartup.Enabled() ? "Start at sign-in: On" : "Start at sign-in: Off");
+        signIn.HorizontalAlignment = HorizontalAlignment.Left;
+        signIn.Margin = new Thickness(0, 8, 0, 0);
+        signIn.Click += (_, _) =>
+        {
+            try
+            {
+                var enabled = !DockStartup.Enabled();
+                DockStartup.Set(enabled, trayMode);
+                var label = enabled ? "Start at sign-in: On" : "Start at sign-in: Off";
+                signIn.Content = label;
+                System.Windows.Automation.AutomationProperties.SetName(signIn, label);
+            }
+            catch (Exception error) when (DockActions.IsActionError(error)) { ShowOwnedMessage(error.Message); }
+        };
+        general.Children.Add(signIn);
         Put(row, Card(general, purple), 0);
         var power = new StackPanel();
         power.Children.Add(CardHeading("Power and display", 0xE7E8, amber));

@@ -40,7 +40,19 @@ internal static class CodingSummaryClient
         return File.Exists(installed) ? installed : CodexUsageClient.FindOnPath("claude.exe");
     }
 
-    internal static async Task<string> SummarizeAsync(AssistantProvider provider, string model, string instruction, string text,
+    internal static Task<string> SummarizeAsync(AssistantProvider provider, string model, string instruction, string text,
+        CancellationToken cancellation) => RunAsync(provider, model,
+        instruction + " Return only the summary. Do not call tools or read files.",
+        JsonSerializer.Serialize(new { sourceText = text }, InputJson), cancellation);
+
+    internal static Task<string> ChatAsync(AssistantProvider provider, string model, string instruction,
+        IReadOnlyList<(bool User, string Text)> turns, CancellationToken cancellation) =>
+        RunAsync(provider, model, instruction + " The input is the conversation in JSON. Reply to its last turn. " +
+            "Use only the app protocol above for requested actions. Do not call CLI tools or read files.",
+            JsonSerializer.Serialize(turns.Select(item => new { role = item.User ? "user" : "assistant", text = item.Text }), InputJson),
+            cancellation);
+
+    private static async Task<string> RunAsync(AssistantProvider provider, string model, string instruction, string input,
         CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();
@@ -65,16 +77,15 @@ internal static class CodingSummaryClient
                 start.ArgumentList.Add(option);
             if (model.Length != 0)
                 start.ArgumentList.Add("--model=" + model);
-            const string noTools = "Return only the summary. Do not call tools or read files.";
             if (codex)
                 start.ArgumentList.Add("-");
             else
             {
                 start.ArgumentList.Add("--system-prompt");
-                start.ArgumentList.Add(instruction + " " + noTools);
+                start.ArgumentList.Add(instruction);
             }
-            var source = JsonSerializer.Serialize(new { sourceText = text }, InputJson);
-            var input = codex ? $"{instruction} {noTools}\n\nSource material:\n{source}" : source;
+            if (codex)
+                input = $"{instruction}\n\nInput:\n{input}";
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
             timeout.CancelAfter(TimeSpan.FromSeconds(75));

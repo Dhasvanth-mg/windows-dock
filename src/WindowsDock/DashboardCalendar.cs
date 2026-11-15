@@ -12,11 +12,11 @@ public partial class DashboardWindow
 {
     private readonly DispatcherTimer focusTicker = new() { Interval = TimeSpan.FromSeconds(1) };
     private DateTimeOffset? focusEnds;
+    private DateTime focusStamp;
     private int focusMinutes = 25;
     private DateTime calendarWeek = DateTime.Today;
     private DateTime reminderDate = DateTime.Today;
     private bool showReminders;
-    private List<Reminder>? reminders;
     private Action? updateFocusWidget;
 
     private UIElement CalendarPage()
@@ -133,12 +133,18 @@ public partial class DashboardWindow
 
     private void ShowFocusWidget()
     {
-        var (window, content, _) = CreateDockPanel("Focus timer", "", 406, 0xE916, green, widget: true);
+        var (window, content, cancellation) = CreateDockPanel("Focus timer", "", 406, 0xE916, green, widget: true);
+        BuildPinnedFocus(content, cancellation);
+        window.Show();
+    }
+
+    private void BuildPinnedFocus(StackPanel content, System.Threading.CancellationToken cancellation)
+    {
+        RefreshFocusState();
         content.Children.Add(FocusCard(out var update, title: false));
         updateFocusWidget = update;
-        window.Closed += (_, _) => updateFocusWidget = null;
+        cancellation.Register(() => updateFocusWidget = null);
         update();
-        window.Show();
     }
 
     private Border FocusCard(out Action update, bool title = true)
@@ -241,7 +247,7 @@ public partial class DashboardWindow
 
     private UIElement RemindersContent()
     {
-        reminders ??= ReadJson<List<Reminder>>("reminders.json") ?? [];
+        var reminders = DockReminders.Load();
         var grid = Columns(1.35, 1);
         var compose = new StackPanel();
         compose.Children.Add(CardHeading("Add reminder", 0xEA8F, amber));
@@ -265,9 +271,12 @@ public partial class DashboardWindow
                 return;
             }
             reminderDate = chosen.Date;
-            reminders.Add(new Reminder(input.Text.Trim(), reminderDate));
-            WriteJson("reminders.json", reminders);
-            ShowPage(DashboardPage.Calendar);
+            try
+            {
+                DockReminders.Add(new(input.Text.Trim(), reminderDate));
+                ShowPage(DashboardPage.Calendar);
+            }
+            catch (Exception error) when (DockActions.IsActionError(error)) { ShowOwnedMessage(error.Message); }
         });
         add.Background = AgentArt.Wash(amber, 35);
         add.BorderBrush = AgentArt.Wash(amber, 65);
@@ -283,9 +292,12 @@ public partial class DashboardWindow
             var row = new DockPanel { Margin = new Thickness(0, 5, 0, 0) };
             var done = IconButton(0xE73E, "Complete " + item.Title, () =>
             {
-                reminders.Remove(item);
-                WriteJson("reminders.json", reminders);
-                ShowPage(DashboardPage.Calendar);
+                try
+                {
+                    DockReminders.Change(item, null);
+                    ShowPage(DashboardPage.Calendar);
+                }
+                catch (Exception error) when (DockActions.IsActionError(error)) { ShowOwnedMessage(error.Message); }
             });
             DockPanel.SetDock(done, Dock.Right);
             row.Children.Add(done);
@@ -300,20 +312,33 @@ public partial class DashboardWindow
 
     private void InitializeFocus()
     {
-        var saved = ReadJson<FocusState>("focus.json");
-        if (saved is { Minutes: >= 1 and <= 120 })
-        {
-            focusMinutes = saved.Minutes;
-            focusEnds = saved.Ends > DateTimeOffset.Now ? saved.Ends : null;
-        }
+        RefreshFocusState();
         focusTicker.Tick += (_, _) =>
         {
+            RefreshFocusState();
             CheckFocusTimer();
             updateFocusWidget?.Invoke();
         };
         if (focusEnds.HasValue)
             focusTicker.Start();
         Closed += (_, _) => focusTicker.Stop();
+    }
+
+    private void RefreshFocusState()
+    {
+        DateTime stamp;
+        try { stamp = File.GetLastWriteTimeUtc(DataPath("focus.json")); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return; }
+        if (focusStamp == stamp)
+            return;
+        focusStamp = stamp;
+        var saved = ReadJson<FocusState>("focus.json");
+        focusMinutes = saved is { Minutes: >= 1 and <= 120 } ? saved.Minutes : 25;
+        focusEnds = saved?.Ends > DateTimeOffset.Now ? saved.Ends : null;
+        if (focusEnds.HasValue)
+            focusTicker.Start();
+        else
+            focusTicker.Stop();
     }
 
     private void CheckFocusTimer()

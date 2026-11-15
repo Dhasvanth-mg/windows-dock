@@ -14,8 +14,14 @@ public partial class DashboardWindow
 
     private void ShowClipboardWidget()
     {
-        clips ??= ReadJson<List<ClipItem>>("clipboard-pins.json") ?? [];
         var (window, content, cancellation) = CreateDockPanel("Clipboard and files", "", 472, 0xE77F, green, widget: true);
+        BuildPinnedClipboard(content, cancellation);
+        window.Show();
+    }
+
+    private void BuildPinnedClipboard(StackPanel content, System.Threading.CancellationToken cancellation)
+    {
+        clips ??= ReadJson<List<ClipItem>>("clipboard-pins.json") ?? [];
         var controls = new WrapPanel();
         var list = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
         var status = Text("", 11, subdued);
@@ -32,7 +38,6 @@ public partial class DashboardWindow
         content.Children.Add(status);
         content.Children.Add(list);
         Render();
-        window.Show();
         _ = AddHistoryAsync();
 
         async System.Threading.Tasks.Task AddHistoryAsync()

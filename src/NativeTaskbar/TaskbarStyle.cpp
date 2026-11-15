@@ -32,6 +32,7 @@ TaskbarStyle::TaskbarStyle(Grid const& root, winrt::handle const& dashboard, DWO
     : root(root), dashboard(dashboard.get()),
       launcherEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"OpenLauncher").c_str())),
       agentEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Agent").c_str())),
+      completionEvent(OpenEventW(SYNCHRONIZE, FALSE, SessionName(controllerPid, L"AgentCompletion").c_str())),
       agentMapping(OpenFileMappingW(FILE_MAP_WRITE, FALSE, SessionName(controllerPid, L"AgentGrid").c_str())),
       agentState(agentMapping ? static_cast<AgentGridState*>(MapViewOfFile(agentMapping.get(), FILE_MAP_WRITE,
           0, 0, sizeof(AgentGridState))) : nullptr)
@@ -120,9 +121,9 @@ void TaskbarStyle::AddChrome()
     chrome.Name(L"WindowsDockGlass");
     chrome.IsHitTestVisible(false);
     chrome.CornerRadius({18, 18, 18, 18});
-    chrome.Margin({0, 2, 0, 4});
     chrome.BorderThickness({1, 1, 1, 1});
-    chrome.BorderBrush(Solid(46, 235, 235, 235));
+    chromeRim = Solid(46, 235, 235, 235);
+    chrome.BorderBrush(chromeRim);
     media::AcrylicBrush glass;
     glass.BackgroundSource(media::AcrylicBackgroundSource::Backdrop);
     glass.TintColor(Color{255, 24, 24, 24});
@@ -151,6 +152,26 @@ void TaskbarStyle::AddChrome()
     divider.IsHitTestVisible(false);
     Grid::SetColumn(divider, 2);
     root.Children().Append(divider);
+}
+
+void TaskbarStyle::PulseCompletion()
+{
+    if (!chromeRim || !agentMotion)
+        return;
+    namespace motion = media::Animation;
+    if (completionPulse)
+        completionPulse.Stop();
+    motion::ColorAnimation glow;
+    glow.EnableDependentAnimation(true);
+    glow.To(winrt::box_value(Color{225, 164, 247, 201}).as<winrt::Windows::Foundation::IReference<Color>>());
+    glow.Duration(xaml::Duration{std::chrono::milliseconds(440), xaml::DurationType::TimeSpan});
+    glow.AutoReverse(true);
+    glow.FillBehavior(motion::FillBehavior::Stop);
+    motion::Storyboard::SetTarget(glow, chromeRim);
+    motion::Storyboard::SetTargetProperty(glow, L"Color");
+    completionPulse = motion::Storyboard();
+    completionPulse.Children().Append(glow);
+    completionPulse.Begin();
 }
 
 void TaskbarStyle::AddDashboardButton()
@@ -386,6 +407,8 @@ void TaskbarStyle::Restore() noexcept
         for (auto& animation : agentAnimations)
             if (animation)
                 animation.Stop();
+        if (completionPulse)
+            completionPulse.Stop();
         if (rootSize.value)
             root.SizeChanged(rootSize);
         if (traySize.value)

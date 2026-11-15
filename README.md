@@ -12,9 +12,9 @@ At the bottom of Widgets, Coding chats, and Assistants, click a section or drag 
 
 Use one taskbar appearance module at a time. The native controller exits if it cannot find the expected taskbar layout. Panels open just above the taskbar. Windows Dock holds auto-hide off while a panel is open and restores the previous setting when the panel closes. If Explorer restarts, run the controller again.
 
-The dashboard opens on demand and exits about 20 seconds after hiding. A smaller background process keeps coding chat status and active focus timers current. An API key typed into the dashboard lasts until that process exits. Use the Windows environment variables below if you want the key available on subsequent opens.
+The dashboard opens on demand and exits about 20 seconds after hiding once its jobs have finished. A smaller background process keeps coding chat status and active focus timers current. Dashboard tabs and popups keep their size while content changes and scrolls. Use **Settings → Start at sign-in** to start the controller automatically in the current mode.
 
-The dashboard includes media sessions and volume, Windows settings shortcuts, a calendar, local reminders, a focus timer, system statistics, a file shelf, a wallpaper picker, and weather. Forecasts use Open-Meteo. In the Audio tab, the lyrics button sends track metadata to LRCLIB to look up line-synced lyrics.
+The dashboard includes media sessions and volume, a calendar, local reminders, a focus timer, system statistics, a file shelf, a wallpaper picker, and weather. **Controls** toggles Wi-Fi and Bluetooth when Windows grants radio access. Use the network and Bluetooth device links to choose a network or pair a device. Weather remembers your chosen city or rounded Windows location and has a °F/°C switch. Forecasts use Open-Meteo. In the Audio tab, the lyrics button sends track metadata to LRCLIB to look up line-synced lyrics.
 
 ## Use with Hitodama
 
@@ -26,13 +26,13 @@ To switch back to Windows Dock's taskbar styling, exit tray mode from its icon, 
 
 ## Coding chats
 
-The four faces in the taskbar row animate as chats work, finish, or need attention. Click a face to open **Coding chats**. The panel brings an approval or recent reply to the front and keeps the chat list below it. **Assign slot** pins a chat, follows the latest matching chat in a project, or restores automatic selection. The grid reads local desktop metadata and turn events, so cloud-only chats may be missing. Character motion follows the Windows animation preference.
+The four faces in the taskbar row animate as chats work, finish, or need attention. A new completion briefly lights the taskbar rim and the open dock panel. Click a face to open **Coding chats**. The panel brings an approval or recent reply to the front and keeps the chat list below it. **Assign slot** pins a chat, follows the latest matching chat in a project, or restores automatic selection. The grid reads local desktop metadata and turn events, so cloud-only chats may be missing. Motion follows the Windows animation preference.
 
 Under **Connections and defaults**, enable the provider hooks for live updates. Turn on **Allow or deny individual requests here** before enabling the hooks if you want the dock to handle one-time tool approvals. Codex requires you to review the new hooks in **Settings → Hooks**. Start or resume a Claude Code session for the new settings to take effect. Each supported request shows its tool, working directory, and arguments. After 30 seconds the dock yields to the provider's own approval flow. The dock stores status metadata locally and removes the approval payload when the request ends.
 
 **Save defaults** updates the provider's user configuration and creates a backup. These are defaults for new sessions when the provider loads its settings. Existing chats can have their own model and thinking overrides. Use **Remove dock hooks** to remove this integration from a provider.
 
-**Summarize reply** previews the selected chat's latest completed local reply. Paste a reply when a transcript is unavailable. Review the editable text, then choose **Codex**, **Claude Code**, **Gemini**, or **Groq** and send it to that provider. Codex and Claude Code use their installed Windows CLI and saved sign-in. Leave the model blank to use the CLI's default. Gemini and Groq use an API key from the popup, `GEMINI_API_KEY`, or `GROQ_API_KEY`. Keys entered in the popup stay in memory for the current dock session.
+**Summarize reply** sends the latest completed local reply to the saved provider and model in one click. Open **Source & provider** to inspect or edit the source, change providers, or paste a reply when a transcript is unavailable. Codex and Claude Code use their installed Windows CLI and saved sign-in. Leave the model blank to use the CLI's default. Gemini and Groq accept a key from the popup, `GEMINI_API_KEY`, or `GROQ_API_KEY`. Keys entered in the popup are saved after a successful request using Windows account encryption. Use **Forget saved key** to remove a saved key.
 
 Reply and notification summaries remember the last selected provider and each provider's model across dock restarts. Clear the model field to restore the selected provider's default.
 
@@ -42,9 +42,9 @@ CLI summaries run in a temporary directory with model tools disabled and session
 
 ## Widgets
 
-Choose **Widgets** from the dashboard or the compact Coding chats panel. Star a widget to show it first in the launcher and add a shortcut to Overview. Press **Ctrl+K** in any dock panel to search open windows, chats, widgets, apps, workspaces, and settings. Type `window:` to limit the search to open windows on your current desktop. Use **↑** and **↓** to select a result, **Enter** to open it, and **Esc** to close the popup.
+Choose **Widgets** from the dashboard or the compact Coding chats panel. Pick one live widget from the **Pinned** menu, then star up to four other widgets for compact shortcuts below it and on Overview. If you pin a favorite, the previous pinned widget takes its shortcut slot. Press **Ctrl+K** in any dock panel to search open windows, chats, widgets, apps, workspaces, and settings. Type `window:` to limit the search to open windows on your current desktop. Use **↑** and **↓** to select a result, **Enter** to open it, and **Esc** to close the popup.
 
-- **Audio switchboard** changes the active output device and offers per-app volume and output routing. Some apps apply a new route when they reopen their audio stream.
+- **Audio switchboard** changes the default output and offers per-app volume and output routing across connected devices. Each mixer row shows the device hosting the audio session. If the app keeps an open stream on an older device, the mixer shows the saved route and prompts you to resume playback or reload the player. Windows routes at the app level.
 - **Audio presets** saves the default output, master volume, and available per-app levels and mute states. Reapply a preset after an absent app opens an audio session.
 - **Activity inbox** keeps the last three days of observed chat replies, approval requests, and limits. Open it from the bell in Coding chats or from Widgets. Mark all read saves your position.
 - **Meetings** reads a local `.ics` export and offers Join and Copy link for supported meeting providers.
@@ -55,6 +55,22 @@ Choose **Widgets** from the dashboard or the compact Coding chats panel. Star a 
 - **Focus timer** runs locally. **Windows Focus** opens the system controls for a focus session with Do Not Disturb.
 - **Notifications** reads recent Windows alerts when access is allowed. Select alerts and review the draft before sending it to any of the four summary providers.
 - **Assistant** opens the four-character picker. Choose **ChatGPT plan** and continue in your browser to authorize eligible plan usage. **Claude API** uses a Claude Console key. Gemini, Grok, and Groq use their own API keys. Configure them in the panel or with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or `GROQ_API_KEY`. On a usage error, you can switch to Gemini or Grok and resend the draft. Each send shares the current character's recent conversation with the selected provider.
+- **Assistant jobs** shows running tasks and saved results. Open a job to cancel it, copy its result, or save it as Markdown.
+
+### Assistant actions and background jobs
+
+Any of the four dock assistants can look up dock state, change volume or output, manage reminders and focus timers, switch radios, change startup settings, and arrange widgets. Review the exact proposed changes in chat and select **Apply changes**. The chat can use its enabled role-specific MCP connections when a lookup is useful. Codex CLI and Claude Code CLI are also available as chat providers with their local sign-in.
+
+Ask Orbit to hand off substantial work. Lark handles research, Scribe drafts and edits, Fern plans, and Bolt codes. Confirm the brief to start it, then open **Jobs** to check its progress after closing the chat. Bolt asks for a local Git workspace and uses the signed-in Codex CLI. A standalone CLI can run workspace commands. When the Windows command runner cannot start, Bolt can still read and edit project text files through the dock's workspace editor. The job result identifies shell checks that remain. Up to two jobs can run at once. A job that loses its dock process is marked interrupted the next time you open Jobs.
+
+External coding agents can connect over stdio. Replace the executable path with your installed path and add `--tray` after `--dock-mcp` when you use tray mode.
+
+```powershell
+codex mcp add windows-dock -- "C:\Path\To\WindowsDock.exe" --dock-mcp
+claude mcp add --scope user --transport stdio windows-dock -- "C:\Path\To\WindowsDock.exe" --dock-mcp
+```
+
+The MCP connection exposes dock status, supported edits, and the coding role's enabled lookup tools. An external write request opens a Windows confirmation with the exact change.
 
 ### Assistant connections
 

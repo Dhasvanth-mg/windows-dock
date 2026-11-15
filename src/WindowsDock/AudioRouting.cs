@@ -1,3 +1,6 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
 
@@ -35,11 +38,73 @@ internal static class AudioRouting
                 // IInspectable contributes six entries. SetPersistedDefaultAudioEndpoint follows 19 factory methods.
                 var vtable = *(nint**)factory;
                 var setEndpoint = (delegate* unmanaged[Stdcall]<nint, uint, int, int, nint, int>)vtable[25];
-                foreach (var role in new[] { Role.Multimedia, Role.Console })
+                foreach (var role in new[] { Role.Multimedia, Role.Console, Role.Communications })
                     Marshal.ThrowExceptionForHR(setEndpoint(factory, pid, (int)DataFlow.Render, (int)role, endpoint.Handle));
             }
         }
         finally { Marshal.Release(factory); }
+    }
+
+    internal static string RouteApplication(uint pid, string? id)
+    {
+        var path = ShellIntegration.ProcessPath(pid);
+        RouteApp(pid, id);
+        // Browsers can open WASAPI streams from a utility process or the main browser.
+        if (path.Length != 0)
+        {
+            using var current = Process.GetCurrentProcess();
+            var sessionId = current.SessionId;
+            foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(path)))
+            {
+                using (process)
+                {
+                    try
+                    {
+                        var candidate = (uint)process.Id;
+                        if (candidate != pid && process.SessionId == sessionId &&
+                            path.Equals(ShellIntegration.ProcessPath(candidate), StringComparison.OrdinalIgnoreCase))
+                            RouteApp(candidate, id);
+                    }
+                    catch (Exception error) when (error is COMException or Win32Exception or InvalidOperationException or UnauthorizedAccessException)
+                    {
+                        // A sibling may exit during enumeration. Verify the originating audio process below.
+                    }
+                }
+            }
+        }
+        if (!string.Equals(id, AppRoute(pid), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Windows did not confirm the saved app route.");
+        return path;
+    }
+
+    internal static string[] PlayingOutputs(uint pid, string path)
+    {
+        using var audio = new MMDeviceEnumerator();
+        var playing = new List<string>();
+        var processes = new Dictionary<uint, string>();
+        foreach (var endpoint in audio.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
+        {
+            using (endpoint)
+            {
+                var sessions = endpoint.AudioSessionManager.Sessions;
+                for (var index = 0; index < sessions.Count; index++)
+                {
+                    using var session = sessions[index];
+                    if (session.State != NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateActive)
+                        continue;
+                    var owner = session.GetProcessID;
+                    if (owner != pid && path.Length == 0)
+                        continue;
+                    if (!processes.TryGetValue(owner, out var executable))
+                        processes[owner] = executable = ShellIntegration.ProcessPath(owner);
+                    if (owner != pid && !path.Equals(executable, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    playing.Add(endpoint.ID);
+                    break;
+                }
+            }
+        }
+        return playing.ToArray();
     }
 
     internal static string? AppRoute(uint pid)

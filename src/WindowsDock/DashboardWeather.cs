@@ -20,12 +20,27 @@ public partial class DashboardWindow
     private City[] cityMatches = [];
     private string cityQuery = "";
     private bool weatherLocationDenied;
+    private bool weatherCelsius;
     private DateTimeOffset weatherUpdated;
 
     private UIElement WeatherPage()
     {
         var layout = new StackPanel();
         var toolbar = new DockPanel();
+        var units = ActionButton(weatherCelsius ? "°C" : "°F", () =>
+        {
+            try
+            {
+                DockData.Save("weather-celsius.json", !weatherCelsius);
+                weatherCelsius = !weatherCelsius;
+                ShowPage(DashboardPage.Weather);
+            }
+            catch (Exception error) when (DockActions.IsActionError(error)) { ShowOwnedMessage(error.Message); }
+        });
+        System.Windows.Automation.AutomationProperties.SetName(units, weatherCelsius ? "Switch to Fahrenheit" : "Switch to Celsius");
+        units.Margin = new Thickness(6, 0, 0, 0);
+        DockPanel.SetDock(units, Dock.Right);
+        toolbar.Children.Add(units);
         var detect = AccentButton("Use my location", 0xE707, accent, () => _ = LocateWeatherAsync());
         detect.Margin = new Thickness(6, 0, 0, 0);
         detect.IsEnabled = !loadingWeather;
@@ -120,16 +135,20 @@ public partial class DashboardWindow
 
         if (weather is not { } forecast)
         {
-            layout.Children.Add(Card(CardHeading("Set a forecast location", 0xE753, accent,
-                detail: "Use Windows location for automatic updates, or choose a city."), accent));
+            layout.Children.Add(Card(CardHeading(city?.Label ?? "Set a forecast location", 0xE753, accent,
+                detail: city == null ? "Use Windows location or choose a city." :
+                loadingWeather ? "Loading forecast…" : "Saved forecast location"), accent));
             return layout;
         }
 
         var row = WideDashboard ? Columns(1, 2.7) : Columns(1);
         var current = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var (icon, tint) = WeatherStyle(forecast.Code);
+        var art = WeatherIllustration(forecast.Code);
+        art.HorizontalAlignment = HorizontalAlignment.Left;
+        current.Children.Add(art);
         current.Children.Add(CardHeading(forecast.City, icon, tint, detail: WeatherLabel(forecast.Code)));
-        current.Children.Add(Text($"{forecast.Temperature:0}°F", 33, strong: true));
+        current.Children.Add(Text(DisplayTemperature(forecast.Temperature), 33, strong: true));
         var credit = ActionButton("Open-Meteo", () => OpenTarget("https://open-meteo.com/"));
         credit.Padding = new Thickness(7, 4, 7, 4);
         credit.HorizontalAlignment = HorizontalAlignment.Left;
@@ -147,7 +166,7 @@ public partial class DashboardWindow
             badge.Margin = new Thickness(0, 4, 0, 5);
             stack.Children.Add(Text(day.Date.ToString("ddd"), 11, subdued, true));
             stack.Children.Add(badge);
-            stack.Children.Add(Text($"{day.High:0}° / {day.Low:0}°", 14, strong: true));
+            stack.Children.Add(Text($"{DisplayTemperature(day.High)} / {DisplayTemperature(day.Low)}", 14, strong: true));
             stack.Children.Add(Text(WeatherLabel(day.Code), 10, muted));
             foreach (var label in stack.Children.OfType<TextBlock>())
                 label.TextAlignment = TextAlignment.Center;
@@ -172,6 +191,12 @@ public partial class DashboardWindow
         weatherError = null;
         try
         {
+            if (city != selected)
+            {
+                city = selected;
+                weather = null;
+                WriteJson("weather-city.json", selected);
+            }
             var url = FormattableString.Invariant(
                 $"https://api.open-meteo.com/v1/forecast?latitude={selected.Latitude}&longitude={selected.Longitude}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&temperature_unit=fahrenheit&forecast_days=5");
             using var data = await WeatherClient.GetFromJsonAsync<JsonDocument>(url, lifetime.Token);
@@ -189,11 +214,6 @@ public partial class DashboardWindow
             weather = new Forecast(selected.Name, current.GetProperty("temperature_2m").GetDouble(),
                 current.GetProperty("weather_code").GetInt32(), days);
             weatherUpdated = DateTimeOffset.UtcNow;
-            if (city != selected)
-            {
-                city = selected;
-                WriteJson("weather-city.json", selected.Automatic ? selected with { Latitude = 0, Longitude = 0 } : selected);
-            }
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception error) when (error is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException
@@ -203,20 +223,27 @@ public partial class DashboardWindow
         }
     }
 
-    private void LoadSavedWeather() => city = ReadJson<City>("weather-city.json");
+    private void LoadSavedWeather()
+    {
+        city = ReadJson<City>("weather-city.json");
+        weatherCelsius = ReadJson<bool>("weather-celsius.json");
+    }
+
+    private string DisplayTemperature(double fahrenheit) =>
+        weatherCelsius ? $"{(fahrenheit - 32) * 5 / 9:0}°C" : $"{fahrenheit:0}°F";
 
     private async Task RefreshSavedWeatherAsync()
     {
-        if (city == null || loadingWeather || DateTimeOffset.UtcNow - weatherUpdated < TimeSpan.FromMinutes(20))
+        if (loadingWeather || DateTimeOffset.UtcNow - weatherUpdated < TimeSpan.FromMinutes(20))
             return;
         loadingWeather = true;
         weatherUpdated = DateTimeOffset.UtcNow;
-        if (city.Automatic)
+        if (city == null || city is { Automatic: true, Latitude: 0, Longitude: 0 })
         {
             if (await DetectWeatherCityAsync() is { } current)
                 await SetCityAsync(current);
-            else if (weather == null)
-                weatherError = "Current location is unavailable. Search for a city or try location again.";
+            else
+                weatherError = "Windows location is unavailable. Choose a city or allow location in Windows.";
         }
         else
             await SetCityAsync(city);

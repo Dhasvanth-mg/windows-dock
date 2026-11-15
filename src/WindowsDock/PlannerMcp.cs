@@ -31,7 +31,7 @@ internal static class PlannerMcp
     private static string ReadSchedule(int days)
     {
         var until = DateTime.Today.AddDays(Math.Clamp(days, 1, 7));
-        var reminders = (DockData.Read<List<Reminder>>("reminders.json") ?? [])
+        var reminders = DockReminders.Load()
             .Where(item => item.Date.Date < until).OrderBy(item => item.Date).Take(30)
             .Select(item => new { title = item.Title, date = item.Date.ToString("yyyy-MM-dd") });
         var path = DockData.Read<string>("calendar-source.json");

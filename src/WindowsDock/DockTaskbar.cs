@@ -11,21 +11,36 @@ namespace WindowsDock;
 
 internal static class DockTaskbar
 {
+    internal static bool ControllerRunning() => FindWindowW("WindowsDockNativeController", null) != 0;
+
+    internal static bool ShellReady() => FindWindowW("Shell_TrayWnd", null) != 0;
+
     internal static int Open()
     {
         if (SignalLauncher())
             return 0;
 
         var controller = Path.Combine(AppContext.BaseDirectory, "NativeTaskbar.exe");
+        var native = DockStartup.UseNativeMode();
         try
         {
-            using var process = Process.Start(new ProcessStartInfo(controller, "--tray --open")
+            using var process = Process.Start(new ProcessStartInfo(controller, native ? "" : "--tray --open")
             {
                 WorkingDirectory = AppContext.BaseDirectory,
                 UseShellExecute = false,
                 CreateNoWindow = true
             });
-            return process == null ? 1 : 0;
+            if (process == null)
+                return 1;
+            if (!native)
+                return 0;
+            for (var attempt = 0; attempt < 45 && !process.HasExited; attempt++)
+            {
+                if (SignalLauncher())
+                    return 0;
+                Thread.Sleep(200);
+            }
+            return SignalLauncher() ? 0 : 1;
         }
         catch (System.ComponentModel.Win32Exception)
         {

@@ -243,7 +243,14 @@ void TaskbarStyle::AddAgentGrid()
     agentTimer.Interval(std::chrono::milliseconds(750));
     agentTick = agentTimer.Tick([this](auto&&, auto&&)
     {
-        try { RefreshAgentGrid(); RefreshBattery(); } catch (...) {}
+        try
+        {
+            RefreshAgentGrid();
+            RefreshBattery();
+            if (completionEvent && WaitForSingleObject(completionEvent.get(), 0) == WAIT_OBJECT_0)
+                PulseCompletion();
+        }
+        catch (...) {}
     });
     agentTimer.Start();
 }

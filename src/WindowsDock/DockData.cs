@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 
 namespace WindowsDock;
 
@@ -16,6 +17,24 @@ internal static class DockData
 
     internal static void Save<T>(string name, T value) =>
         Write(name, path => File.WriteAllText(path, JsonSerializer.Serialize(value)));
+
+    internal static T Update<T>(string name, Func<T?, T> change)
+    {
+        using var gate = new Mutex(false, @"Local\WindowsDock.Data." + name);
+        try
+        {
+            if (!gate.WaitOne(TimeSpan.FromSeconds(2)))
+                throw new IOException("Windows Dock is saving another change.");
+        }
+        catch (AbandonedMutexException) { }
+        try
+        {
+            var next = change(Read<T>(name));
+            Save(name, next);
+            return next;
+        }
+        finally { gate.ReleaseMutex(); }
+    }
 
     internal static void Write(string name, Action<string> write)
     {

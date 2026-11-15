@@ -54,7 +54,7 @@ public partial class DashboardWindow : Window
         idleExit.Tick += (_, _) =>
         {
             idleExit.Stop();
-            if (!IsVisible)
+            if (!IsVisible && runningJobs.Count == 0)
                 Application.Current.Shutdown();
         };
         if (releaseWhenIdle && deferPage)
@@ -95,7 +95,7 @@ public partial class DashboardWindow : Window
             {
                 ReportDockVisibility(false);
                 ticker.Stop();
-                if (releaseWhenIdle)
+                if (releaseWhenIdle && runningJobs.Count == 0)
                     idleExit.Start();
                 return;
             }
@@ -184,6 +184,8 @@ public partial class DashboardWindow : Window
         agentPanel?.Close();
         if (controllerPid > 0)
             Hide();
+        else if (runningJobs.Count > 0)
+            WindowState = WindowState.Minimized;
         else
             Close();
     }
@@ -277,6 +279,8 @@ public partial class DashboardWindow : Window
     }
     private void UpdateDashboard()
     {
+        UpdateCompletionCue();
+        RefreshFocusState();
         updateAudioWidget?.Invoke();
         updateFocusWidget?.Invoke();
         var now = DateTime.Now;
@@ -299,9 +303,10 @@ public partial class DashboardWindow : Window
     {
         var screen = TaskbarScreen();
         var dpi = VisualTreeHelper.GetDpi(this);
-        Width = Math.Min(compactAgents ? 506 : 1060, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
+        Width = Math.Min(compactAgents ? 506 : 960, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
         MaxHeight = Math.Max(200, (DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - screen.Bounds.Top) /
             dpi.DpiScaleY - 12);
+        Height = Math.Min(compactAgents ? 454 : 412, MaxHeight);
         DashboardHeader.Visibility = compactAgents ? Visibility.Collapsed : Visibility.Visible;
         if (compactAgents)
             DockNavigationHost.Content ??= DockNavigation(this, DockSection.Chats);
@@ -333,7 +338,11 @@ public partial class DashboardWindow : Window
         agentPanel?.Close();
         SetDashboardSurface(true);
         if (!compactAgents && pageInitialized)
+        {
+            if (currentPage == DashboardPage.Home)
+                RenderHomeFavorites();
             return;
+        }
         compactAgents = false;
         ConfigureWidth();
         ShowPage(lastDashboardPage);

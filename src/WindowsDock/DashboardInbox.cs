@@ -9,7 +9,13 @@ public partial class DashboardWindow
 {
     private void ShowActivityInbox()
     {
-        var (window, content, _) = CreateDockPanel("Activity inbox", "", 492, 0xEA8F, pink, widget: true);
+        var (window, content, cancellation) = CreateDockPanel("Activity inbox", "", 492, 0xEA8F, pink, widget: true);
+        BuildPinnedActivity(window, content, cancellation);
+        window.Show();
+    }
+
+    private void BuildPinnedActivity(Window window, StackPanel content, System.Threading.CancellationToken cancellation)
+    {
         var seen = DockData.Read<DateTimeOffset>("activity-seen.json");
         var unreadOnly = false;
         var actions = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
@@ -27,7 +33,7 @@ public partial class DashboardWindow
         InboxItem[]? displayed = null;
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
         timer.Tick += (_, _) => Render();
-        window.Closed += (_, _) => timer.Stop();
+        cancellation.Register(timer.Stop);
         toggle.Click += (_, _) =>
         {
             unreadOnly = !unreadOnly;
@@ -51,7 +57,6 @@ public partial class DashboardWindow
         };
         Render();
         timer.Start();
-        window.Show();
 
         void Render(bool force = false)
         {

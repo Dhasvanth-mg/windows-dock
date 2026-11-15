@@ -457,6 +457,87 @@
 - Verification: Windows smoke checks passed for switching providers, reopening both summary types, invalid saved models, clearing a custom model, and restored preferences in a fresh process. A fixture confirmed the key stays out of the preference file. An installed Reply summary opened directly with Codex and the CLI default.
 - Remaining work: None.
 
+#### Pinned widgets and dock assistant actions
+
+- Status: Built, verified, and installed.
+- Scope: Put one live widget above four favorite shortcuts and the main widget list. Let dock assistants carry out app actions and use their relevant MCP connections in chat. Add a Windows sign-in option.
+- Acceptance criteria: The pinned widget stays usable inside Widgets. Up to four favorites remain easy to reach, and selections survive a restart. Every dock persona can use the shared actions for volume, reminders, timers, Wi-Fi, Bluetooth, and startup. Role-specific MCP tools are available through the conversation.
+- Outcome: Widgets opens with one live panel, four optional favorites, and the remaining catalog. A favorite and the existing pin trade places when the favorite is pinned. All personas can propose supported dock actions and read from their enabled MCP connections. Installed external coding clients have the same dock controls through the local MCP server.
+- Verification: Windows fixtures checked pinned controls, the four favorites, persistence, and the shared reminder and timer stores. The installed MCP server exposed three tools, read live state, and rejected an out-of-range volume. Codex and Claude Code both have the installed stdio connection.
+- Remaining work: Actual Wi-Fi and Bluetooth radio transitions were not exercised during deployment.
+
+##### Background assistant jobs and Orbit handoffs
+
+- Status: Built, verified, and installed.
+- Scope: Let Orbit delegate tasks to specialists. Keep accepted jobs running when the conversation closes and surface their status, results, and cancellation in the dock. Add a writing specialist and a workspace-scoped coding path.
+- Acceptance criteria: Orbit can propose the right handoff based on the task. Confirming it starts a background job that can be tracked without leaving another app. Writing produces usable drafts. Coding targets an explicitly selected workspace. Jobs report completed, failed, canceled, or interrupted states.
+- Outcome: Orbit routes to Lark, Scribe, Fern, or Bolt. Confirm a handoff to start it. Jobs shows progress, cancellation, and saved results. The dock stays running while jobs are active. Bolt can edit project text through a workspace-scoped tool when the Windows shell runner is unavailable.
+- Verification: A fixture ran a writing handoff to completion after the dock window hid and verified the saved result. The live coding fixture wrote and checked a file in an isolated Git project. The Windows shell runner returned a package-identity error and the scoped text editor completed the edit.
+- Remaining work: Shell-based coding checks remain unverified on this Windows installation.
+
+##### Launch the dock
+
+- Status: Verified.
+- Scope: Open the installed Windows Dock while the new widget and assistant work continues.
+- Acceptance criteria: The launch command opens Dashboard through the installed controller.
+- Outcome: Launched the previous installed build during development and reopened Dashboard after installing the native update.
+- Verification: Windows reported the visible Dashboard window and the final native controller signaled Dashboard open.
+- Remaining work: None.
+
+##### Audio routing, fixed windows, and saved setup
+
+- Status: Built and installed. Windows routing and shell layout verified.
+- Scope: Repair browser and multi-device routing, keep panel dimensions stable, retain provider credentials and weather preferences, add in-app radio controls, and restore native mode at sign-in with the visible four-slot widget.
+- Acceptance criteria: Brave routing targets the correct Windows audio processes and shows whether the requested route is active or pending. Data changes scroll inside stable windows. Local provider setup and weather location and units survive restart. Wi-Fi and Bluetooth have direct controls and native startup keeps the launcher and 1×4 row visible.
+- Outcome: Mixer routing follows related browser processes and verifies the saved device separately from active playback. Windows account encryption stores provider keys. Weather saves the chosen location even if the network fetch fails and renders °F or °C from one forecast. Controls toggles radios. The installed controller uses native mode and the Windows sign-in entry points to that mode. Hitodama's taskbar appearance was paused so the two apps can coexist.
+- Verification: Windows confirmed an isolated app route to the connected Bluetooth Echo Spot and restored it afterward. Smoke checks verified fixed dashboard size, the saved unit preference, and provider and model persistence. Explorer exposed the visible dock launcher and four live slots.
+- Remaining work: Live Brave playback on Bluetooth and separate simultaneous streams across devices were not heard or verified. The sign-in entry was inspected during the existing Windows session.
+
+##### Agent completion glow
+
+- Status: Built, verified, and installed.
+- Scope: Give completed coding turns and finished dock jobs a brief rim animation on the native taskbar and any open dock window.
+- Acceptance criteria: A new completion triggers a single cue. Old completions do not continually replay. Animations respect Windows accessibility preferences and do not keep a render loop active.
+- Outcome: A new finished turn or background job signals a single brief mint rim pulse. The cue respects Windows animations and high contrast.
+- Verification: The managed fixture measured animation and restoration and confirmed it does not replay. The installed Explorer module consumed the native completion event.
+- Remaining work: No pixel capture of the native pulse was recorded.
+
+##### Compact dock and richer graphics
+
+- Status: Built, rendered, and installed.
+- Scope: Reduce excess space in fixed-size windows and improve the visual hierarchy, especially Dashboard Overview, Widgets, and the shared panel controls.
+- Acceptance criteria: Windows stay stable while navigating, with content scrollable when needed. The dashboard uses artwork, weather graphics, and status visuals at useful sizes. Controls remain accessible and the black surfaces and frosted taskbar remain consistent.
+- Outcome: Overview uses a compact fixed window, larger media artwork, an illustrated forecast, a calendar tile, and CPU and RAM gauges. Widgets and other popups have fixed per-panel heights.
+- Verification: Windows rendered the dashboard and panels. Layout and scrolling fixtures passed in the final managed build.
+- Remaining work: None.
+
+##### Taller taskbar glass
+
+- Status: Built and installed.
+- Scope: Increase the visible native taskbar surface height by approximately 15 percent.
+- Acceptance criteria: Grow the 42-pixel glass surface to the full 48-pixel taskbar at 96 DPI. Preserve Explorer's reserved desktop area, launcher access, and the 1×4 layout.
+- Outcome: Removed the six combined pixels of vertical margin around the native glass at 96 DPI. The surface now fills the existing 48-pixel shell height.
+- Verification: The updated DLL attached to Explorer. Windows reported a 48-pixel reserved taskbar and exposed the launcher and four equal-height buttons in a single row.
+- Remaining work: None.
+
+##### One-click summaries and quieter scrollbars
+
+- Status: Built, verified, and installed.
+- Scope: Open a reply summary and generate it with the remembered model on the first click. Replace the wide scrollbar chrome with a slim indicator throughout the dock.
+- Acceptance criteria: Summarize reply immediately runs with a configured provider. Source and provider settings remain reachable, and missing reply text or credentials have a recovery path. Wheel, touch, keyboard, and dragging still scroll.
+- Outcome: Summarize reply runs with the remembered provider and model. Source editing and provider settings are available in the optional details. Outer panel tracks are hidden and inner scroll indicators are slim.
+- Verification: Windows fixtures verified saved provider and model selection and the recovery path for a missing reply. A synthetic reply generated a live summary with the saved Codex setting from the initial click. The Coding chats render showed the outer track hidden.
+- Remaining work: None.
+
+##### Coding chats controls redesign
+
+- Status: Built and installed.
+- Scope: Reorganize the Coding chats panel and surface relevant controls within the dock.
+- Acceptance criteria: The selected chat and its next action are easy to find. Users can switch chats, open summaries, assign slots, review usage and approvals, and reach jobs and provider defaults from the panel.
+- Outcome: The selected conversation and summary action lead the panel. Open chat, assignment, and copy are next to them. Jobs, Usage, and Setup sit in the header. All, Codex, and Claude filter the list below. Setup shows the selected provider's hook and default controls first.
+- Verification: Windows rendered the redesigned Coding chats panel and verified existing chat navigation. Invoking a native slot opened the installed 506 by 454 pixel panel with Jobs and Setup visible.
+- Remaining work: None.
+
 ##### Coding providers for summaries
 
 - Status: Built and installed. Codex verified live. Claude Code sign-in required on this machine.

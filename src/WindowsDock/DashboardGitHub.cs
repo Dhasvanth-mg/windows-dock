@@ -11,6 +11,12 @@ public partial class DashboardWindow
     private void ShowGitHubWidget()
     {
         var (window, content, cancellation) = CreateDockPanel("GitHub checks and reviews", "", 476, 0xE73E, purple, widget: true);
+        BuildPinnedGitHub(content, cancellation);
+        window.Show();
+    }
+
+    private void BuildPinnedGitHub(StackPanel content, System.Threading.CancellationToken cancellation)
+    {
         var query = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
         var refresh = AccentButton("Refresh", 0xE72C, purple);
         DockPanel.SetDock(refresh, Dock.Right);
@@ -36,7 +42,6 @@ public partial class DashboardWindow
                 _ = LoadAsync();
             }
         };
-        window.Show();
         if (repo.Text.Length > 0)
             _ = LoadAsync();
 

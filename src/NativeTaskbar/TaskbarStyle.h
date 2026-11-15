@@ -54,11 +54,12 @@ private:
     void RefreshAgentGrid();
     void StyleTray(xaml::FrameworkElement const& tray);
     void RefreshBattery();
+    void PulseCompletion();
 
     controls::Grid root;
     HANDLE dashboard;
     winrt::handle launcherEvent;
-    winrt::handle agentEvent, agentMapping;
+    winrt::handle agentEvent, completionEvent, agentMapping;
     std::unique_ptr<AgentGridState, UnmapAgentGrid> agentState;
     AgentGridTile visibleTiles[4]{};
     LONG agentRevision = -1;
@@ -69,6 +70,8 @@ private:
     winrt::weak_ref<xaml::FrameworkElement> appFrame;
     winrt::weak_ref<xaml::FrameworkElement> trayFrame;
     controls::Border chrome{nullptr};
+    xaml::Media::SolidColorBrush chromeRim{nullptr};
+    xaml::Media::Animation::Storyboard completionPulse{nullptr};
     controls::Border divider{nullptr};
     controls::Button dashboardButton{nullptr};
     controls::Grid dockControls{nullptr};

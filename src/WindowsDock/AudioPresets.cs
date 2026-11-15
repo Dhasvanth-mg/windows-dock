@@ -13,6 +13,30 @@ internal sealed record AudioPreset(string Name, string DeviceId, string DeviceNa
 
 internal static class AudioPresets
 {
+    internal static string[] ActiveApps()
+    {
+        using var audio = new MMDeviceEnumerator();
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        Visit(audio, (_, path) => names.Add(Path.GetFileNameWithoutExtension(path)));
+        return names.Order().ToArray();
+    }
+
+    internal static int ChangeAppVolume(string name, int percent)
+    {
+        using var audio = new MMDeviceEnumerator();
+        var changed = 0;
+        Visit(audio, (session, path) =>
+        {
+            if (!Path.GetFileNameWithoutExtension(path).Equals(name, StringComparison.OrdinalIgnoreCase))
+                return;
+            session.SimpleAudioVolume.Volume = percent / 100f;
+            changed++;
+        });
+        if (changed == 0)
+            throw new InvalidOperationException("That app has no active audio session. Play something in it first.");
+        return changed;
+    }
+
     internal static AudioPreset Capture(string name)
     {
         using var audio = new MMDeviceEnumerator();

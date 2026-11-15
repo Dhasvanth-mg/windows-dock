@@ -11,6 +11,12 @@ public partial class DashboardWindow
     private void ShowAudioPresets()
     {
         var (window, content, _) = CreateDockPanel("Audio presets", "", 492, 0xE767, purple, widget: true);
+        BuildPinnedAudioPresets(content);
+        window.Show();
+    }
+
+    private void BuildPinnedAudioPresets(StackPanel content)
+    {
         var list = (ReadJson<List<AudioPreset>>("audio-presets.json") ?? [])
             .Where(preset => preset is { Name.Length: > 0, DeviceId.Length: > 0, Apps: not null }).Take(12).ToArray();
         var choices = new ComboBox { DisplayMemberPath = nameof(AudioPreset.Label), Margin = new Thickness(0, 0, 0, 7) };
@@ -83,7 +89,6 @@ public partial class DashboardWindow
         content.Children.Add(status);
         choices.SelectionChanged += (_, _) => { apply.IsEnabled = remove.IsEnabled = choices.SelectedItem != null; };
         Update(null);
-        window.Show();
 
         void Update(AudioPreset? selected)
         {

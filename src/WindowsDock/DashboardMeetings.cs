@@ -13,6 +13,12 @@ public partial class DashboardWindow
     private void ShowMeetingWidget()
     {
         var (window, content, cancellation) = CreateDockPanel("Meetings", "", 470, 0xE787, accent, widget: true);
+        BuildPinnedMeetings(window, content, cancellation);
+        window.Show();
+    }
+
+    private void BuildPinnedMeetings(Window window, StackPanel content, System.Threading.CancellationToken cancellation)
+    {
         var status = Text("Loading calendar…", 11, subdued);
         status.TextWrapping = TextWrapping.Wrap;
         var list = new StackPanel();
@@ -28,7 +34,6 @@ public partial class DashboardWindow
         var path = ReadJson<string>("calendar-source.json");
         select.Click += (_, _) => Choose();
         refresh.Click += (_, _) => _ = LoadAsync();
-        window.Show();
         _ = LoadAsync();
 
         void Choose()

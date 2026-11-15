@@ -32,14 +32,21 @@ internal static partial class AssistantConnections
 
     internal static AssistantConnection[] For(string personaId) => personaId switch
     {
-        "research" => [Exa],
+        "research" or "writing" => [Exa],
         "housekeeping" => [Planner],
         "coding" => [Learn, GitHub],
+        "casual" => [Exa],
         _ => []
     };
 
     internal static bool IsAvailable(AssistantConnection connection) =>
         connection.TokenVariable == null || !string.IsNullOrWhiteSpace(ReadToken(connection.TokenVariable));
+
+    internal static AssistantConnection[] Active(string personaId)
+    {
+        var enabled = Enabled();
+        return For(personaId).Where(connection => enabled.Contains(connection.Id) && IsAvailable(connection)).ToArray();
+    }
 
     internal static HashSet<string> Enabled() =>
         DockData.Read<HashSet<string>>("assistant-connections.json") ?? [Exa.Id, Planner.Id, Learn.Id];

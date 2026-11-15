@@ -39,16 +39,17 @@ namespace
               showLauncher(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowLauncher").c_str())),
               panelVisible(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"PanelVisible").c_str())),
               visibilityChanged(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"PanelVisibilityChanged").c_str())),
+              completion(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"AgentCompletion").c_str())),
               agentGrid(CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(AgentGridState),
                   SessionName(pid, L"AgentGrid").c_str()))
         {
             if (!ready || !restored || !stop || !dashboard || !showDashboard || !agent || !showAgent ||
-                !assistant || !showAssistant || !openLauncher || !showLauncher || !panelVisible || !visibilityChanged || !agentGrid)
+                !assistant || !showAssistant || !openLauncher || !showLauncher || !panelVisible || !visibilityChanged || !completion || !agentGrid)
                 winrt::throw_last_error();
         }
 
         winrt::handle ready, restored, stop, dashboard, showDashboard, agent, showAgent, assistant, showAssistant, agentGrid;
-        winrt::handle openLauncher, showLauncher, panelVisible, visibilityChanged;
+        winrt::handle openLauncher, showLauncher, panelVisible, visibilityChanged, completion;
     };
 
     class TaskbarVisibility

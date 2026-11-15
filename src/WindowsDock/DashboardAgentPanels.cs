@@ -70,10 +70,13 @@ public partial class DashboardWindow
         var (window, content, cancellation) = CreateDockPanel(title, subtitle, 468, 0xEAB7, AssistantInk);
         var preferences = DockData.Read<SummaryPreferences>(SummaryPreferencesFile);
         var activeSource = SummarySources.FirstOrDefault(source => source.Provider.ToString() == preferences?.Provider)
-            ?? SummarySources[0];
+            ?? SummarySources[2];
         var savedProvider = activeSource.Provider;
         var models = preferences?.Models ?? new Dictionary<string, string>();
         var modelChanged = false;
+        var autoPending = session != null;
+        var options = new StackPanel { Visibility = autoPending ? Visibility.Collapsed : Visibility.Visible };
+        content.Children.Add(options);
         var sourceLabel = Text(label, 11, AssistantSecondary, true);
         var source = Field(label, AgentSessions.SummaryLimit);
         source.Tag = session == null ? "Paste notifications here" : "Paste a reply";
@@ -83,12 +86,12 @@ public partial class DashboardWindow
         source.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         source.Height = 89;
         source.Margin = new Thickness(0, 4, 0, 5);
-        content.Children.Add(sourceLabel);
-        content.Children.Add(source);
+        options.Children.Add(sourceLabel);
+        options.Children.Add(source);
         var sourceStatus = Text(session == null ? "Review the notifications before sending." : "Looking for the latest completed reply…",
             11, AssistantSecondary);
         sourceStatus.TextWrapping = TextWrapping.Wrap;
-        content.Children.Add(sourceStatus);
+        options.Children.Add(sourceStatus);
 
         var fields = Columns(1, 1.25);
         fields.Margin = new Thickness(0, 9, 0, 0);
@@ -99,28 +102,52 @@ public partial class DashboardWindow
         model.MinHeight = provider.MinHeight;
         Put(fields, Labeled("Provider", provider), 0);
         Put(fields, Labeled("Model", model), 1);
-        content.Children.Add(fields);
+        options.Children.Add(fields);
         var key = new PasswordBox { MaxLength = 512 };
+        var status = Text("", 11, AssistantSecondary);
         AutomationProperties.SetName(key, "Summary API key");
-        var keyField = Labeled("API key for this dashboard session", key);
+        var keyField = Labeled("API key · saved on this Windows account", key);
         keyField.Margin = new Thickness(0, 7, 0, 0);
-        content.Children.Add(keyField);
+        options.Children.Add(keyField);
+        var savedKeyRow = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+        var changeKey = ActionButton("Change saved key", () =>
+        {
+            keyField.Visibility = Visibility.Visible;
+            savedKeyRow.Visibility = Visibility.Collapsed;
+            key.Focus();
+        });
+        changeKey.Margin = new Thickness(0, 0, 5, 0);
+        savedKeyRow.Children.Add(changeKey);
+        savedKeyRow.Children.Add(ActionButton("Forget saved key", () =>
+        {
+            try
+            {
+                DockCredentials.Forget(activeSource.Provider);
+                summaryKeys[provider.SelectedIndex]?.Dispose();
+                summaryKeys[provider.SelectedIndex] = null;
+                key.Clear();
+                SetKeyVisibility();
+                status.Text = "Saved key removed.";
+            }
+            catch (Exception error) when (DockActions.IsActionError(error)) { status.Text = error.Message; }
+        }));
+        options.Children.Add(savedKeyRow);
 
         var result = Field("Generated summary", 0);
         result.IsReadOnly = true;
         result.TextWrapping = TextWrapping.Wrap;
         result.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         result.MinHeight = 44;
-        result.MaxHeight = 134;
+        result.MaxHeight = session == null ? 134 : 177;
         result.Visibility = Visibility.Collapsed;
         result.Margin = new Thickness(0, 9, 0, 0);
         content.Children.Add(result);
-        var status = Text("", 11, AssistantSecondary);
         status.TextWrapping = TextWrapping.Wrap;
         status.Margin = new Thickness(0, 8, 0, 6);
         content.Children.Add(status);
 
         var actions = new WrapPanel();
+        Button? edit = null;
         var send = AccentButton("Summarize", 0xEAB7, AssistantInk);
         send.Click += async (_, _) => await SummarizeAsync();
         send.Margin = new Thickness(0, 0, 5, 3);
@@ -130,6 +157,10 @@ public partial class DashboardWindow
             var open = ActionButton("Open chat", () => { window.Close(); OpenAgent(session); });
             open.Margin = new Thickness(0, 0, 5, 3);
             actions.Children.Add(open);
+            edit = ActionButton("Source & provider");
+            edit.Click += (_, _) => ShowOptions(options.Visibility != Visibility.Visible);
+            edit.Margin = new Thickness(0, 0, 5, 3);
+            actions.Children.Add(edit);
         }
         content.Children.Add(actions);
         provider.SelectionChanged += (_, _) =>
@@ -145,9 +176,23 @@ public partial class DashboardWindow
         window.Closing += (_, _) => SaveModel();
         window.Closed += (_, _) => key.Clear();
         ApplyProvider();
+        if (autoPending)
+            status.Text = "Reading the latest completed reply…";
         window.Show();
         if (session != null)
             _ = ReadSourceAsync(session);
+
+        void ShowOptions(bool visible)
+        {
+            autoPending = false;
+            options.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            result.MaxHeight = visible ? 134 : 177;
+            if (edit == null)
+                return;
+            var labelText = visible ? "Hide source & provider" : "Source & provider";
+            edit.Content = labelText;
+            AutomationProperties.SetName(edit, labelText);
+        }
 
         StackPanel Labeled(string label, Control control)
         {
@@ -167,13 +212,20 @@ public partial class DashboardWindow
                 !string.IsNullOrEmpty(customModel) && IsSummaryModelId(customModel) ? customModel : selected.DefaultModel;
             model.Tag = cli ? "CLI default" : selected.DefaultModel;
             key.Clear();
-            keyField.Visibility = cli ? Visibility.Collapsed : Visibility.Visible;
+            SetKeyVisibility();
             send.Content = IconLabel("Summarize with " + selected.Label, 0xEAB7, AssistantInk);
             AutomationProperties.SetName(send, "Summarize with " + selected.Label);
             status.Text = cli ? $"Uses your local {selected.Label} sign-in to summarize the text above."
                 : $"Sends the text above to {selected.Label}.";
-            if (selected.KeyVariable is { } variable && (summaryKeys[index] != null || EnvironmentKey(variable) != null))
+            if (selected.KeyVariable is { } variable && (summaryKeys[index] != null || DockCredentials.Read(selected.Provider) != null || EnvironmentKey(variable) != null))
                 status.Text += " A key is available.";
+        }
+
+        void SetKeyVisibility()
+        {
+            var saved = activeSource.KeyVariable != null && DockCredentials.Read(activeSource.Provider) != null;
+            keyField.Visibility = activeSource.KeyVariable == null || saved ? Visibility.Collapsed : Visibility.Visible;
+            savedKeyRow.Visibility = saved ? Visibility.Visible : Visibility.Collapsed;
         }
 
         string CurrentModel() => string.IsNullOrWhiteSpace(model.Text) ? activeSource.DefaultModel : model.Text.Trim();
@@ -231,6 +283,16 @@ public partial class DashboardWindow
                     not null => "Latest completed local reply. Edit the text before sending if needed.",
                     _ => "This chat has no readable local reply. Paste one above."
                 };
+                if (reply == null || string.IsNullOrWhiteSpace(source.Text))
+                {
+                    ShowOptions(true);
+                    status.Text = sourceStatus.Text;
+                }
+                else if (autoPending)
+                {
+                    autoPending = false;
+                    await SummarizeAsync();
+                }
             }
             catch (OperationCanceledException) { }
         }
@@ -239,21 +301,23 @@ public partial class DashboardWindow
         {
             var reply = source.Text;
             var index = provider.SelectedIndex;
-            if (provider.SelectedItem is not SummarySource selected || index < 0)
+            if (!send.IsEnabled || provider.SelectedItem is not SummarySource selected || index < 0)
                 return;
             var modelId = CurrentModel();
             SaveModel();
             var typed = selected.KeyVariable == null ? "" : key.Password.Trim();
             var apiKey = selected.KeyVariable is { } variable
-                ? (typed.Length == 0 ? ReadSessionKey(index) ?? EnvironmentKey(variable) : typed)
+                ? (typed.Length == 0 ? ReadSessionKey(index) ?? DockCredentials.Read(selected.Provider) ?? EnvironmentKey(variable) : typed)
                 : null;
             if (string.IsNullOrWhiteSpace(reply))
             {
+                ShowOptions(true);
                 status.Text = "Enter text to summarize.";
                 return;
             }
             if (selected.KeyVariable != null && (modelId.Length == 0 || string.IsNullOrWhiteSpace(apiKey)))
             {
+                ShowOptions(true);
                 status.Text = "Enter a model ID and an API key.";
                 return;
             }
@@ -278,16 +342,25 @@ public partial class DashboardWindow
                     status.Text = "The provider returned no summary. Try another model or shorten the reply.";
                     return;
                 }
+                var saved = true;
                 if (typed.Length > 0)
+                {
                     RememberSessionKey(index, key);
+                    try { DockCredentials.Save(selected.Provider, typed); key.Clear(); SetKeyVisibility(); }
+                    catch (Exception error) when (DockActions.IsActionError(error) || error is System.Security.Cryptography.CryptographicException)
+                    { saved = false; }
+                }
                 result.Text = response.Trim();
                 result.Visibility = Visibility.Visible;
-                status.Text = $"Summary generated by {selected.Label}.";
+                status.Text = $"Summary generated by {selected.Label}." + (saved ? "" : " Windows could not save the key.");
             }
             catch (CodingSummaryException error)
             {
                 if (!cancellation.IsCancellationRequested)
+                {
+                    ShowOptions(true);
                     status.Text = error.Message;
+                }
             }
             catch (HttpRequestException error)
             {
@@ -605,11 +678,21 @@ public partial class DashboardWindow
 
         var screen = TaskbarScreen();
         var dpi = VisualTreeHelper.GetDpi(this);
+        var room = Math.Max(160, (DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - screen.Bounds.Top) /
+            dpi.DpiScaleY - 12);
+        var panelHeight = title switch
+        {
+            "Assistants" => 302,
+            "Widgets" => 558,
+            "Reply summary" => 350,
+            "Notification summary" => 468,
+            "Focus timer" => 218,
+            _ => 436
+        };
         var window = new Window
         {
             Owner = this, Title = title, Width = Math.Min(width, screen.WorkingArea.Width / dpi.DpiScaleX - 24),
-            MaxHeight = Math.Max(160, (DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - screen.Bounds.Top) /
-                dpi.DpiScaleY - 12), SizeToContent = SizeToContent.Height,
+            MaxHeight = room, Height = Math.Min(room, panelHeight), SizeToContent = SizeToContent.Manual,
             WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent,
             Foreground = AssistantInk, FontFamily = FontFamily, ResizeMode = ResizeMode.NoResize, Topmost = true,
             ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, UseLayoutRounding = true
@@ -632,7 +715,8 @@ public partial class DashboardWindow
         }, null, false);
         DockPanel.SetDock(footer, Dock.Bottom);
         frame.Children.Add(footer);
-        frame.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        frame.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
+            PanningMode = PanningMode.VerticalOnly });
         var card = Card(frame);
         card.CornerRadius = new CornerRadius(12);
         card.Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantShell;
@@ -682,7 +766,7 @@ public partial class DashboardWindow
             lifetime.Dispose();
             agentPanel = null;
             modalOpen = false;
-            if (controllerPid > 0 && !closed)
+            if ((controllerPid > 0 || Owner is MainWindow) && !closed)
                 Dispatcher.BeginInvoke(() =>
                 {
                     if (agentPanel == null && IsVisible && Opacity == 0)

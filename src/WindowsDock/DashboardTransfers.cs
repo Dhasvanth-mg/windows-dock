@@ -12,6 +12,12 @@ public partial class DashboardWindow
     private void ShowDownloadWidget()
     {
         var (window, content, cancellation) = CreateDockPanel("Downloads", "", 466, 0xE896, accent, widget: true);
+        BuildPinnedDownloads(window, content, cancellation);
+        window.Show();
+    }
+
+    private void BuildPinnedDownloads(Window window, StackPanel content, System.Threading.CancellationToken cancellation)
+    {
         var status = Text("", 11, subdued);
         status.TextWrapping = TextWrapping.Wrap;
         var list = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
@@ -26,8 +32,7 @@ public partial class DashboardWindow
         content.Children.Add(actions);
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         timer.Tick += (_, _) => { if (refresh.IsEnabled && window.IsActive) _ = LoadAsync(); };
-        window.Closed += (_, _) => timer.Stop();
-        window.Show();
+        cancellation.Register(timer.Stop);
         timer.Start();
         _ = LoadAsync();
 
