@@ -23,6 +23,8 @@ public partial class DashboardWindow
     private Action? updateUsagePanel;
     private DateTimeOffset lastUsagePaint;
     private sealed record SummarySource(string Label, AssistantProvider Provider, string DefaultModel, string? KeyVariable);
+    private sealed record SummaryPreferences(string? Provider, Dictionary<string, string>? Models);
+    private const string SummaryPreferencesFile = "summary-preferences.json";
     private static readonly SummarySource[] SummarySources =
     [
         new("Gemini", AssistantProvider.Gemini, TextModelClient.GeminiSummaryModel, "GEMINI_API_KEY"),
@@ -30,8 +32,6 @@ public partial class DashboardWindow
         new("Codex", AssistantProvider.CodexCli, "", null),
         new("Claude Code", AssistantProvider.ClaudeCode, "", null)
     ];
-    private int summaryProviderIndex;
-    private readonly string?[] summaryModels = new string?[SummarySources.Length];
     private readonly System.Security.SecureString?[] summaryKeys = new System.Security.SecureString?[SummarySources.Length];
     private (AgentSession Session, AgentReply? Reply)? lastReplyPreview;
     private Task<AgentReply?>? pendingReplyPreview;
@@ -62,9 +62,18 @@ public partial class DashboardWindow
     private void ShowReplySummary(AgentSession session) => ShowTextSummary("Reply summary", session.Title,
         "Reply to summarize", null, session);
 
+    private static bool IsSummaryModelId(string value) => value.Length <= 128 &&
+        value.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.' or '/' or ':');
+
     private void ShowTextSummary(string title, string subtitle, string label, string? draft, AgentSession? session = null)
     {
-        var (window, content, cancellation) = CreateDockPanel(title, subtitle, 468, 0xEAB7, AssistantInk, assistant: true);
+        var (window, content, cancellation) = CreateDockPanel(title, subtitle, 468, 0xEAB7, AssistantInk);
+        var preferences = DockData.Read<SummaryPreferences>(SummaryPreferencesFile);
+        var activeSource = SummarySources.FirstOrDefault(source => source.Provider.ToString() == preferences?.Provider)
+            ?? SummarySources[0];
+        var savedProvider = activeSource.Provider;
+        var models = preferences?.Models ?? new Dictionary<string, string>();
+        var modelChanged = false;
         var sourceLabel = Text(label, 11, AssistantSecondary, true);
         var source = Field(label, AgentSessions.SummaryLimit);
         source.Tag = session == null ? "Paste notifications here" : "Paste a reply";
@@ -84,9 +93,10 @@ public partial class DashboardWindow
         var fields = Columns(1, 1.25);
         fields.Margin = new Thickness(0, 9, 0, 0);
         var provider = new ComboBox { ItemsSource = SummarySources, DisplayMemberPath = nameof(SummarySource.Label),
-            SelectedIndex = summaryProviderIndex };
+            SelectedItem = activeSource, MinHeight = 38 };
         AutomationProperties.SetName(provider, "Summary provider");
         var model = Field("Summary model ID", 128);
+        model.MinHeight = provider.MinHeight;
         Put(fields, Labeled("Provider", provider), 0);
         Put(fields, Labeled("Model", model), 1);
         content.Children.Add(fields);
@@ -122,7 +132,17 @@ public partial class DashboardWindow
             actions.Children.Add(open);
         }
         content.Children.Add(actions);
-        provider.SelectionChanged += (_, _) => ApplyProvider();
+        provider.SelectionChanged += (_, _) =>
+        {
+            if (provider.SelectedItem is not SummarySource selected)
+                return;
+            RememberModel();
+            activeSource = selected;
+            ApplyProvider();
+            SaveChoices();
+        };
+        model.LostKeyboardFocus += (_, _) => SaveModel();
+        window.Closing += (_, _) => SaveModel();
         window.Closed += (_, _) => key.Clear();
         ApplyProvider();
         window.Show();
@@ -141,12 +161,11 @@ public partial class DashboardWindow
         void ApplyProvider()
         {
             var index = provider.SelectedIndex;
-            if (provider.SelectedItem is not SummarySource selected || index < 0)
-                return;
-            summaryProviderIndex = index;
+            var selected = activeSource;
             var cli = selected.KeyVariable == null;
-            model.Text = summaryModels[index] ?? selected.DefaultModel;
-            model.Tag = cli ? "CLI default" : "";
+            model.Text = models.TryGetValue(selected.Provider.ToString(), out var customModel) &&
+                !string.IsNullOrEmpty(customModel) && IsSummaryModelId(customModel) ? customModel : selected.DefaultModel;
+            model.Tag = cli ? "CLI default" : selected.DefaultModel;
             key.Clear();
             keyField.Visibility = cli ? Visibility.Collapsed : Visibility.Visible;
             send.Content = IconLabel("Summarize with " + selected.Label, 0xEAB7, AssistantInk);
@@ -155,6 +174,45 @@ public partial class DashboardWindow
                 : $"Sends the text above to {selected.Label}.";
             if (selected.KeyVariable is { } variable && (summaryKeys[index] != null || EnvironmentKey(variable) != null))
                 status.Text += " A key is available.";
+        }
+
+        string CurrentModel() => string.IsNullOrWhiteSpace(model.Text) ? activeSource.DefaultModel : model.Text.Trim();
+
+        void RememberModel()
+        {
+            var modelId = CurrentModel();
+            if (!IsSummaryModelId(modelId))
+                return;
+            var providerId = activeSource.Provider.ToString();
+            if (modelId == activeSource.DefaultModel)
+                modelChanged |= models.Remove(providerId);
+            else if (!models.TryGetValue(providerId, out var previous) || previous != modelId)
+            {
+                models[providerId] = modelId;
+                modelChanged = true;
+            }
+        }
+
+        void SaveChoices()
+        {
+            if (!modelChanged && savedProvider == activeSource.Provider)
+                return;
+            try
+            {
+                DockData.Save(SummaryPreferencesFile, new SummaryPreferences(activeSource.Provider.ToString(), models));
+                savedProvider = activeSource.Provider;
+                modelChanged = false;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                status.Text = "Could not save your summary choices.";
+            }
+        }
+
+        void SaveModel()
+        {
+            RememberModel();
+            SaveChoices();
         }
 
         async Task ReadSourceAsync(AgentSession chat)
@@ -183,7 +241,8 @@ public partial class DashboardWindow
             var index = provider.SelectedIndex;
             if (provider.SelectedItem is not SummarySource selected || index < 0)
                 return;
-            var modelId = model.Text.Trim();
+            var modelId = CurrentModel();
+            SaveModel();
             var typed = selected.KeyVariable == null ? "" : key.Password.Trim();
             var apiKey = selected.KeyVariable is { } variable
                 ? (typed.Length == 0 ? ReadSessionKey(index) ?? EnvironmentKey(variable) : typed)
@@ -199,12 +258,11 @@ public partial class DashboardWindow
                 return;
             }
             if (reply.Length > AgentSessions.SummaryLimit || (apiKey?.Any(char.IsWhiteSpace) ?? false) ||
-                modelId.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.' or '/' or ':')))
+                !IsSummaryModelId(modelId))
             {
                 status.Text = "Check the length of the reply, API key, or model ID.";
                 return;
             }
-            summaryModels[index] = modelId;
             send.IsEnabled = provider.IsEnabled = model.IsEnabled = key.IsEnabled = false;
             source.IsReadOnly = true;
             status.Text = "Summarizing…";
@@ -509,7 +567,7 @@ public partial class DashboardWindow
 
     private (Window Window, StackPanel Content, CancellationToken Cancellation) CreateDockPanel(
         string title, string subtitle, double width, int icon, SolidColorBrush tint, bool widget = false,
-        Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null, bool assistant = false,
+        Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null,
         DockSection? section = null)
     {
         agentPanel?.Close();
@@ -519,15 +577,11 @@ public partial class DashboardWindow
         var panel = new StackPanel();
         var header = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
         var close = IconButton(0xE711, "Close " + title.ToLowerInvariant(), () => agentPanel?.Close());
-        if (assistant)
-            ((TextBlock)close.Content).Foreground = AssistantInk;
         DockPanel.SetDock(close, Dock.Right);
         header.Children.Add(close);
         if (widget || backAction != null)
         {
             var back = IconButton(0xE76B, backLabel, backAction ?? ShowWidgets);
-            if (assistant)
-                ((TextBlock)back.Content).Foreground = AssistantInk;
             back.Margin = new Thickness(0, 0, 4, 0);
             header.Children.Add(back);
         }
@@ -539,9 +593,9 @@ public partial class DashboardWindow
             heading.Children.Add(badge);
         }
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        labels.Children.Add(Text(title, 19, assistant ? AssistantInk : Foreground, strong: true));
+        labels.Children.Add(Text(title, 19, AssistantInk, strong: true));
         if (!string.IsNullOrEmpty(subtitle))
-            labels.Children.Add(Text(subtitle, 11, assistant ? AssistantSecondary : subdued));
+            labels.Children.Add(Text(subtitle, 12, AssistantSecondary));
         heading.Children.Add(labels);
         header.Children.Add(heading);
         var frame = new DockPanel();
@@ -557,15 +611,14 @@ public partial class DashboardWindow
             MaxHeight = Math.Max(160, (DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - screen.Bounds.Top) /
                 dpi.DpiScaleY - 12), SizeToContent = SizeToContent.Height,
             WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent,
-            Foreground = assistant ? AssistantInk : Foreground, FontFamily = FontFamily, ResizeMode = ResizeMode.NoResize, Topmost = true,
+            Foreground = AssistantInk, FontFamily = FontFamily, ResizeMode = ResizeMode.NoResize, Topmost = true,
             ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, UseLayoutRounding = true
         };
         window.Resources.MergedDictionaries.Add(new ResourceDictionary
         {
             Source = new Uri("/WindowsDock;component/DashboardControls.xaml", UriKind.Relative)
         });
-        if (assistant)
-            ApplyAssistantResources(window);
+        ApplyDashboardResources(window);
         var footer = section is { } selected ? DockNavigation(window, selected) : DockGrip(window, swipe =>
         {
             if (swipe == DockSwipe.Right && backRoute != null)
@@ -581,11 +634,8 @@ public partial class DashboardWindow
         frame.Children.Add(footer);
         frame.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         var card = Card(frame);
-        card.CornerRadius = new CornerRadius(21);
-        card.Background = assistant
-            ? (SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantShell)
-            : new LinearGradientBrush(Color.FromRgb(37, 28, 53), Color.FromRgb(23, 21, 35), 55);
-        card.BorderBrush = assistant ? AssistantRule : AgentArt.Wash(tint, 123);
+        card.CornerRadius = new CornerRadius(12);
+        card.Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantShell;
         card.Padding = new Thickness(15);
         window.Content = card;
 

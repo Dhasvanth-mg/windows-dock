@@ -5,21 +5,12 @@
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True"
         Background="Transparent" ShowInTaskbar="False" Topmost="True"
         WindowStartupLocation="Manual" UseLayoutRounding="True" ShowActivated="True"
-        FontFamily="Segoe UI Variable Text, Segoe UI" Foreground="#F8F3FF">
+        FontFamily="Segoe UI Variable Text, Segoe UI" Foreground="{DynamicResource TextPrimary}">
     <Window.Resources>
         <ResourceDictionary>
         <ResourceDictionary.MergedDictionaries>
             <ResourceDictionary Source="DashboardControls.xaml"/>
         </ResourceDictionary.MergedDictionaries>
-        <SolidColorBrush x:Key="TextPrimary" Color="#F8F3FF"/>
-        <SolidColorBrush x:Key="TextSecondary" Color="#C5BCD6"/>
-        <SolidColorBrush x:Key="TextMuted" Color="#A69BB8"/>
-        <SolidColorBrush x:Key="ChipSurface" Color="#1BCDB6F9"/>
-        <SolidColorBrush x:Key="ChipStroke" Color="#22D9C6FF"/>
-        <SolidColorBrush x:Key="ChipHover" Color="#16DCCAFF"/>
-        <SolidColorBrush x:Key="FieldSurface" Color="#22110D1B"/>
-        <SolidColorBrush x:Key="FieldStroke" Color="#40C6AEF5"/>
-        <SolidColorBrush x:Key="ControlFocus" Color="#E2CBFF"/>
         <Style x:Key="Chip" TargetType="Button">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
             <Setter Property="Background" Value="{DynamicResource ChipSurface}"/>
@@ -33,12 +24,12 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7"
                                 Padding="{TemplateBinding Padding}">
                             <Grid>
                                 <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                                   HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
-                                <Border x:Name="Hover" Background="{DynamicResource ChipHover}" CornerRadius="7" Margin="-2"
+                                <Border x:Name="Hover" Background="{DynamicResource ChipHover}" CornerRadius="5" Margin="-2"
                                         Opacity="0" IsHitTestVisible="False"/>
                             </Grid>
                         </Border>
@@ -71,11 +62,15 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Hit" CornerRadius="7" Padding="{TemplateBinding Padding}"
+                        <Border x:Name="Hit" CornerRadius="6" Padding="{TemplateBinding Padding}"
                                 Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            <Grid>
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                <Border x:Name="Selection" Height="2" Margin="3,0,3,-2" VerticalAlignment="Bottom"
+                                        Background="{DynamicResource ControlFocus}" Visibility="Collapsed" IsHitTestVisible="False"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -86,6 +81,9 @@
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Hit" Property="BorderBrush" Value="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                            </Trigger>
+                            <Trigger Property="Tag" Value="Selected">
+                                <Setter TargetName="Selection" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -181,49 +179,32 @@
         </Style>
         </ResourceDictionary>
     </Window.Resources>
-    <Border x:Name="Shell" CornerRadius="22" BorderThickness="1" Padding="10,8,10,10">
-        <Border.Background>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Color="#FF211A30" Offset="0"/>
-                <GradientStop Color="#FF171320" Offset="0.52"/>
-                <GradientStop Color="#FF13131F" Offset="1"/>
-            </LinearGradientBrush>
-        </Border.Background>
-        <Border.BorderBrush>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Color="#98CEB3FF" Offset="0"/>
-                <GradientStop Color="#36BBA7E3" Offset="0.55"/>
-                <GradientStop Color="#66A0B4DD" Offset="1"/>
-            </LinearGradientBrush>
-        </Border.BorderBrush>
+    <Border x:Name="Shell" CornerRadius="12" BorderThickness="1" Padding="15,10,15,15"
+            Background="{DynamicResource DockSurface}" BorderBrush="{DynamicResource DockStroke}">
         <Grid x:Name="PanelLayout">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <StackPanel x:Name="DashboardHeader" Margin="4,3,4,8">
-                <DockPanel Height="35" Margin="0,0,0,8">
+            <StackPanel x:Name="DashboardHeader" Margin="0,0,0,12">
+                <DockPanel Height="39" Margin="0,0,0,6">
                     <StackPanel x:Name="HeaderActions" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"/>
                     <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="#29CAB4FF" BorderBrush="#50CAB4FF" BorderThickness="1"
-                                Width="29" Height="29" CornerRadius="9" Margin="0,0,8,0">
-                            <TextBlock Text="✦" FontSize="17" Foreground="#E0CEFF" FontFamily="Segoe UI Symbol"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <TextBlock Text="Windows Dock" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <ContentControl x:Name="HeaderMark" Width="30" Height="30" Margin="0,0,8,0"/>
+                        <TextBlock Text="Windows Dock" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <Border x:Name="HeaderClock" Background="#21C8AFF9" BorderBrush="#33C8AFF9"
-                            BorderThickness="1" Padding="9,3" CornerRadius="8"
-                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Border x:Name="HeaderClock" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Padding="0,0,12,0">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock x:Name="HeaderTime" FontSize="12" FontWeight="SemiBold"/>
-                            <Border Width="3" Height="3" CornerRadius="2" Background="#CAB4FF" Margin="8,0" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="HeaderDate" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="HeaderDate" FontSize="12" Foreground="{DynamicResource TextSecondary}"
+                                       Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                 </DockPanel>
                 <WrapPanel x:Name="DashboardTabs" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                <Border Height="1" Margin="0,4,0,0" Background="{DynamicResource DockStroke}"/>
             </StackPanel>
             <ScrollViewer x:Name="PageScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto">
                 <ContentControl x:Name="PageHost" HorizontalContentAlignment="Stretch"/>

@@ -430,6 +430,33 @@
 - Verification: Native Release, x64 publish, and Windows smoke checks passed. The fixture tested partial wheel deltas, momentum, tab boundaries, nested scrolling, and tab preservation. The installed build opened Dashboard, switched to Audio with a horizontal wheel message, opened Widgets with an upward wheel message, and returned to Audio from the Explorer taskbar button. Explorer was restarted after the old shell session refused to reload the native integration.
 - Remaining work: Physical touchpad input was not exercised. Windows wheel messages verified the input routing.
 
+#### Native dock visual refresh and animated horizontal slots
+
+- Status: Built, verified, and running in native mode.
+- Scope: Apply uncodixify to the native dashboard, widgets, and overlay panels. Arrange the live coding slots and assistant picker in one row of four.
+- Acceptance criteria: Preserve the taskbar height and existing panel widths. The four slots are interactive and animate to communicate state or focus. Dashboard navigation, forms, and popovers share styling and keep their existing routes.
+- Outcome: Dashboard and popovers share black surfaces, neutral controls, and simpler row separators. The assistant picker keeps its 366 DIP width and shows the characters side by side. The native coding strip stays on the taskbar and uses state-specific motion. Both surfaces respect the Windows animation setting.
+- Verification: Release builds, Windows smoke tests, and Windows renders passed. Verified all dashboard pages at 1060 and 640 DIP, four assistant tiles in one row, and the existing click and wheel navigation. An installed Explorer slot opened Coding chats.
+- Remaining work: None.
+
+##### Taskbar contrast and agent spacing
+
+- Status: Built and running in native mode. Installed geometry and routing verified.
+- Scope: Address the light-background screenshot and use the allowed extra width for the four live agent slots.
+- Acceptance criteria: The frosted taskbar remains legible over light content. The native faces are readable and separated, and the shell height stays fixed. The assistant picker uses the existing width.
+- Outcome: Added a neutral shade over the acrylic to limit its brightness and brightened the date. Removed the heavy fill from the agent strip. Each slot now has a 22 DIP column and a larger face.
+- Verification: Installed native build loaded in Explorer. At 96 DPI, all four click targets measured 20 by 36 pixels, spaced 22 pixels apart. The taskbar stayed 48 pixels tall.
+- Remaining work: The new native glass was not visually rechecked over a white browser page.
+
+##### Remember summary choices
+
+- Status: Built, verified, and installed.
+- Scope: Remember the last selected provider and each provider's model across reply and notification summary popups and dock restarts.
+- Acceptance criteria: Both popups open ready to use with the saved selection. Switching providers restores its own model, including a CLI default. Opening a new popup does not require navigating to another settings screen.
+- Outcome: The two summary popups share locally saved provider and per-provider model preferences. Changing provider or leaving the model field saves the choice without a summary request. Clearing a model restores that provider's default. The installed profile was initialized to Codex with the CLI default from the screenshot.
+- Verification: Windows smoke checks passed for switching providers, reopening both summary types, invalid saved models, clearing a custom model, and restored preferences in a fresh process. A fixture confirmed the key stays out of the preference file. An installed Reply summary opened directly with Codex and the CLI default.
+- Remaining work: None.
+
 ##### Coding providers for summaries
 
 - Status: Built and installed. Codex verified live. Claude Code sign-in required on this machine.

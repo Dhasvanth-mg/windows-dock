@@ -28,6 +28,8 @@ public:
     static xaml::FrameworkElement Find(xaml::DependencyObject const& root, std::wstring_view name);
 
 private:
+    static constexpr double AgentSlotWidth = 22;
+
     struct Property
     {
         winrt::weak_ref<xaml::DependencyObject> object;

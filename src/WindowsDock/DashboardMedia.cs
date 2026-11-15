@@ -23,47 +23,49 @@ public partial class DashboardWindow
 
     private UIElement HomePage()
     {
-        var grid = WideDashboard ? Columns(1.18, .82, 1.26) : Columns(1, 1);
+        var grid = Columns(1.55, 1);
         var media = MediaCard(false, out var updateMedia);
-        Put(grid, media, 0, 0, WideDashboard ? 2 : 1);
-        Put(grid, QuickCard(), 0, WideDashboard ? 2 : 1);
+        Put(grid, media, 0);
+        Put(grid, QuickCard(), 1);
 
-        var date = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var date = new StackPanel();
+        date.Children.Add(CardHeading("Calendar", 0xE787, amber));
         var today = DateTime.Today;
-        var dateLabel = Text(today.ToString("dddd"), 11, amber, true);
-        var dateNumber = Text(today.ToString("d MMM"), 24, strong: true);
-        dateLabel.TextAlignment = dateNumber.TextAlignment = TextAlignment.Center;
-        date.Children.Add(dateLabel);
+        var dateLabel = Text(today.ToString("dddd"), 12, subdued);
+        var dateNumber = Text(today.ToString("d MMM"), 23, strong: true);
         date.Children.Add(dateNumber);
-        var calendar = AccentButton("Open calendar", 0xE787, amber, () => ShowPage(DashboardPage.Calendar));
+        date.Children.Add(dateLabel);
+        var calendar = ActionButton("Open calendar", () => ShowPage(DashboardPage.Calendar));
         calendar.Padding = new Thickness(7, 4, 7, 4);
         calendar.Margin = new Thickness(0, 5, 0, 0);
-        calendar.HorizontalAlignment = HorizontalAlignment.Center;
+        calendar.HorizontalAlignment = HorizontalAlignment.Left;
         date.Children.Add(calendar);
-        Put(grid, Card(date, amber), 1, 0);
 
-        var forecast = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var forecast = new StackPanel();
         forecast.Children.Add(CardHeading("Weather", 0xE753, accent));
         if (weather is { } currentWeather)
         {
             forecast.Children.Add(Text($"{currentWeather.Temperature:0}°F", 23, strong: true));
             forecast.Children.Add(Text(currentWeather.City, 11, subdued));
         }
-        var weatherLink = AccentButton(weather == null ? "Set location" : "View forecast", 0xE707, accent,
+        var weatherLink = ActionButton(weather == null ? "Set location" : "View forecast",
             () => ShowPage(DashboardPage.Weather));
         weatherLink.Padding = new Thickness(7, 4, 7, 4);
         weatherLink.Margin = new Thickness(0, 5, 0, 0);
         weatherLink.HorizontalAlignment = HorizontalAlignment.Left;
         forecast.Children.Add(weatherLink);
-        Put(grid, Card(forecast, accent), 1, 1);
 
-        var overview = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var overview = new StackPanel();
         var details = ActionButton("Details", () => ShowPage(DashboardPage.Stats));
         details.Padding = new Thickness(7, 4, 7, 4);
         overview.Children.Add(CardHeading("System stats", 0xE9D9, green, details));
         var cpu = MetricBar(overview, "CPU", green);
         var memory = MetricBar(overview, "Memory", accent);
-        Put(grid, Card(overview, green), WideDashboard ? 1 : 2, WideDashboard ? 2 : 0, WideDashboard ? 1 : 2);
+        var sections = Columns(1, 1, 1.35);
+        Put(sections, date, 0);
+        Put(sections, OverviewSection(forecast), 1);
+        Put(sections, OverviewSection(overview), 2);
+        Put(grid, Card(sections), 1, 0, 2);
         updatePage = () =>
         {
             updateMedia();
@@ -80,6 +82,12 @@ public partial class DashboardWindow
         content.Children.Add(homeFavorites);
         content.Children.Add(grid);
         return content;
+
+        Border OverviewSection(UIElement child) => new()
+        {
+            BorderBrush = AssistantRule, BorderThickness = new Thickness(1, 0, 0, 0),
+            Padding = new Thickness(12, 0, 0, 0), Child = child
+        };
     }
 
     private UIElement MediaPage()

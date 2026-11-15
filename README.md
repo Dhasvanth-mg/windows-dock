@@ -1,6 +1,6 @@
 # Windows Dock
 
-Windows Dock styles Explorer's taskbar in place on Windows 11 x64 25H2 (build 26200). It centers the native app list, tray, and clock on one frosted glass surface. The Windows Dock button opens Dashboard and the adjoining 2×2 grid shows live coding chat states. Native app switching, jump lists, window previews, Start, notifications, and Quick Settings remain Explorer features.
+Windows Dock styles Explorer's taskbar in place on Windows 11 x64 25H2 (build 26200). It centers the native app list, tray, and clock on one frosted glass surface. The Windows Dock button opens Dashboard and the adjoining row of four animated slots shows live coding chat states. Native app switching, jump lists, window previews, Start, notifications, and Quick Settings remain Explorer features.
 
 ## Run the native dock
 
@@ -20,19 +20,21 @@ The dashboard includes media sessions and volume, Windows settings shortcuts, a 
 
 With Windows Dock's native styling stopped, run `NativeTaskbar.exe --tray` to keep the dashboard and coding chats available while Hitodama styles the taskbar. For a normal Windows taskbar pin in this mode, create a shortcut to `WindowsDock.exe --open` and pin it through Windows. That command opens Dashboard and starts the companion controller if needed. **Ctrl+Alt+D** opens Coding chats in either mode.
 
-In either mode, **Ctrl+Alt+A** or **Open assistant** in the tray menu opens the 2×2 assistant picker. Use **1–4** to open a character, or search for their name with **Ctrl+K**. On battery, the controller sends Windows notifications at 25%, 20%, 15%, 10%, and 5%. Reconnecting power resets the alert sequence.
+In either mode, **Ctrl+Alt+A** or **Open assistant** in the tray menu opens the four-character picker. Use keys **1 to 4** to open a character, or search for their name with **Ctrl+K**. On battery, the controller sends Windows notifications at 25%, 20%, 15%, 10%, and 5%. Reconnecting power resets the alert sequence.
 
 To switch back to Windows Dock's taskbar styling, exit tray mode from its icon, turn off Hitodama's taskbar appearance, and launch `NativeTaskbar.exe` without arguments. Hitodama's assistant can run in either mode.
 
 ## Coding chats
 
-The four faces in the 2×2 taskbar grid change as chats work, finish, or need attention. Click a face to open **Coding chats**. The panel brings an approval or recent reply to the front and keeps the chat list below it. **Assign slot** pins a chat, follows the latest matching chat in a project, or restores automatic selection. The grid reads local desktop metadata and turn events, so cloud-only chats may be missing.
+The four faces in the taskbar row animate as chats work, finish, or need attention. Click a face to open **Coding chats**. The panel brings an approval or recent reply to the front and keeps the chat list below it. **Assign slot** pins a chat, follows the latest matching chat in a project, or restores automatic selection. The grid reads local desktop metadata and turn events, so cloud-only chats may be missing. Character motion follows the Windows animation preference.
 
 Under **Connections and defaults**, enable the provider hooks for live updates. Turn on **Allow or deny individual requests here** before enabling the hooks if you want the dock to handle one-time tool approvals. Codex requires you to review the new hooks in **Settings → Hooks**. Start or resume a Claude Code session for the new settings to take effect. Each supported request shows its tool, working directory, and arguments. After 30 seconds the dock yields to the provider's own approval flow. The dock stores status metadata locally and removes the approval payload when the request ends.
 
 **Save defaults** updates the provider's user configuration and creates a backup. These are defaults for new sessions when the provider loads its settings. Existing chats can have their own model and thinking overrides. Use **Remove dock hooks** to remove this integration from a provider.
 
 **Summarize reply** previews the selected chat's latest completed local reply. Paste a reply when a transcript is unavailable. Review the editable text, then choose **Codex**, **Claude Code**, **Gemini**, or **Groq** and send it to that provider. Codex and Claude Code use their installed Windows CLI and saved sign-in. Leave the model blank to use the CLI's default. Gemini and Groq use an API key from the popup, `GEMINI_API_KEY`, or `GROQ_API_KEY`. Keys entered in the popup stay in memory for the current dock session.
+
+Reply and notification summaries remember the last selected provider and each provider's model across dock restarts. Clear the model field to restore the selected provider's default.
 
 CLI summaries run in a temporary directory with model tools disabled and session history off. They use the selected CLI's account and usage limits. Sign in to the CLI before choosing it in the dock.
 
@@ -52,7 +54,7 @@ Choose **Widgets** from the dashboard or the compact Coding chats panel. Star a 
 - **Downloads** shows recent files and partial browser downloads from the Downloads folder, alongside Windows background transfers. Browser progress is limited to what the partial files expose.
 - **Focus timer** runs locally. **Windows Focus** opens the system controls for a focus session with Do Not Disturb.
 - **Notifications** reads recent Windows alerts when access is allowed. Select alerts and review the draft before sending it to any of the four summary providers.
-- **Assistant** opens the 2×2 character picker. Choose **ChatGPT plan** and continue in your browser to authorize eligible plan usage. **Claude API** uses a Claude Console key. Gemini, Grok, and Groq use their own API keys. Configure them in the panel or with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or `GROQ_API_KEY`. On a usage error, you can switch to Gemini or Grok and resend the draft. Each send shares the current character's recent conversation with the selected provider.
+- **Assistant** opens the four-character picker. Choose **ChatGPT plan** and continue in your browser to authorize eligible plan usage. **Claude API** uses a Claude Console key. Gemini, Grok, and Groq use their own API keys. Configure them in the panel or with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or `GROQ_API_KEY`. On a usage error, you can switch to Gemini or Grok and resend the draft. Each send shares the current character's recent conversation with the selected provider.
 
 ### Assistant connections
 

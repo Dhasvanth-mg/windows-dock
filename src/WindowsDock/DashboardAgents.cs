@@ -280,8 +280,8 @@ public partial class DashboardWindow
         });
         button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         button.Padding = new Thickness(8, 4, 10, 4);
-        button.Background = selected ? AgentArt.Wash(color, 32) : Brush("#0BFFFFFF");
-        button.BorderBrush = selected ? AgentArt.Wash(color, 72) : Brush("#12C7B3F4");
+        button.Background = selected ? assistantInset : Brushes.Transparent;
+        button.BorderBrush = selected ? AgentArt.Wash(color, 105) : AssistantRule;
         button.ToolTip = AgentTooltip(session);
         return button;
     }
@@ -340,11 +340,7 @@ public partial class DashboardWindow
         panel.Children.Add(actions);
         var card = Card(panel);
         card.Padding = new Thickness(13);
-        card.CornerRadius = new CornerRadius(16);
-        card.BorderBrush = AgentArt.Wash(color, 53);
-        var tint = color.Color;
-        card.Background = new LinearGradientBrush(Color.FromRgb((byte)(25 + tint.R / 10),
-            (byte)(21 + tint.G / 10), (byte)(36 + tint.B / 10)), Color.FromRgb(30, 26, 44), 55);
+        card.BorderBrush = SystemParameters.HighContrast ? AssistantRule : AgentArt.Wash(color, 65);
         return card;
 
         void AddAction(string text, int icon, Action action, bool primary = false)

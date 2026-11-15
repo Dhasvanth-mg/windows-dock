@@ -113,7 +113,7 @@ public partial class DashboardWindow
                 labels[i], () => { if (!current) OpenDockSection(selected, section); });
             button.Style = (Style)FindResource("AssistantPickerButton");
             button.Foreground = AssistantInk;
-            button.Background = current ? (SystemParameters.HighContrast ? SystemColors.ControlBrush : assistantInset) : Brushes.Transparent;
+            button.Tag = current ? "Selected" : null;
             button.MinHeight = 29;
             button.Padding = new Thickness(2, 4, 2, 4);
             button.HorizontalContentAlignment = HorizontalAlignment.Center;

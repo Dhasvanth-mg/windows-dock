@@ -23,8 +23,8 @@ public partial class DashboardWindow : Window
     private readonly bool releaseWhenIdle;
     private readonly bool trayMode;
     private readonly DispatcherTimer idleExit = new() { Interval = TimeSpan.FromSeconds(20) };
-    private readonly SolidColorBrush subdued = Brush("#C5BCD6");
-    private readonly SolidColorBrush muted = Brush("#A69BB8");
+    private SolidColorBrush subdued => AssistantSecondary;
+    private SolidColorBrush muted => AssistantSecondary;
     private readonly SolidColorBrush accent = Brush("#9CC9FF");
     private readonly SolidColorBrush green = Brush("#A1EDC5");
     private readonly SolidColorBrush purple = Brush("#CAB4FF");
@@ -47,6 +47,7 @@ public partial class DashboardWindow : Window
         bool trayMode = false)
     {
         InitializeComponent();
+        ApplyDashboardResources(this);
         this.controllerPid = controllerPid;
         this.releaseWhenIdle = releaseWhenIdle;
         this.trayMode = trayMode;
@@ -61,17 +62,18 @@ public partial class DashboardWindow : Window
         agentGrid = AgentGrid.Connect(controllerPid);
         ShowInTaskbar = controllerPid == 0;
 
-        AddTab(DashboardPage.Home, 0xE80F, "Overview");
-        AddTab(DashboardPage.Media, 0xE8D6, "Audio");
-        AddTab(DashboardPage.Controls, 0xE9E9, "Controls");
-        AddTab(DashboardPage.Calendar, 0xE787, "Calendar");
-        AddTab(DashboardPage.Weather, 0xE753, "Weather");
-        AddTab(DashboardPage.Agents, 0xE943, "Chats");
-        AddTab(DashboardPage.Stats, 0xE9D9, "Stats");
-        AddTab(DashboardPage.Shelf, 0xE8B7, "Files");
-        AddTab(DashboardPage.Wallpapers, 0xE91B, "Wallpapers");
-        AddTab(DashboardPage.Power, 0xE7E8, "Power");
-        AddTab(DashboardPage.Settings, 0xE713, "Settings");
+        AddTab(DashboardPage.Home, "Overview");
+        AddTab(DashboardPage.Media, "Audio");
+        AddTab(DashboardPage.Controls, "Controls");
+        AddTab(DashboardPage.Calendar, "Calendar");
+        AddTab(DashboardPage.Weather, "Weather");
+        AddTab(DashboardPage.Agents, "Chats");
+        AddTab(DashboardPage.Stats, "Stats");
+        AddTab(DashboardPage.Shelf, "Files");
+        AddTab(DashboardPage.Wallpapers, "Wallpapers");
+        AddTab(DashboardPage.Power, "Power");
+        AddTab(DashboardPage.Settings, "Settings");
+        HeaderMark.Content = DockTaskbar.IconBadge(30);
         HeaderActions.Children.Add(WidgetLauncherButton());
         HeaderActions.Children.Add(IconButton(0xE711, "Close dashboard", Dismiss));
 
@@ -223,11 +225,15 @@ public partial class DashboardWindow : Window
             DockTaskbar.ReportVisibility(controllerPid, visible);
     }
 
-    private void AddTab(DashboardPage page, int icon, string label)
+    private void AddTab(DashboardPage page, string label)
     {
-        var button = MakeButton(IconLabel(label, icon), label, () => ShowPage(page));
-        button.Padding = new Thickness(8, 4, 8, 4);
+        var button = MakeButton(label, label, () => ShowPage(page));
+        button.Style = (Style)FindResource("AssistantPickerButton");
+        button.Padding = new Thickness(9, 5, 9, 6);
         button.Margin = new Thickness(0, 0, 3, 3);
+        button.MinHeight = 30;
+        button.FontSize = 13;
+        ToolTipService.SetIsEnabled(button, false);
         tabs[page] = button;
         DashboardTabs.Children.Add(button);
     }
@@ -244,9 +250,10 @@ public partial class DashboardWindow : Window
         homeFavorites = null;
         foreach (var (key, button) in tabs)
         {
-            button.Background = key == page ? Brush("#32C5A8FF") : Brushes.Transparent;
-            button.BorderBrush = key == page ? Brush("#56C5A8FF") : Brushes.Transparent;
-            button.Foreground = key == page ? purple : subdued;
+            button.Tag = key == page ? "Selected" : null;
+            button.Foreground = key == page ? AssistantInk : AssistantSecondary;
+            button.FontWeight = key == page ? FontWeights.SemiBold : FontWeights.Normal;
+            AutomationProperties.SetItemStatus(button, key == page ? "Current tab" : "");
         }
 
         PageHost.Content = page switch
@@ -343,12 +350,9 @@ public partial class DashboardWindow : Window
 
     private Border Card(UIElement child, SolidColorBrush? tint = null) => new()
     {
-        Background = tint == null
-            ? new LinearGradientBrush(Color.FromRgb(41, 35, 54), Color.FromRgb(29, 25, 40), 90)
-            : new LinearGradientBrush(Color.FromArgb(33, tint.Color.R, tint.Color.G, tint.Color.B),
-                Color.FromArgb(10, tint.Color.R, tint.Color.G, tint.Color.B), 65),
-        BorderBrush = tint == null ? Brush("#28D4BDFE") : AgentArt.Wash(tint, 50), BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(15), Padding = new Thickness(12), Child = child,
+        Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantInset,
+        BorderBrush = tint == null || SystemParameters.HighContrast ? AssistantRule : AgentArt.Wash(tint, 34),
+        BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(12), Child = child,
         ClipToBounds = true
     };
 
@@ -380,15 +384,12 @@ public partial class DashboardWindow : Window
 
     private Button AccentButton(string label, int icon, SolidColorBrush tint, Action? action = null)
     {
-        var button = MakeButton(IconLabel(label, icon, tint), label, action);
-        button.Background = AgentArt.Wash(tint, 35);
-        button.BorderBrush = AgentArt.Wash(tint, 70);
-        return button;
+        return MakeButton(IconLabel(label, icon, SystemParameters.HighContrast ? AssistantInk : tint), label, action);
     }
 
     private Button IconButton(int icon, string label, Action? action = null)
     {
-        var glyph = DockGlyph(icon, 13);
+        var glyph = DockGlyph(icon, 13, AssistantInk);
         var button = MakeButton(glyph, label, action);
         button.Padding = new Thickness(0);
         button.Width = 28;
@@ -401,7 +402,7 @@ public partial class DashboardWindow : Window
 
     private Button WidgetLauncherButton()
     {
-        var button = AccentButton("Widgets", 0xECAA, purple, ShowWidgets);
+        var button = AccentButton("Widgets", 0xECAA, AssistantSecondary, ShowWidgets);
         button.ToolTip = "Open Widgets or scroll up at the top of Dashboard";
         button.Padding = new Thickness(8, 4, 8, 4);
         button.Margin = new Thickness(3, 0, 3, 0);
@@ -432,12 +433,11 @@ public partial class DashboardWindow : Window
 
     private Border GlyphBadge(int icon, SolidColorBrush tint, double size)
     {
-        var glyph = DockGlyph(icon, size * .5, tint);
+        var glyph = DockGlyph(icon, size * .6, SystemParameters.HighContrast ? AssistantInk : tint);
         glyph.HorizontalAlignment = HorizontalAlignment.Center;
         return new Border
         {
-            Width = size, Height = size, CornerRadius = new CornerRadius(size * .29),
-            Background = AgentArt.Wash(tint, 30), Child = glyph, VerticalAlignment = VerticalAlignment.Center
+            Width = size * .7, Height = size * .72, Child = glyph, VerticalAlignment = VerticalAlignment.Center
         };
     }
 

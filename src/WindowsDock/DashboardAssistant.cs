@@ -51,7 +51,7 @@ public partial class DashboardWindow
         var chat = assistantConversations[slot];
         var tint = AssistantInk;
         var (window, content, cancellation) = CreateDockPanel(persona.Name, persona.Role, 506, 0xEAB7, tint,
-            backAction: ShowAssistantPicker, backLabel: "Back to assistants", portrait: PersonaPortrait(persona, 38), assistant: true);
+            backAction: ShowAssistantPicker, backLabel: "Back to assistants", portrait: PersonaPortrait(persona, 38));
         var intro = Text(persona.Greeting, 14, AssistantInk, strong: true);
         intro.Margin = new Thickness(0, 0, 0, 6);
         content.Children.Add(intro);
@@ -419,7 +419,7 @@ public partial class DashboardWindow
             var review = ActionButton("Attached: " + context.Source, () =>
             {
                 var (previewWindow, body, _) = CreateDockPanel("Attached context", context.Source, 474, 0xE8A7, tint,
-                    backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}", assistant: true);
+                    backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}");
                 var text = Field("Attached context text", 0);
                 text.IsReadOnly = true;
                 text.TextWrapping = TextWrapping.Wrap;

@@ -3,6 +3,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace WindowsDock;
 
@@ -17,20 +18,22 @@ public partial class DashboardWindow
     private static SolidColorBrush AssistantSecondary => SystemParameters.HighContrast ? SystemColors.WindowTextBrush : assistantSoftInk;
     private static SolidColorBrush AssistantRule => SystemParameters.HighContrast ? SystemColors.WindowTextBrush : assistantRule;
 
-    private static void ApplyAssistantResources(Window window)
+    private static void ApplyDashboardResources(Window window)
     {
         var contrast = SystemParameters.HighContrast;
         var surface = contrast ? SystemColors.WindowBrush : assistantInset;
         var focus = contrast ? SystemColors.HighlightBrush : AssistantInk;
         var hover = contrast ? SystemColors.ControlBrush : Brush("#10FFFFFF");
         var selected = contrast ? SystemColors.ControlBrush : Brush("#22FFFFFF");
+        window.Resources["DockSurface"] = contrast ? SystemColors.WindowBrush : assistantShell;
+        window.Resources["DockStroke"] = AssistantRule;
         foreach (var key in new[] { "ChipSurface", "FieldSurface", "InputSurface", "InputPopup" })
             window.Resources[key] = surface;
         foreach (var key in new[] { "ChipStroke", "FieldStroke", "InputStroke" })
             window.Resources[key] = AssistantRule;
         foreach (var key in new[] { "TextPrimary", "InputText", "InputMark" })
             window.Resources[key] = AssistantInk;
-        window.Resources["TextMuted"] = AssistantSecondary;
+        window.Resources["TextSecondary"] = window.Resources["TextMuted"] = AssistantSecondary;
         window.Resources["ChipHover"] = window.Resources["InputItemHover"] = hover;
         window.Resources["InputItemSelected"] = window.Resources["InputChecked"] = selected;
         window.Resources["ControlFocus"] = window.Resources["InputFocus"] = focus;
@@ -43,21 +46,11 @@ public partial class DashboardWindow
             picker.Activate();
             return;
         }
-        var (window, content, _) = CreateDockPanel("Assistants", "", 366, 0, AssistantRule, assistant: true,
+        var (window, content, _) = CreateDockPanel("Assistants", "", 366, 0, AssistantRule,
             section: DockSection.Assistants);
-        var grid = Columns(1, 1);
-        grid.ColumnDefinitions.Insert(1, new ColumnDefinition { Width = new GridLength(1) });
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1) });
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var verticalRule = new Border { Background = AssistantRule };
-        Grid.SetColumn(verticalRule, 1);
-        Grid.SetRowSpan(verticalRule, 3);
-        grid.Children.Add(verticalRule);
-        var horizontalRule = new Border { Background = AssistantRule };
-        Grid.SetRow(horizontalRule, 1);
-        Grid.SetColumnSpan(horizontalRule, 3);
-        grid.Children.Add(horizontalRule);
+        window.MinHeight = Math.Min(302, window.MaxHeight);
+        var grid = Columns(1, 1, 1, 1);
+        grid.Margin = new Thickness(0, 5, 0, 0);
         var buttons = new List<Button>();
         var buttonStyle = (Style)FindResource("AssistantPickerButton");
         for (var index = 0; index < AssistantPersonas.All.Length; index++)
@@ -65,53 +58,62 @@ public partial class DashboardWindow
             var slot = index;
             var persona = AssistantPersonas.All[index];
             var keyLabel = (index + 1).ToString();
-            var body = new DockPanel();
-            var key = Text(keyLabel, 11, AssistantSecondary);
-            key.Margin = new Thickness(4, 2, 0, 0);
-            key.VerticalAlignment = VerticalAlignment.Top;
-            DockPanel.SetDock(key, Dock.Right);
-            body.Children.Add(key);
-            var portrait = PersonaPortrait(persona, 42);
-            portrait.Background = Brushes.Transparent;
-            portrait.Margin = new Thickness(0, 0, 7, 0);
-            body.Children.Add(portrait);
-            var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            labels.Children.Add(Text(persona.Name, 16, AssistantInk, strong: true));
-            labels.Children.Add(Text(persona.Role, 12, AssistantSecondary));
+            var face = PersonaPortrait(persona, 64);
+            var labels = new StackPanel { Margin = new Thickness(0, 3, 0, 0) };
+            labels.Children.Add(face);
+            var name = Text(persona.Name, 15, AssistantInk, strong: true);
+            var role = Text(persona.Role, 11, AssistantSecondary);
+            name.HorizontalAlignment = role.HorizontalAlignment = HorizontalAlignment.Center;
+            labels.Children.Add(name);
+            labels.Children.Add(role);
+
+            var body = new Grid();
             body.Children.Add(labels);
+            var key = Text(keyLabel, 11, AssistantSecondary);
+            key.HorizontalAlignment = HorizontalAlignment.Right;
+            key.VerticalAlignment = VerticalAlignment.Top;
+            body.Children.Add(key);
             var tile = MakeButton(body, persona.Label, () => OpenAssistantConversation(slot));
             tile.Style = buttonStyle;
             tile.Foreground = AssistantInk;
-            tile.Padding = new Thickness(3, 4, 6, 3);
+            tile.Padding = new Thickness(3, 6, 4, 9);
             tile.ToolTip = persona.Bio;
             AutomationProperties.SetHelpText(tile, persona.Bio);
             AutomationProperties.SetAcceleratorKey(tile, keyLabel);
-            var actionLabel = AssistantQuickLabel(persona);
-            var actionIcon = persona.Id switch
+            var delay = TimeSpan.FromMilliseconds(25 * index);
+            tile.Loaded += (_, _) =>
             {
-                "research" => 0xE721,
-                "housekeeping" => 0xE787,
-                "coding" => 0xE723,
-                _ => 0xEA80
+                if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
+                {
+                    var lift = new TranslateTransform();
+                    face.RenderTransform = lift;
+                    lift.BeginAnimation(TranslateTransform.YProperty,
+                        new DoubleAnimation(4, 0, TimeSpan.FromMilliseconds(185)) { BeginTime = delay,
+                            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+                    face.BeginAnimation(OpacityProperty,
+                        new DoubleAnimation(.3, 1, TimeSpan.FromMilliseconds(155)) { BeginTime = delay });
+                }
             };
-            var action = new DockPanel();
-            var glyph = DockGlyph(actionIcon, 12, AssistantSecondary);
-            glyph.Margin = new Thickness(0, 0, 7, 0);
-            action.Children.Add(glyph);
-            action.Children.Add(Text(actionLabel, 12, AssistantInk));
-            var tools = MakeButton(action, actionLabel, () => OpenAssistantQuickAction(slot));
+
+            var caption = persona.Id switch
+            {
+                "research" => "Web search",
+                "housekeeping" => "Schedule",
+                "coding" => "Logs",
+                _ => "Idea jar"
+            };
+            var tools = MakeButton(caption, AssistantQuickLabel(persona), () => OpenAssistantQuickAction(slot));
             tools.Style = buttonStyle;
-            tools.Foreground = AssistantInk;
-            tools.Padding = new Thickness(10, 4, 8, 4);
-            tools.MinHeight = 28;
-            var cell = new StackPanel
-            {
-                Margin = new Thickness(index % 2 == 0 ? 0 : 5, 4, index % 2 == 0 ? 5 : 0, 4)
-            };
+            tools.Foreground = AssistantSecondary;
+            tools.FontSize = 11;
+            tools.Padding = new Thickness(2, 4, 2, 4);
+            tools.HorizontalContentAlignment = HorizontalAlignment.Center;
+            tools.MinHeight = 31;
+            var cell = new StackPanel { Margin = new Thickness(2, 0, 2, 0) };
             cell.Children.Add(tile);
+            cell.Children.Add(new Border { Height = 1, Background = AssistantRule, Margin = new Thickness(5, 4, 5, 0) });
             cell.Children.Add(tools);
-            Grid.SetRow(cell, index / 2 * 2);
-            Grid.SetColumn(cell, index % 2 * 2);
+            Grid.SetColumn(cell, index);
             grid.Children.Add(cell);
             buttons.Add(tile);
         }

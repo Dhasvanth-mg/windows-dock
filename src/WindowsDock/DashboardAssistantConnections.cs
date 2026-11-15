@@ -14,7 +14,7 @@ public partial class DashboardWindow
         var tint = AssistantInk;
         var title = quick ? AssistantQuickLabel(persona) : "MCP connections";
         var (window, content, cancellation) = CreateDockPanel(title, persona.Label, 458, 0xE8A7, tint,
-            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}", assistant: true);
+            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}");
         var connections = AssistantConnections.For(persona.Id);
         var chat = assistantConversations[assistantRole];
         var enabled = AssistantConnections.Enabled();

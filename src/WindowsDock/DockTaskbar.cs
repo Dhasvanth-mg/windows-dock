@@ -75,13 +75,13 @@ internal static class DockTaskbar
         return screen.Bottom - 48 * scale;
     }
 
-    internal static Border IconBadge()
+    internal static Border IconBadge(double size = 35)
     {
         var resource = Application.GetResourceStream(new Uri("pack://application:,,,/WindowsDock;component/DockIcon.ico"));
         using var stream = resource!.Stream;
         var decoder = new IconBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         var icon = decoder.Frames.OrderBy(frame => Math.Abs(frame.PixelWidth - 48)).First();
-        return new Border { Width = 35, Height = 35, Child = new System.Windows.Controls.Image { Source = icon } };
+        return new Border { Width = size, Height = size, Child = new System.Windows.Controls.Image { Source = icon } };
     }
 
     [StructLayout(LayoutKind.Sequential)]

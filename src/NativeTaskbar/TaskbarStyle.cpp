@@ -26,22 +26,6 @@ namespace
     {
         return media::SolidColorBrush(Color{alpha, red, green, blue});
     }
-
-    media::LinearGradientBrush Rim()
-    {
-        media::LinearGradientBrush brush;
-        brush.StartPoint({0, 0});
-        brush.EndPoint({0, 1});
-        for (const auto [position, color] : std::initializer_list<std::pair<double, Color>>{
-            {0.0, {105, 207, 188, 252}}, {0.46, {33, 163, 147, 208}}, {1.0, {64, 174, 200, 240}}})
-        {
-            media::GradientStop stop;
-            stop.Offset(position);
-            stop.Color(color);
-            brush.GradientStops().Append(stop);
-        }
-        return brush;
-    }
 }
 
 TaskbarStyle::TaskbarStyle(Grid const& root, winrt::handle const& dashboard, DWORD controllerPid)
@@ -138,14 +122,19 @@ void TaskbarStyle::AddChrome()
     chrome.CornerRadius({18, 18, 18, 18});
     chrome.Margin({0, 2, 0, 4});
     chrome.BorderThickness({1, 1, 1, 1});
-    chrome.BorderBrush(Rim());
+    chrome.BorderBrush(Solid(46, 235, 235, 235));
     media::AcrylicBrush glass;
     glass.BackgroundSource(media::AcrylicBackgroundSource::Backdrop);
-    glass.TintColor(Color{255, 18, 15, 27});
-    glass.TintOpacity(0.83);
-    glass.TintLuminosityOpacity(0.10);
-    glass.FallbackColor(Color{246, 22, 19, 32});
+    glass.TintColor(Color{255, 24, 24, 24});
+    glass.TintOpacity(0.72);
+    glass.TintLuminosityOpacity(0.65);
+    glass.FallbackColor(Color{255, 26, 26, 26});
     chrome.Background(glass);
+    // Bound the backdrop brightness behind the light tray icons and clock.
+    controls::Border shade;
+    shade.Background(Solid(175, 12, 12, 12));
+    shade.CornerRadius({17, 17, 17, 17});
+    chrome.Child(shade);
 
     Grid::SetColumn(chrome, 1);
     Grid::SetColumnSpan(chrome, 3);
@@ -158,7 +147,7 @@ void TaskbarStyle::AddChrome()
     divider.HorizontalAlignment(xaml::HorizontalAlignment::Left);
     divider.VerticalAlignment(xaml::VerticalAlignment::Center);
     divider.Margin({1, 0, 0, 0});
-    divider.Background(Solid(57, 191, 169, 245));
+    divider.Background(Solid(42, 235, 235, 235));
     divider.IsHitTestVisible(false);
     Grid::SetColumn(divider, 2);
     root.Children().Append(divider);
@@ -258,7 +247,7 @@ void TaskbarStyle::StyleTray(FrameworkElement const& tray)
     if (date)
     {
         Set(date, controls::TextBlock::FontSizeProperty(), 10.0);
-        Set(date, controls::TextBlock::ForegroundProperty(), Solid(255, 185, 191, 205));
+        Set(date, controls::TextBlock::ForegroundProperty(), Solid(255, 218, 218, 218));
     }
     for (const auto name : {L"ControlCenterButton", L"NotificationCenterButton", L"ChevronIconView"})
     {
@@ -350,7 +339,8 @@ void TaskbarStyle::FitApps()
     {
         const auto tray = trayFrame.get();
         const auto trayWidth = tray ? tray.ActualWidth() : 0;
-        const auto controlsWidth = std::max(dockControls.ActualWidth(), agentTray ? 95.0 : 45.0);
+        const auto minimumControlsWidth = 51.0 + (agentTray ? 14.0 + std::size(agentButtons) * AgentSlotWidth : 0.0);
+        const auto controlsWidth = std::max(dockControls.ActualWidth(), minimumControlsWidth);
         const auto maxWidth = std::max(120.0, root.ActualWidth() - trayWidth - controlsWidth - 38.0);
         if (apps.MaxWidth() != maxWidth)
             Set(apps, FrameworkElement::MaxWidthProperty(), maxWidth);

@@ -172,13 +172,13 @@ void TaskbarStyle::AddAgentGrid()
     grid.HorizontalAlignment(xaml::HorizontalAlignment::Center);
     grid.Name(L"WindowsDockCodingAgents");
     xaml::Automation::AutomationProperties::SetName(grid, L"Coding chat status grid");
-    for (int index = 0; index < 2; ++index)
+    controls::RowDefinition row;
+    row.Height({40, xaml::GridUnitType::Pixel});
+    grid.RowDefinitions().Append(row);
+    for (int index = 0; index < 4; ++index)
     {
-        controls::RowDefinition row;
-        row.Height({20, xaml::GridUnitType::Pixel});
-        grid.RowDefinitions().Append(row);
         controls::ColumnDefinition column;
-        column.Width({28, xaml::GridUnitType::Pixel});
+        column.Width({AgentSlotWidth, xaml::GridUnitType::Pixel});
         grid.ColumnDefinitions().Append(column);
     }
 
@@ -186,8 +186,8 @@ void TaskbarStyle::AddAgentGrid()
     {
         controls::Button button;
         button.Name(L"WindowsDockAgentSlot" + std::to_wstring(index + 1));
-        button.Width(26);
-        button.Height(18);
+        button.Width(AgentSlotWidth - 2);
+        button.Height(36);
         button.MinWidth(0);
         button.MinHeight(0);
         button.Padding({0, 0, 0, 0});
@@ -202,8 +202,8 @@ void TaskbarStyle::AddAgentGrid()
         character.IsHitTestVisible(false);
         character.RenderTransform(xaml::Media::TranslateTransform());
         controls::Image face;
-        face.Width(19);
-        face.Height(14);
+        face.Width(18);
+        face.Height(13.5);
         face.Stretch(xaml::Media::Stretch::Fill);
         character.Children().Append(face);
         controls::TextBlock symbol;
@@ -212,8 +212,7 @@ void TaskbarStyle::AddAgentGrid()
         symbol.VerticalAlignment(xaml::VerticalAlignment::Center);
         character.Children().Append(symbol);
         button.Content(character);
-        controls::Grid::SetRow(button, index / 2);
-        controls::Grid::SetColumn(button, index % 2);
+        controls::Grid::SetColumn(button, index);
         button.Click([this, index](auto&&, auto&&)
         {
             const auto& tile = visibleTiles[index];
@@ -233,7 +232,7 @@ void TaskbarStyle::AddAgentGrid()
     }
     agentTray = controls::Border();
     agentTray.BorderThickness({1, 1, 1, 1});
-    agentTray.CornerRadius({10, 10, 10, 10});
+    agentTray.CornerRadius({8, 8, 8, 8});
     agentTray.Margin({0, 0, 6, 1});
     agentTray.Child(grid);
     controls::Grid::SetColumn(agentTray, 1);
@@ -276,10 +275,7 @@ void TaskbarStyle::RefreshAgentGrid()
     if (revision != InterlockedCompareExchange(&agentState->revision, 0, 0))
         return;
     if (agentAppearanceDirty)
-    {
-        agentTray.Background(agentHighContrast ? nullptr : AgentBrush(124, 21, 18, 34));
-        agentTray.BorderBrush(agentHighContrast ? nullptr : AgentBrush(67, 191, 169, 245));
-    }
+        agentTray.BorderBrush(agentHighContrast ? nullptr : AgentBrush(30, 235, 235, 235));
     const auto normalText = GetSysColor(COLOR_WINDOWTEXT);
     for (int index = 0; index < 4; ++index)
     {
@@ -320,7 +316,9 @@ void TaskbarStyle::RefreshAgentGrid()
         }
         else
         {
-            button.Background(AgentBrush(tile.provider ? 38 : 22, r, g, b));
+            const bool prominent = state == Working || state == Approval || state == Finished ||
+                state == Failed || state == QuotaReached;
+            button.Background(AgentBrush(prominent ? 32 : 0, r, g, b));
             face.Source(agentSprites[state]);
         }
         symbol.Text(mood.symbol);
@@ -331,22 +329,22 @@ void TaskbarStyle::RefreshAgentGrid()
             agentAnimations[index].Stop();
             agentAnimations[index] = nullptr;
         }
-        if (agentMotion && tile.provider)
+        if (agentMotion)
         {
             motion::Storyboard storyboard;
             switch (state)
             {
             case Working:
-                MoveAgentPart(storyboard, character, L"(UIElement.RenderTransform).(TranslateTransform.Y)", 0, -1.2, 650, true);
+                MoveAgentPart(storyboard, character, L"(UIElement.RenderTransform).(TranslateTransform.Y)", 0, -2.2, 620, true);
                 break;
             case Approval:
-                MoveAgentPart(storyboard, character, L"(UIElement.RenderTransform).(TranslateTransform.X)", -0.6, 0.6, 420, true);
+                MoveAgentPart(storyboard, character, L"(UIElement.RenderTransform).(TranslateTransform.Y)", 0, -1.5, 440, true);
                 break;
             case Finished:
-                MoveAgentPart(storyboard, character, L"(UIElement.RenderTransform).(TranslateTransform.Y)", -2, 0, 320, false);
+                MoveAgentPart(storyboard, character, L"(UIElement.RenderTransform).(TranslateTransform.Y)", -4, 0, 260, false);
                 break;
-            case QuotaReached: MoveAgentPart(storyboard, character, L"Opacity", 0.68, 1, 1100, true); break;
-            default: break;
+            case QuotaReached: MoveAgentPart(storyboard, character, L"Opacity", 0.62, 1, 900, true); break;
+            default: MoveAgentPart(storyboard, character, L"Opacity", 0.45, 1, 180, false); break;
             }
             if (storyboard.Children().Size() != 0)
             {

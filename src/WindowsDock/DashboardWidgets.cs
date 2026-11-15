@@ -18,7 +18,7 @@ public partial class DashboardWindow
 
     private void ShowWidgets()
     {
-        var (window, content, _) = CreateDockPanel("Widgets", "", 492, 0, AssistantInk, assistant: true,
+        var (window, content, _) = CreateDockPanel("Widgets", "", 492, 0, AssistantInk,
             portrait: DockTaskbar.IconBadge(), section: DockSection.Widgets);
         var searchRow = new DockPanel();
         var keyboard = new Border
@@ -33,12 +33,12 @@ public partial class DashboardWindow
         ToolTipService.SetIsEnabled(search, false);
         search.HorizontalAlignment = HorizontalAlignment.Stretch;
         search.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        search.Margin = new Thickness(0, 0, 0, 10);
-        content.Children.Add(search);
-        var dashboard = MakeButton(IconLabel("Dashboard", 0xE80F, AssistantSecondary), "Dashboard", OpenMainDashboard);
-        dashboard.HorizontalAlignment = HorizontalAlignment.Left;
-        dashboard.Margin = new Thickness(0, 0, 9, 9);
-        content.Children.Add(dashboard);
+        var toolbar = Columns(3, 1);
+        toolbar.Margin = new Thickness(0, 0, 0, 10);
+        Put(toolbar, search, 0);
+        var dashboard = MakeButton("Dashboard", "Dashboard", OpenMainDashboard);
+        Put(toolbar, dashboard, 1);
+        content.Children.Add(toolbar);
         var tiles = new StackPanel();
         content.Children.Add(tiles);
         var widgets = WidgetActions();
@@ -79,6 +79,8 @@ public partial class DashboardWindow
                     }
                     var button = WidgetTile(item, showArrow: false);
                     ToolTipService.SetIsEnabled(button, false);
+                    button.Background = Brushes.Transparent;
+                    button.BorderBrush = Brushes.Transparent;
                     var star = IconButton(isFavorite ? 0xE735 : 0xE734,
                         (isFavorite ? "Remove favorite " : "Favorite ") + item.Label, () =>
                         {
@@ -98,7 +100,9 @@ public partial class DashboardWindow
                     star.HorizontalAlignment = HorizontalAlignment.Right;
                     tile.Children.Add(star);
                     button.Padding = new Thickness(8, 5, 33, 5);
-                    Put(items, tile, row, column, wide ? 2 : 1);
+                    var divider = new Border { BorderThickness = new Thickness(0, 0, 0, 1),
+                        BorderBrush = AssistantRule, Padding = new Thickness(0, 0, 0, 3), Child = tile };
+                    Put(items, divider, row, column, wide ? 2 : 1);
                     if (item.Id == focused)
                         window.Dispatcher.BeginInvoke(() => star.Focus(), System.Windows.Threading.DispatcherPriority.Input);
                     if (wide || column == 1)

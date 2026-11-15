@@ -40,7 +40,7 @@ public partial class DashboardWindow
         const string source = "Debug logs";
         var tint = AssistantInk;
         var (window, content, _) = CreateDockPanel("Attach logs", persona.Name, 460, 0xE8C8, tint,
-            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}", assistant: true);
+            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}");
         var note = Text("Keep the relevant lines and remove secrets before attaching.", 11, AssistantSecondary);
         note.TextWrapping = TextWrapping.Wrap;
         note.Margin = new Thickness(0, 0, 0, 7);
@@ -109,7 +109,7 @@ public partial class DashboardWindow
     private void ShowAssistantIdeaJar(AssistantPersona persona, AssistantConversation chat)
     {
         var (window, content, _) = CreateDockPanel("Idea jar", persona.Name, 366, 0xEA80, AssistantInk,
-            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}", assistant: true);
+            backAction: ShowAssistantWidget, backLabel: $"Back to {persona.Name}");
         var note = Text("Pick a conversation starter to add to your draft.", 11, AssistantSecondary);
         note.Margin = new Thickness(0, 0, 0, 7);
         content.Children.Add(note);
