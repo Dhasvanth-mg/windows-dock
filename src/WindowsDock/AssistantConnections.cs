@@ -108,7 +108,7 @@ internal static partial class AssistantConnections
             return new StdioClientTransport(new StdioClientTransportOptions
             {
                 Name = "Dock Planner",
-            Command = Path.Combine(AppContext.BaseDirectory, "WindowsDock.exe"),
+                Command = Path.Combine(AppContext.BaseDirectory, "WindowsDock.exe"),
                 Arguments = ["--planner-mcp"],
                 InheritEnvironmentVariables = false
             });

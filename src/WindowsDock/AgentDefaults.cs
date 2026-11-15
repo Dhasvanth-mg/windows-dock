@@ -54,7 +54,11 @@ internal static class AgentDefaults
             _ = Toml.ToModel(result);
         }
         if (result != original)
+        {
+            if (provider == AgentProvider.Claude)
+                AgentHookSetup.EnsureRewritable(original);
             AgentHookSetup.SaveConfig(path, original, result);
+        }
     }
 
     private static string SetRootString(string contents, string key, string value)

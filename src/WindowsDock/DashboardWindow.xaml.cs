@@ -310,6 +310,11 @@ public partial class DashboardWindow : Window
         updatePage?.Invoke();
     }
 
+    // Dashboard and Chats share one height, so switching between them only changes the width and the window never
+    // jumps vertically. It is tall enough for Overview with its favorites row and live media and weather text, which
+    // are filled in after layout and cannot be measured before the window is shown. Other pages scroll inside it.
+    private const double PanelHeight = 454;
+
     private void ConfigureWidth()
     {
         var screen = TaskbarScreen();
@@ -317,7 +322,7 @@ public partial class DashboardWindow : Window
         Width = Math.Min(compactAgents ? 764 : 960, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
         MaxHeight = Math.Max(200, (DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - screen.Bounds.Top) /
             dpi.DpiScaleY - 12);
-        Height = Math.Min(compactAgents ? 454 : 412, MaxHeight);
+        Height = Math.Min(PanelHeight, MaxHeight);
         DashboardHeader.Visibility = compactAgents ? Visibility.Collapsed : Visibility.Visible;
         if (compactAgents)
             DockNavigationHost.Content ??= DockNavigation(this, DockSection.Chats);

@@ -10,9 +10,34 @@ namespace WindowsDock;
 
 internal static class DockCodingJob
 {
-    internal static bool IsWorkspace(string path) => Path.IsPathFullyQualified(path) &&
-        !path.StartsWith(@"\\", StringComparison.Ordinal) && Directory.Exists(path) &&
-        (Directory.Exists(Path.Combine(path, ".git")) || File.Exists(Path.Combine(path, ".git")));
+    internal static bool IsWorkspace(string path)
+    {
+        if (!Path.IsPathFullyQualified(path) || path.StartsWith(@"\\", StringComparison.Ordinal) || !Directory.Exists(path))
+            return false;
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        if (Path.GetPathRoot(full)?.Length == full.Length || ProtectedFolders().Any(folder =>
+                string.Equals(full, folder, StringComparison.OrdinalIgnoreCase)))
+            return false;
+        return Directory.Exists(Path.Combine(full, ".git")) || File.Exists(Path.Combine(full, ".git"));
+    }
+
+    // A drive root, the user profile, and system folders are never a project, even when they hold a .git entry.
+    private static IEnumerable<string> ProtectedFolders() => new[]
+    {
+        Environment.SpecialFolder.UserProfile, Environment.SpecialFolder.Windows, Environment.SpecialFolder.System,
+        Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86,
+        Environment.SpecialFolder.ApplicationData, Environment.SpecialFolder.LocalApplicationData,
+        Environment.SpecialFolder.CommonApplicationData
+    }.Select(Environment.GetFolderPath).Where(folder => folder.Length > 0).Select(Path.TrimEndingDirectorySeparator);
+
+    /// <summary>True for environment variables that commonly hold credentials. Coding jobs never inherit them.</summary>
+    internal static bool IsSecretVariable(string name) =>
+        name is "CODEX_THREAD_ID" or "CLAUDECODE" ||
+        new[] { "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL", "COOKIE", "PRIVATE_KEY", "CONNECTION_STRING" }
+            .Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase)) ||
+        new[] { "_KEY", "_PAT", "_AUTH" }.Any(end => name.EndsWith(end, StringComparison.OrdinalIgnoreCase)) ||
+        new[] { "AWS_", "AZURE_", "GOOGLE_APPLICATION_CREDENTIALS" }
+            .Any(start => name.StartsWith(start, StringComparison.OrdinalIgnoreCase));
 
     internal static async Task<string> RunAsync(string workspace, string task, CancellationToken cancellation)
     {
@@ -45,9 +70,7 @@ internal static class DockCodingJob
             "exec", "--sandbox", "workspace-write", "--json", "--ephemeral", "--ignore-user-config", "-"
         })
             start.ArgumentList.Add(flag);
-        foreach (var variable in start.Environment.Keys.Where(key =>
-            key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase) || key.EndsWith("_KEY", StringComparison.OrdinalIgnoreCase) ||
-            key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase) || key is "CODEX_THREAD_ID" or "CLAUDECODE").ToArray())
+        foreach (var variable in start.Environment.Keys.Where(IsSecretVariable).ToArray())
             start.Environment.Remove(variable);
         var powershell = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0");
         start.Environment.TryGetValue("PATH", out var environmentPath);

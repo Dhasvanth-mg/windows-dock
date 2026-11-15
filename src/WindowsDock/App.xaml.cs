@@ -94,6 +94,9 @@ internal static class DockEntryPoint
     [STAThread]
     public static int Main(string[] args)
     {
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            DockLog.Write("crash", "Unhandled exception (" + (args.Length > 0 ? args[0] : "app") + ")",
+                e.ExceptionObject as Exception, detail: true);
         if (args is ["--open"])
             return DockTaskbar.Open();
         if (args is ["--start-at-logon"] or ["--start-at-logon", "--tray"])
@@ -117,6 +120,7 @@ internal static class DockEntryPoint
     private static int RunApplication()
     {
         var app = new App();
+        app.DispatcherUnhandledException += (_, e) => DockLog.Write("ui", "Unhandled UI exception", e.Exception, detail: true);
         app.InitializeComponent();
         return app.Run();
     }

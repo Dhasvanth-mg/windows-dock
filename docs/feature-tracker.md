@@ -1,5 +1,36 @@
 # Feature tracker
 
+## Fix top repository-analysis findings
+
+- Status: Built and verified by builds, tests, and standalone dashboard measurements. Not yet run on the installed native taskbar.
+- Scope: Fix the highest-priority findings from the full repository analysis: no logging, no committed tests, unconfirmed `dock_lookup`, loose coding-job confinement and environment scrubbing, silent overwrite of corrupt data files, hook-config backup growth, comment loss and install-path fragility, an untracked reference video, and two small code nits. Out of scope: the 750 ms in-Explorer timer, splitting `DashboardWindow`, and removing the legacy companion.
+- Acceptance criteria: Managed and native Release builds pass with no new warnings. A committed test project covers the new logic and passes. No prompts, replies, or credentials are written to logs.
+- Implementation: `DockLog` (managed `dock.log`) and `Log.h` (native `native.log`), both size-rotated and writing exception types and HRESULTs, with messages only for startup and crash events. Logging added at crash, startup, controller failure, Explorer styling, MCP, and job failure points. `DockData` moves unreadable files aside (newest three kept) and `Update` aborts instead of overwriting after a read failure. `dock_lookup` now asks for desktop approval like `dock_action`. Coding workspaces reject drive roots, the user profile, and system folders, and job environment scrubbing now covers secret, credential, cookie, `_PAT`, `_AUTH`, `AWS_`, `AZURE_`, and similar names. Hook and defaults writes keep the newest three backups, refuse to rewrite a JSON config that contains comments, take the install path from `AppContext.BaseDirectory`, and give status hooks a 5 second budget. Added `tests/WindowsDock.Tests` (xUnit). Added `inspiration/` to `.gitignore`, fixed a `%zu` argument type in `DockTray.cpp`, and fixed an indentation nit.
+- Verification: Managed and native Release builds pass with 0 warnings and 0 errors. 31 of 31 tests pass. The 5 new native and 1 changed managed files compiled in the scratch build output.
+- Limitations: Hook installs made earlier keep their 2 second timeout until reinstalled. The environment scrub is still a name-pattern heuristic. Native logging was compiled but not exercised in Explorer, because the app was not installed over the running dock. `dock_lookup` approval was not exercised against a real MCP client.
+- Remaining work: Install the new build to confirm the native log and the dashboard size on the real taskbar.
+
+### Dashboard window resizes every time it opens
+
+- Status: Fixed and verified for the standalone dashboard. Native taskbar not re-run.
+- Scope: Message received during the fixes above. The user reports that each time the dashboard appears its tab or window is resized. The screenshot shows the Overview page clipped at the bottom of the panel, with the calendar, weather, and CPU/RAM tiles cut off.
+- Acceptance criteria: The dashboard opens at the same size on every show, with the same anchor above the taskbar, and the Overview content fits inside it.
+- Findings: Repeated standalone opens were already a stable 960 by 412. Overview needed about 297 px of a 290 px viewport, so its bottom was clipped. Dashboard (412) and Chats (454) had different heights, so moving between them resized the window vertically. A pre-show measurement was tried and rejected, because media, weather, and clock text are filled in after layout and it under-measured by about 12 px.
+- Implementation: Dashboard and Chats now share one height, `PanelHeight` 454 DIP, set in `ConfigureWidth`. The handoff document states the new size.
+- Verification: Three repeated opens each gave 960 by 454 at the same position (240, 392) at 96 DPI. Overview now has a 332 px viewport for about 297 px of content and is no longer scrollable. A window opened from the Chats panel could not be tested without the native controller.
+- Limitations: Switching between Dashboard and Chats still changes the width (960 to 764). A user with a large DPI scale or a small display is clamped by `MaxHeight`, so Overview can scroll there.
+- Remaining work: Confirm on the installed native taskbar.
+
+## Full repository analysis
+
+- Status: Complete. Analysis delivered in chat; no source changes.
+- Scope: Analyse the whole Windows Dock repository (structure, architecture, code quality, risks, and verification state) and report findings. Analysis only; no source changes requested.
+- Acceptance criteria: Cover the native C++ taskbar module and the .NET WPF app, their boundaries, persistence and security-relevant surfaces, documentation accuracy, and the result of a fresh build where possible. Findings cite files.
+- Implementation: Read the docs, project files, the whole native layer (Main, Diagnostics, TaskbarStyle, TaskbarAgents, DockTray, Connection, AgentGridState, BatteryAlerts), and the managed entry point, data, credentials, approvals, hooks, MCP, actions, coding jobs, workspace editor, summary and ChatGPT clients, monitor, shared-memory bridge, startup, and launch paths. The Dashboard\*.cs UI partials were sampled (widgets, meetings, GitHub, agents), not read line by line.
+- Verification: Fresh managed Release build (0 warnings, 0 errors) and native Release build (CMake with VS 18 Build Tools) both succeeded, with output in a scratch directory outside the repo. Confirmed the C++ and C# shared-memory offsets agree (tile 528, selection 204, quota offset 2320). Confirmed 37 commits, all by the owner identity, with no coauthor or generation trailers. The app was not launched, because that would restyle Explorer, and no automated tests exist in the repository to run.
+- Limitations: Static review only. Findings about runtime behavior, UI confirmation text, and external service contracts (ChatGPT plan OAuth, model IDs, API version) are unverified.
+- Remaining work: None for the analysis. Follow-up fixes are up to the owner.
+
 ## Code review and UI redesign handoff
 
 - Status: Complete.
@@ -566,3 +597,13 @@
 - Outcome: Reply and notification summaries share a provider picker with Gemini, Groq, Codex, and Claude Code. The CLI routes use saved sign-in, accept an optional model override, and read the reviewed text from standard input. They run outside project folders with model tools and session persistence disabled. API providers retain their existing key fields.
 - Verification: Release build, x64 publish, and Windows smoke checks passed. Both preview panels preserved edits across provider changes. A synthetic live request succeeded through Codex, and the installed Claude Code CLI reported that it needs sign-in. The installed notification flow exposed both new options, and the native taskbar controller stayed running during the managed update.
 - Remaining work: Sign in to the installed Claude Code CLI and verify a live summary with that account.
+
+## Uncodixify frontend skill
+
+- Status: Installed and structurally validated.
+- Scope: Turn the supplied frontend design guidance into a personal Codex skill.
+- Acceptance criteria: Install a discoverable skill that preserves the component rules, recurring pitfalls, and supplied palettes and passes skill validation.
+- Implementation: Installed the personal uncodixify skill. Consolidated duplicate rules and removed stray diff markers while retaining the component guidance and four supplied palettes.
+- Verification: The bundled skill validator passed, and all four palette rows match the source exactly.
+- Limitations: Automatic selection and generated frontend output have yet to be tested in a fresh Codex session.
+- Remaining work: None for installation.

@@ -146,8 +146,9 @@ void DockTray::UpdateStatus()
     states = next;
     wchar_t tip[128]{};
     swprintf_s(tip, L"Windows Dock\n%zu working, %zu need approval, %zu replies ready",
-        std::count(states.begin(), states.end(), 2), std::count(states.begin(), states.end(), 3),
-        std::count(states.begin(), states.end(), 4));
+        static_cast<size_t>(std::count(states.begin(), states.end(), 2)),
+        static_cast<size_t>(std::count(states.begin(), states.end(), 3)),
+        static_cast<size_t>(std::count(states.begin(), states.end(), 4)));
     wcscpy_s(notification.szTip, tip);
     if (const auto replacement = MakeIcon(states))
     {

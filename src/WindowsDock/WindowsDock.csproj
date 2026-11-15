@@ -14,6 +14,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="WindowsDock.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="../Shared/AgentFaces.txt" LogicalName="WindowsDock.AgentFaces.txt" />
     <Resource Include="../Shared/DockIcon.ico" Link="DockIcon.ico" />
     <PackageReference Include="Ical.Net" Version="5.2.4" />

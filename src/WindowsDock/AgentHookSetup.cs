@@ -48,7 +48,8 @@ internal static class AgentHookSetup
         var changed = RemoveOurHandlers(events, provider);
         if (install)
         {
-            var executable = Path.ChangeExtension(typeof(AgentHookSetup).Assembly.Location, ".exe");
+            // BaseDirectory also works for single-file publishes, where Assembly.Location is empty.
+            var executable = Path.Combine(AppContext.BaseDirectory, "WindowsDock.exe");
             if (!File.Exists(executable))
                 throw new InvalidOperationException("The Windows Dock executable could not be found.");
             var arguments = Marker + provider.ToString().ToLowerInvariant();
@@ -63,7 +64,8 @@ internal static class AgentHookSetup
                     events[name] = groups;
                 }
                 var relayApproval = approvals && name == "PermissionRequest";
-                var handler = new JsonObject { ["type"] = "command", ["timeout"] = relayApproval ? 34 : 2 };
+                // A cold PowerShell start (Codex) can take over two seconds, so status events get a larger budget.
+                var handler = new JsonObject { ["type"] = "command", ["timeout"] = relayApproval ? 34 : 5 };
                 if (provider == AgentProvider.Claude)
                 {
                     handler["command"] = executable;
@@ -105,8 +107,30 @@ internal static class AgentHookSetup
         if (!install && events.Count == 0)
             config.Remove("hooks");
 
+        EnsureRewritable(original);
         SaveConfig(path, original, config.ToJsonString(JsonOptions) + Environment.NewLine);
     }
+
+    /// <summary>
+    /// Rewriting a JSON config drops its comments. Refuse instead of removing them without telling the user.
+    /// </summary>
+    internal static void EnsureRewritable(string? original)
+    {
+        if (original == null)
+            return;
+        try
+        {
+            using var _ = JsonDocument.Parse(original, new JsonDocumentOptions
+                { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Disallow });
+        }
+        catch (JsonException)
+        {
+            throw new InvalidOperationException(
+                "The provider settings contain comments that Windows Dock would remove. Remove them or edit the file by hand.");
+        }
+    }
+
+    private const int BackupsKept = 3;
 
     internal static void SaveConfig(string path, string? original, string contents)
     {
@@ -123,6 +147,7 @@ internal static class AgentHookSetup
                     throw new IOException("The provider settings changed. Try again.");
                 var backup = path + ".windows-dock-" + Guid.NewGuid().ToString("N") + ".bak";
                 File.Replace(temp, path, backup);
+                DockData.KeepNewest(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".windows-dock-*.bak", BackupsKept);
             }
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }

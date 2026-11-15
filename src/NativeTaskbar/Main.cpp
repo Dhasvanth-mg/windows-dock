@@ -1,5 +1,6 @@
 #include "Connection.h"
 #include "DockTray.h"
+#include "Log.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -16,8 +17,19 @@ namespace
 {
     HANDLE activeStop = nullptr;
 
+    // Failures also go to native.log: at sign-in the controller has no console, so stderr is not seen.
+    void PrintFailure(const wchar_t* message)
+    {
+        std::wstring text(message);
+        while (!text.empty() && (text.back() == L'\n' || text.back() == L'\r'))
+            text.pop_back();
+        DockLog(L"controller", text.c_str());
+        std::fputws(message, stderr);
+    }
+
     void ReportFailure(const wchar_t* message)
     {
+        DockLog(L"controller", message);
         std::fwprintf(stderr, L"%ls\n", message);
         if (GetConsoleWindow() && IsWindowVisible(GetConsoleWindow()))
             MessageBoxW(nullptr, message, L"Windows Dock", MB_OK | MB_ICONINFORMATION);
@@ -96,7 +108,7 @@ namespace
             winrt::handle stop(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(pid, L"Stop").c_str()));
             if (!stop || !SetEvent(stop.get()))
             {
-                std::fputws(L"No active native dock session with that process ID.\n", stderr);
+                PrintFailure(L"No active native dock session with that process ID.\n");
                 return 1;
             }
             return 0;
@@ -124,7 +136,7 @@ namespace
         winrt::handle owner(CreateMutexW(nullptr, TRUE, L"Local\\WindowsDock.NativeTaskbar.Controller"));
         if (!owner || GetLastError() == ERROR_ALREADY_EXISTS)
         {
-            std::fputws(L"A native dock session is already running.\n", stderr);
+            PrintFailure(L"A native dock session is already running.\n");
             return 1;
         }
 
@@ -133,7 +145,7 @@ namespace
         winrt::handle explorer(OpenProcess(SYNCHRONIZE, FALSE, explorerPid));
         if (!explorerPid || !explorer)
         {
-            std::fputws(L"Explorer's desktop window was not found.\n", stderr);
+            PrintFailure(L"Explorer's desktop window was not found.\n");
             return 1;
         }
 
@@ -145,13 +157,13 @@ namespace
         const auto module = directory / NATIVE_TASKBAR_DLL;
         if (!trayMode && !std::filesystem::is_regular_file(module))
         {
-            std::fwprintf(stderr, L"%ls must be beside this executable.\n", NATIVE_TASKBAR_DLL);
+            PrintFailure((std::wstring(NATIVE_TASKBAR_DLL) + L" must be beside this executable.\n").c_str());
             return 1;
         }
         const auto panel = directory / L"WindowsDock.exe";
         if (!std::filesystem::is_regular_file(panel))
         {
-            std::fputws(L"WindowsDock.exe must be beside this executable.\n", stderr);
+            PrintFailure(L"WindowsDock.exe must be beside this executable.\n");
             return 1;
         }
 
@@ -316,11 +328,13 @@ int wmain(int argc, wchar_t** argv)
     try { return Run(argc, argv); }
     catch (const winrt::hresult_error& error)
     {
+        DockLog(L"controller", error.message().c_str(), static_cast<unsigned long>(error.code().value));
         std::fwprintf(stderr, L"%ls\n", error.message().c_str());
         return 1;
     }
     catch (const std::exception& error)
     {
+        DockLog(L"controller", L"Unexpected exception; see standard error.");
         std::fprintf(stderr, "%s\n", error.what());
         return 1;
     }

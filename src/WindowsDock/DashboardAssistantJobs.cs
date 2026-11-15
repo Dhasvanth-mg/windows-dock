@@ -130,7 +130,8 @@ public partial class DashboardWindow
             return null;
         if (DockCodingJob.IsWorkspace(dialog.FolderName))
             return dialog.FolderName;
-        MessageBox.Show(parent, "Choose the folder that contains the project's .git directory or file.", "Windows Dock");
+        MessageBox.Show(parent, "Choose the folder that contains the project's .git directory or file. " +
+            "Drive roots, your user profile folder, and system folders are not allowed.", "Windows Dock");
         return null;
     }
 
@@ -171,6 +172,7 @@ public partial class DashboardWindow
             catch (Exception error) when (DockActions.IsActionError(error) ||
                 error is TimeoutException or PlanException or CodingSummaryException or OperationCanceledException)
             {
+                DockLog.Write("job", "A " + handoff.Role + " job failed", error);
                 var message = error is OperationCanceledException ? "The provider timed out." : error.Message;
                 job = job with { Status = DockJobStatus.Failed, Result = message[..Math.Min(message.Length, 600)] };
             }

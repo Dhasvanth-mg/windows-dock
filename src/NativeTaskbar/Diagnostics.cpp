@@ -1,4 +1,5 @@
 #include "Connection.h"
+#include "Log.h"
 
 #include <ocidl.h>
 #include <xamlom.h>
@@ -149,9 +150,16 @@ namespace
                     for (const auto& child : grid.Children())
                         if (winrt::get_class_name(child) == L"SystemTray.SystemTrayFrame")
                             tray = child.try_as<xaml::FrameworkElement>();
-                    if (!tray || TaskbarStyle::Find(apps, L"HitodamaLook") ||
-                        TaskbarStyle::Find(grid, L"WindowsDockGlass"))
+                    if (!tray)
+                    {
+                        DockLog(L"explorer", L"Taskbar not styled: the system tray frame was not found.");
                         return;
+                    }
+                    if (TaskbarStyle::Find(apps, L"HitodamaLook") || TaskbarStyle::Find(grid, L"WindowsDockGlass"))
+                    {
+                        DockLog(L"explorer", L"Taskbar not styled: another appearance module already owns it.");
+                        return;
+                    }
 
                     auto next = std::make_unique<TaskbarStyle>(grid, self->dashboard, self->controllerPid);
                     next->Apply(apps, tray);
@@ -161,8 +169,13 @@ namespace
                         self->style = std::move(next);
                     }
                     SetEvent(self->ready.get());
+                    DockLog(L"explorer", L"Taskbar styled.");
                 }
-                catch (...) {}
+                catch (...)
+                {
+                    DockLog(L"explorer", L"Taskbar styling failed; the layout was not as expected.",
+                        static_cast<unsigned long>(winrt::to_hresult().value));
+                }
             });
         }
 

@@ -11,7 +11,7 @@ The application baseline for this handoff is `7ceca1b` on `main`. Start with thi
 | Legacy WPF companion | `WindowsDock.exe` | A separate bar with window groups, pins, dividers, custom shortcuts, clock, built-in system widgets, reveal settings, and a Studio for appearance and layout. `--safe-mode` uses the default configuration for that session. |
 | Managed UI development | `WindowsDock.exe --dashboard` | Opens Dashboard directly. Use this entry point for WPF layout work, then validate the real taskbar routes separately. |
 
-In native mode, click or pull up on the dock button to open Dashboard, then use the same button to close it. A panel holds the taskbar visible and restores the user's auto-hide state on close. Panels are centered above the taskbar. The native glass fills the existing 48-pixel taskbar at 96 DPI. The usual Dashboard size is 960 × 412 DIP and the taskbar Coding chats size is 764 × 454 DIP, clamped to the display. Content scrolls within those bounds.
+In native mode, click or pull up on the dock button to open Dashboard, then use the same button to close it. A panel holds the taskbar visible and restores the user's auto-hide state on close. Panels are centered above the taskbar. The native glass fills the existing 48-pixel taskbar at 96 DPI. Dashboard is 960 × 454 DIP and the taskbar Coding chats panel is 764 × 454 DIP, clamped to the display, so switching between them changes only the width. Content scrolls within those bounds.
 
 `Ctrl+Alt+D` opens Coding chats and `Ctrl+Alt+A` opens Assistants in either controller mode. `Ctrl+K` searches open windows, chats, apps, workspaces, widgets, and settings. Prefix a query with `window:` to limit it to windows on the current desktop. Dashboard opens to Overview in a fresh session and remembers the selected tab when returning from Widgets. Two-finger horizontal movement switches Dashboard tabs. A fresh two-finger scroll up opens Widgets when content cannot scroll farther up. The bottom navigation gives Widgets, Coding chats, and Assistants visible buttons, a sideways swipe or wheel gesture to switch sections, and a downward drag to dismiss. Tool panels with a Back action also support a rightward drag on the handle.
 
@@ -105,6 +105,8 @@ Jobs run in the dashboard process and can outlive the visible panel. [DockJobs.c
 - Windows permissions and active devices constrain notification history, location, clipboard history, radio changes, foreground activation, and audio routing. The app surfaces access failures or opens appropriate system settings. Native shell layout and some audio routing interfaces require Windows-version coverage.
 
 ## Build and verify
+
+Run the committed tests with `dotnet test tests/WindowsDock.Tests -c Release`. They use a throwaway data folder and cover the data store, the log, coding-job confinement and environment scrubbing, config rewrite safety, and dock action validation. Diagnostics go to `%LOCALAPPDATA%\WindowsDock\Logs\dock.log` (managed) and `native.log` (controller and the module inside Explorer). They record what failed and where, and exception messages only for startup and crash events, never prompts, replies, or credentials.
 
 Use Windows, the .NET 10 SDK, MSVC x64, and the Windows SDK with C++/WinRT headers. The project requires CMake 3.25 or newer. The Visual Studio 2026 generator below requires CMake 4.2 or newer. If CMake is bundled with Visual Studio, use its Developer PowerShell or its CMake executable. This stages a build without replacing the installed app.
 

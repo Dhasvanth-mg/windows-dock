@@ -43,7 +43,10 @@ internal static class DockStartup
         for (var attempt = 0; attempt < 40 && !DockTaskbar.ShellReady(); attempt++)
             Thread.Sleep(500);
         if (!DockTaskbar.ShellReady())
+        {
+            DockLog.Write("startup", "The Windows taskbar was not ready after 20 seconds; the dock was not started.");
             return 1;
+        }
         if (DockTaskbar.ControllerRunning())
             return 0;
         try
@@ -54,8 +57,16 @@ internal static class DockStartup
                 UseShellExecute = false,
                 CreateNoWindow = true
             });
-            return process == null || process.WaitForExit(1500) && process.ExitCode != 0 ? 1 : 0;
+            var failed = process == null || process.WaitForExit(1500) && process.ExitCode != 0;
+            if (failed)
+                DockLog.Write("startup", "The native controller exited early" +
+                    (process is { HasExited: true } ? " with code " + process.ExitCode : "") + ". See native.log.");
+            return failed ? 1 : 0;
         }
-        catch (Win32Exception) { return 1; }
+        catch (Win32Exception error)
+        {
+            DockLog.Write("startup", "The native controller could not be started.", error, detail: true);
+            return 1;
+        }
     }
 }
