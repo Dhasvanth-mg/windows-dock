@@ -588,12 +588,8 @@ public partial class DashboardWindow
             finally { System.Runtime.InteropServices.Marshal.ZeroFreeBSTR(buffer); }
         }
         var source = AssistantSources[index];
-        return source.Provider switch
-        {
-            AssistantProvider.Gemini => ReadSessionKey(0) ?? EnvironmentKey(0),
-            AssistantProvider.Groq => ReadSessionKey(1) ?? EnvironmentKey(1),
-            _ => source.Variable is { } name ? Environment.GetEnvironmentVariable(name)?.Trim() ??
-                Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User)?.Trim() : null
-        };
+        var summaryIndex = Array.FindIndex(SummarySources, item => item.Provider == source.Provider);
+        return (summaryIndex >= 0 ? ReadSessionKey(summaryIndex) : null) ??
+            (source.Variable is { } name ? EnvironmentKey(name) : null);
     }
 }

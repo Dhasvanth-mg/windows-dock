@@ -32,7 +32,9 @@ Under **Connections and defaults**, enable the provider hooks for live updates. 
 
 **Save defaults** updates the provider's user configuration and creates a backup. These are defaults for new sessions when the provider loads its settings. Existing chats can have their own model and thinking overrides. Use **Remove dock hooks** to remove this integration from a provider.
 
-**Summarize reply** previews the selected chat's latest completed local reply. Choose Gemini or Groq, enter an API key, and click **Summarize** to send the editable text to that provider. You can also set `GEMINI_API_KEY` or `GROQ_API_KEY` in your Windows environment. Keys entered in the popup stay in memory for the current dock session. Paste a reply when a transcript is unavailable.
+**Summarize reply** previews the selected chat's latest completed local reply. Paste a reply when a transcript is unavailable. Review the editable text, then choose **Codex**, **Claude Code**, **Gemini**, or **Groq** and send it to that provider. Codex and Claude Code use their installed Windows CLI and saved sign-in. Leave the model blank to use the CLI's default. Gemini and Groq use an API key from the popup, `GEMINI_API_KEY`, or `GROQ_API_KEY`. Keys entered in the popup stay in memory for the current dock session.
+
+CLI summaries run in a temporary directory with model tools disabled and session history off. They use the selected CLI's account and usage limits. Sign in to the CLI before choosing it in the dock.
 
 **Usage** shows the selected chat's recorded token counts, Codex account usage and quota reset times, and Claude Desktop's last cached plan percentages. The Claude usage page opens from the panel for reset times that aren't in its local cache.
 
@@ -49,7 +51,7 @@ Choose **Widgets** from the dashboard or the compact Coding chats panel. Star a 
 - **Workspace shortcuts** group a folder, websites, and local app shortcuts into a single action.
 - **Downloads** shows recent files and partial browser downloads from the Downloads folder, alongside Windows background transfers. Browser progress is limited to what the partial files expose.
 - **Focus timer** runs locally. **Windows Focus** opens the system controls for a focus session with Do Not Disturb.
-- **Notifications** reads recent Windows alerts when access is allowed. Select alerts and review the draft before sending it to Gemini or Groq.
+- **Notifications** reads recent Windows alerts when access is allowed. Select alerts and review the draft before sending it to any of the four summary providers.
 - **Assistant** opens the 2×2 character picker. Choose **ChatGPT plan** and continue in your browser to authorize eligible plan usage. **Claude API** uses a Claude Console key. Gemini, Grok, and Groq use their own API keys. Configure them in the panel or with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or `GROQ_API_KEY`. On a usage error, you can switch to Gemini or Grok and resend the draft. Each send shares the current character's recent conversation with the selected provider.
 
 ### Assistant connections

@@ -22,9 +22,17 @@ public partial class DashboardWindow
     private bool refreshingUsage;
     private Action? updateUsagePanel;
     private DateTimeOffset lastUsagePaint;
-    private bool summaryGemini = true;
-    private readonly string?[] summaryModels = new string?[2];
-    private readonly System.Security.SecureString?[] summaryKeys = new System.Security.SecureString?[2];
+    private sealed record SummarySource(string Label, AssistantProvider Provider, string DefaultModel, string? KeyVariable);
+    private static readonly SummarySource[] SummarySources =
+    [
+        new("Gemini", AssistantProvider.Gemini, TextModelClient.GeminiSummaryModel, "GEMINI_API_KEY"),
+        new("Groq", AssistantProvider.Groq, TextModelClient.GroqSummaryModel, "GROQ_API_KEY"),
+        new("Codex", AssistantProvider.CodexCli, "", null),
+        new("Claude Code", AssistantProvider.ClaudeCode, "", null)
+    ];
+    private int summaryProviderIndex;
+    private readonly string?[] summaryModels = new string?[SummarySources.Length];
+    private readonly System.Security.SecureString?[] summaryKeys = new System.Security.SecureString?[SummarySources.Length];
     private (AgentSession Session, AgentReply? Reply)? lastReplyPreview;
     private Task<AgentReply?>? pendingReplyPreview;
     private AgentSession? previewSession;
@@ -56,8 +64,8 @@ public partial class DashboardWindow
 
     private void ShowTextSummary(string title, string subtitle, string label, string? draft, AgentSession? session = null)
     {
-        var (window, content, cancellation) = CreateDockPanel(title, subtitle, 468, 0xEAB7, purple);
-        var sourceLabel = Text(label, 11, subdued, true);
+        var (window, content, cancellation) = CreateDockPanel(title, subtitle, 468, 0xEAB7, AssistantInk, assistant: true);
+        var sourceLabel = Text(label, 11, AssistantSecondary, true);
         var source = Field(label, AgentSessions.SummaryLimit);
         source.Tag = session == null ? "Paste notifications here" : "Paste a reply";
         source.Text = draft ?? "";
@@ -68,13 +76,15 @@ public partial class DashboardWindow
         source.Margin = new Thickness(0, 4, 0, 5);
         content.Children.Add(sourceLabel);
         content.Children.Add(source);
-        var sourceStatus = Text(session == null ? "Review the notifications before sending." : "Looking for the latest completed reply…", 10, subdued);
+        var sourceStatus = Text(session == null ? "Review the notifications before sending." : "Looking for the latest completed reply…",
+            11, AssistantSecondary);
         sourceStatus.TextWrapping = TextWrapping.Wrap;
         content.Children.Add(sourceStatus);
 
-        var fields = Columns(0.75, 1.25);
+        var fields = Columns(1, 1.25);
         fields.Margin = new Thickness(0, 9, 0, 0);
-        var provider = new ComboBox { ItemsSource = new[] { "Gemini", "Groq" }, SelectedIndex = summaryGemini ? 0 : 1 };
+        var provider = new ComboBox { ItemsSource = SummarySources, DisplayMemberPath = nameof(SummarySource.Label),
+            SelectedIndex = summaryProviderIndex };
         AutomationProperties.SetName(provider, "Summary provider");
         var model = Field("Summary model ID", 128);
         Put(fields, Labeled("Provider", provider), 0);
@@ -95,13 +105,13 @@ public partial class DashboardWindow
         result.Visibility = Visibility.Collapsed;
         result.Margin = new Thickness(0, 9, 0, 0);
         content.Children.Add(result);
-        var status = Text("", 11, subdued);
+        var status = Text("", 11, AssistantSecondary);
         status.TextWrapping = TextWrapping.Wrap;
         status.Margin = new Thickness(0, 8, 0, 6);
         content.Children.Add(status);
 
         var actions = new WrapPanel();
-        var send = AccentButton("Summarize", 0xEAB7, purple);
+        var send = AccentButton("Summarize", 0xEAB7, AssistantInk);
         send.Click += async (_, _) => await SummarizeAsync();
         send.Margin = new Thickness(0, 0, 5, 3);
         actions.Children.Add(send);
@@ -122,7 +132,7 @@ public partial class DashboardWindow
         StackPanel Labeled(string label, Control control)
         {
             var panel = new StackPanel();
-            panel.Children.Add(Text(label, 10, subdued));
+            panel.Children.Add(Text(label, 11, AssistantSecondary));
             control.Margin = new Thickness(0, 3, 0, 0);
             panel.Children.Add(control);
             return panel;
@@ -131,16 +141,19 @@ public partial class DashboardWindow
         void ApplyProvider()
         {
             var index = provider.SelectedIndex;
-            if (index is < 0 or > 1)
+            if (provider.SelectedItem is not SummarySource selected || index < 0)
                 return;
-            summaryGemini = index == 0;
-            model.Text = summaryModels[index] ?? (summaryGemini ? TextModelClient.GeminiSummaryModel : TextModelClient.GroqSummaryModel);
+            summaryProviderIndex = index;
+            var cli = selected.KeyVariable == null;
+            model.Text = summaryModels[index] ?? selected.DefaultModel;
+            model.Tag = cli ? "CLI default" : "";
             key.Clear();
-            var name = index == 0 ? "Gemini" : "Groq";
-            send.Content = IconLabel("Summarize with " + name, 0xEAB7, purple);
-            AutomationProperties.SetName(send, "Summarize with " + name);
-            status.Text = "Sends the text above to " + name + ".";
-            if (summaryKeys[index] != null || EnvironmentKey(index) != null)
+            keyField.Visibility = cli ? Visibility.Collapsed : Visibility.Visible;
+            send.Content = IconLabel("Summarize with " + selected.Label, 0xEAB7, AssistantInk);
+            AutomationProperties.SetName(send, "Summarize with " + selected.Label);
+            status.Text = cli ? $"Uses your local {selected.Label} sign-in to summarize the text above."
+                : $"Sends the text above to {selected.Label}.";
+            if (selected.KeyVariable is { } variable && (summaryKeys[index] != null || EnvironmentKey(variable) != null))
                 status.Text += " A key is available.";
         }
 
@@ -168,17 +181,24 @@ public partial class DashboardWindow
         {
             var reply = source.Text;
             var index = provider.SelectedIndex;
-            if (index is < 0 or > 1)
+            if (provider.SelectedItem is not SummarySource selected || index < 0)
                 return;
             var modelId = model.Text.Trim();
-            var typed = key.Password.Trim();
-            var apiKey = typed.Length == 0 ? ReadSessionKey(index) ?? EnvironmentKey(index) : typed;
-            if (string.IsNullOrWhiteSpace(reply) || string.IsNullOrWhiteSpace(modelId) || string.IsNullOrWhiteSpace(apiKey))
+            var typed = selected.KeyVariable == null ? "" : key.Password.Trim();
+            var apiKey = selected.KeyVariable is { } variable
+                ? (typed.Length == 0 ? ReadSessionKey(index) ?? EnvironmentKey(variable) : typed)
+                : null;
+            if (string.IsNullOrWhiteSpace(reply))
             {
-                status.Text = "Enter reply text, a model ID, and an API key.";
+                status.Text = "Enter text to summarize.";
                 return;
             }
-            if (reply.Length > AgentSessions.SummaryLimit || apiKey.Any(char.IsWhiteSpace) ||
+            if (selected.KeyVariable != null && (modelId.Length == 0 || string.IsNullOrWhiteSpace(apiKey)))
+            {
+                status.Text = "Enter a model ID and an API key.";
+                return;
+            }
+            if (reply.Length > AgentSessions.SummaryLimit || (apiKey?.Any(char.IsWhiteSpace) ?? false) ||
                 modelId.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.' or '/' or ':')))
             {
                 status.Text = "Check the length of the reply, API key, or model ID.";
@@ -191,7 +211,7 @@ public partial class DashboardWindow
             result.Visibility = Visibility.Collapsed;
             try
             {
-                var response = await TextModelClient.SummarizeAsync(index == 0, modelId, apiKey, reply, cancellation,
+                var response = await TextModelClient.SummarizeAsync(selected.Provider, modelId, apiKey, reply, cancellation,
                     notifications: session == null);
                 if (cancellation.IsCancellationRequested)
                     return;
@@ -204,7 +224,12 @@ public partial class DashboardWindow
                     RememberSessionKey(index, key);
                 result.Text = response.Trim();
                 result.Visibility = Visibility.Visible;
-                status.Text = "Summary generated by " + (index == 0 ? "Gemini" : "Groq") + ".";
+                status.Text = $"Summary generated by {selected.Label}.";
+            }
+            catch (CodingSummaryException error)
+            {
+                if (!cancellation.IsCancellationRequested)
+                    status.Text = error.Message;
             }
             catch (HttpRequestException error)
             {
@@ -222,7 +247,7 @@ public partial class DashboardWindow
                 if (!cancellation.IsCancellationRequested)
                     status.Text = "The provider took too long to respond.";
             }
-            catch (Exception error) when (error is JsonException or FormatException or InvalidOperationException)
+            catch (Exception error) when (error is JsonException or FormatException or InvalidOperationException or IOException or UnauthorizedAccessException)
             {
                 status.Text = "The provider did not return a readable response.";
             }
@@ -254,9 +279,8 @@ public partial class DashboardWindow
         field.Clear();
     }
 
-    private static string? EnvironmentKey(int index)
+    private static string? EnvironmentKey(string name)
     {
-        var name = index == 0 ? "GEMINI_API_KEY" : "GROQ_API_KEY";
         return Environment.GetEnvironmentVariable(name) is { Length: > 0 } process ? process.Trim()
             : Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User)?.Trim();
     }

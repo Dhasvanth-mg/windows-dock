@@ -97,7 +97,7 @@ internal static class CodexUsageClient
         return null;
     }
 
-    private static string? FindExecutable()
+    internal static string? FindExecutable()
     {
         var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenAI", "Codex", "bin");
         try
@@ -112,12 +112,17 @@ internal static class CodexUsageClient
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
 
+        return FindOnPath("codex.exe");
+    }
+
+    internal static string? FindOnPath(string executable)
+    {
         foreach (var folder in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator))
         {
             var directory = folder.Trim().Trim('"');
             if (!Path.IsPathFullyQualified(directory))
                 continue;
-            var path = Path.Combine(directory, "codex.exe");
+            var path = Path.Combine(directory, executable);
             if (File.Exists(path))
                 return path;
         }

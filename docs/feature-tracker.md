@@ -429,3 +429,12 @@
 - Outcome: The taskbar launcher and `--open` open Dashboard. A fresh upward scroll over its header or content opens Widgets when the content under the pointer has reached the top. Horizontal navigation follows the visible tab order and consumes the momentum of each gesture. Returning from Widgets or compact coding chats restores the last Dashboard tab.
 - Verification: Native Release, x64 publish, and Windows smoke checks passed. The fixture tested partial wheel deltas, momentum, tab boundaries, nested scrolling, and tab preservation. The installed build opened Dashboard, switched to Audio with a horizontal wheel message, opened Widgets with an upward wheel message, and returned to Audio from the Explorer taskbar button. Explorer was restarted after the old shell session refused to reload the native integration.
 - Remaining work: Physical touchpad input was not exercised. Windows wheel messages verified the input routing.
+
+##### Coding providers for summaries
+
+- Status: Built and installed. Codex verified live. Claude Code sign-in required on this machine.
+- Scope: Add signed-in Codex and Claude Code as selectable sources for coding reply summaries and notification digests.
+- Acceptance criteria: Both choices work through the installed local CLIs, use the editable preview, and require no separate API key in the dock. A summary call runs without project access or tool use. Existing providers remain available.
+- Outcome: Reply and notification summaries share a provider picker with Gemini, Groq, Codex, and Claude Code. The CLI routes use saved sign-in, accept an optional model override, and read the reviewed text from standard input. They run outside project folders with model tools and session persistence disabled. API providers retain their existing key fields.
+- Verification: Release build, x64 publish, and Windows smoke checks passed. Both preview panels preserved edits across provider changes. A synthetic live request succeeded through Codex, and the installed Claude Code CLI reported that it needs sign-in. The installed notification flow exposed both new options, and the native taskbar controller stayed running during the managed update.
+- Remaining work: Sign in to the installed Claude Code CLI and verify a live summary with that account.
