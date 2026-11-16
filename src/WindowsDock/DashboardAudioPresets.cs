@@ -36,8 +36,8 @@ public partial class DashboardWindow
             try
             {
                 status.Text = AudioPresets.Apply(preset);
-                if (currentPage == DashboardPage.Media)
-                    ShowPage(DashboardPage.Media);
+                if (currentPage == DashboardPage.Controls)
+                    ShowPage(DashboardPage.Controls);
             }
             catch (Exception error) when (error is COMException or InvalidCastException or UnauthorizedAccessException)
             {

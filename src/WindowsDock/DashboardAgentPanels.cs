@@ -147,7 +147,7 @@ public partial class DashboardWindow
         var actions = new WrapPanel();
         Button? edit = null;
         Button? copy = null;
-        var send = AccentButton("Summarize", 0xEAB7, AssistantInk);
+        var send = PrimaryButton("Summarize");
         send.Click += async (_, _) => await SummarizeAsync();
         send.Margin = new Thickness(0, 0, 5, 3);
         actions.Children.Add(send);
@@ -222,7 +222,7 @@ public partial class DashboardWindow
             model.Tag = cli ? "CLI default" : selected.DefaultModel;
             key.Clear();
             SetKeyVisibility();
-            send.Content = IconLabel("Summarize with " + selected.Label, 0xEAB7, AssistantInk);
+            send.Content = "Summarize with " + selected.Label;
             AutomationProperties.SetName(send, "Summarize with " + selected.Label);
             status.Text = cli ? $"Uses your local {selected.Label} sign-in to summarize the text above."
                 : $"Sends the text above to {selected.Label}.";
@@ -463,7 +463,7 @@ public partial class DashboardWindow
         content.Children.Add(slots);
         content.Children.Add(binding);
         var actions = new WrapPanel();
-        var pin = ActionButton("Pin this chat", () => Save(new(session.Provider, session.DesktopId ?? session.Id, null, session.Title)));
+        var pin = PrimaryButton("Pin this chat", () => Save(new(session.Provider, session.DesktopId ?? session.Id, null, session.Title)));
         pin.Margin = new Thickness(0, 0, 5, 4);
         actions.Children.Add(pin);
         var project = ActionButton("Follow this project", () => Save(new(session.Provider, null, session.ProjectPath, session.Project)));
@@ -479,7 +479,8 @@ public partial class DashboardWindow
             for (var i = 0; i < buttons.Length; i++)
             {
                 labels[i].Text = agentSlots[i]?.Label ?? "Automatic";
-                buttons[i].BorderBrush = i == selected ? AssistantInk : AssistantRule;
+                buttons[i].Background = i == selected ? controlSelected : ControlFill;
+                buttons[i].BorderBrush = i == selected ? AssistantSecondary : Brushes.Transparent;
                 AutomationProperties.SetItemStatus(buttons[i], i == selected ? "Selected" : "");
             }
             binding.Text = agentSlots[selected] is { } slot
@@ -593,7 +594,7 @@ public partial class DashboardWindow
                 foreach (var quota in plan.Windows)
                     panel.Children.Add(QuotaRow(quota));
                 if (plan.IsBlocked(DateTimeOffset.UtcNow))
-                    panel.Children.Add(Text("Included usage is limited", 11, Brush("#FF879E"), true));
+                    panel.Children.Add(Text("You have hit the included usage limit.", 12, bad));
                 panel.Children.Add(Text($"{plan.Source} · {plan.Observed.LocalDateTime:g}", 10, muted));
             }
             body.Children.Add(new Border { BorderBrush = AssistantRule, BorderThickness = new Thickness(0, 1, 0, 0),
@@ -617,13 +618,13 @@ public partial class DashboardWindow
         if (value.HasValue)
         {
             var track = new Grid { Height = 3, Margin = new Thickness(0, 4, 0, 4) };
-            track.Children.Add(new Border { Background = Brush("#24FFFFFF"), CornerRadius = new CornerRadius(2) });
+            track.Children.Add(new Border { Background = trackFill, CornerRadius = new CornerRadius(2) });
             track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(value.Value, GridUnitType.Star) });
             track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100 - value.Value, GridUnitType.Star) });
             var fill = new Border
             {
                 CornerRadius = new CornerRadius(2),
-                Background = expired ? muted : value.Value >= 95 ? Brush("#FF879E") : value.Value >= 75 ? amber : accent
+                Background = expired ? muted : value.Value >= 95 ? bad : value.Value >= 75 ? amber : AssistantInk
             };
             track.Children.Add(fill);
             Grid.SetColumnSpan(track.Children[0], 2);
@@ -688,7 +689,7 @@ public partial class DashboardWindow
         ShowDockPanelHost();
         var returnFocus = FocusManager.GetFocusedElement(this) as FrameworkElement;
         var panel = new StackPanel();
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
         Window window = null!;
         var close = IconButton(0xE711, "Close " + title.ToLowerInvariant(), () => window.Close());
         DockPanel.SetDock(close, Dock.Right);
@@ -696,18 +697,19 @@ public partial class DashboardWindow
         if (widget || backAction != null)
         {
             var back = IconButton(0xE76B, backLabel, backAction ?? ShowWidgets);
-            back.Margin = new Thickness(0, 0, 4, 0);
+            back.Margin = new Thickness(-6, 0, 6, 0);
             header.Children.Add(back);
         }
         var heading = new DockPanel { VerticalAlignment = VerticalAlignment.Center };
-        if (portrait != null || icon != 0)
+        // Only the characters get a picture beside the title; a generic icon there says nothing the title does not.
+        if (portrait != null)
         {
-            var badge = portrait ?? GlyphBadge(icon, tint, 33);
+            var badge = portrait;
             badge.Margin = new Thickness(0, 0, 9, 0);
             heading.Children.Add(badge);
         }
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        labels.Children.Add(Text(title, 19, AssistantInk, strong: true));
+        labels.Children.Add(Text(title, 17, AssistantInk, strong: true));
         if (!string.IsNullOrEmpty(subtitle))
             labels.Children.Add(Text(subtitle, 12, AssistantSecondary));
         heading.Children.Add(labels);
@@ -733,8 +735,9 @@ public partial class DashboardWindow
         {
             Owner = this, Title = title, Width = Math.Min(width, screen.WorkingArea.Width / dpi.DpiScaleX - 24),
             MaxHeight = room, Height = Math.Min(room, panelHeight), SizeToContent = SizeToContent.Manual,
-            WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent,
-            Foreground = AssistantInk, FontFamily = FontFamily, ResizeMode = ResizeMode.NoResize, Topmost = true,
+            WindowStyle = WindowStyle.None, AllowsTransparency = false,
+            Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantShell,
+            Foreground = AssistantInk, FontFamily = FontFamily, FontSize = FontSize, ResizeMode = ResizeMode.NoResize, Topmost = true,
             ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, UseLayoutRounding = true
         };
         window.Resources.MergedDictionaries.Add(new ResourceDictionary
@@ -758,9 +761,11 @@ public partial class DashboardWindow
         frame.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
             PanningMode = PanningMode.VerticalOnly });
         var card = Card(frame);
-        card.CornerRadius = new CornerRadius(12);
+        card.CornerRadius = new CornerRadius(8);
+        DockWindowFrame.Attach(window, () => false);
         card.Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantShell;
-        card.Padding = new Thickness(15);
+        card.Padding = new Thickness(18, 14, 18, 14);
+        card.BorderBrush = AssistantRule;
         window.Content = card;
 
         var lifetime = new CancellationTokenSource();

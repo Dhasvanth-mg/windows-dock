@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
@@ -16,19 +17,11 @@ public partial class DashboardWindow
     private TextBox? commandInput;
     private WrapPanel? homeFavorites;
 
-    private void ShowWidgets()
-    {
-        var (window, content, _) = CreateDockPanel("Widgets", "", 492, 0, AssistantInk,
-            portrait: DockTaskbar.IconBadge(), section: DockSection.Widgets);
-        var toolbar = Columns(3, 1);
-        toolbar.Margin = new Thickness(0, 0, 0, 10);
-        var search = MakeButton(IconLabel("Search apps and actions", 0xE721, AssistantSecondary),
-            "Search apps and actions", ShowCommandPalette);
-        search.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        Put(toolbar, search, 0);
-        Put(toolbar, MakeButton("Dashboard", "Dashboard", OpenMainDashboard), 1);
-        content.Children.Add(toolbar);
+    private void ShowWidgets() => OpenWidgetPage(DashboardPage.Widgets);
 
+    private UIElement WidgetsPage()
+    {
+        var content = new StackPanel();
         var widgets = WidgetActions();
         var layout = DockWidgetLayout.Load();
         var pinPicker = new ComboBox { ItemsSource = widgets, DisplayMemberPath = nameof(WidgetAction.Label),
@@ -41,27 +34,32 @@ public partial class DashboardWindow
         pinRow.Children.Add(expand);
         DockPanel.SetDock(pinPicker, Dock.Right);
         pinRow.Children.Add(pinPicker);
-        pinRow.Children.Add(IconLabel("Pinned", 0xE718, AssistantSecondary));
+        var pinnedTitle = Text("Pinned widget", 13, AssistantInk, true);
+        pinnedTitle.Margin = new Thickness(0);
+        pinnedTitle.VerticalAlignment = VerticalAlignment.Center;
+        pinRow.Children.Add(pinnedTitle);
         content.Children.Add(pinRow);
-        var pinned = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            MaxHeight = Math.Clamp(window.Height * .28, 90, 180) };
-        content.Children.Add(new Border { Child = pinned, BorderBrush = AssistantRule, BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(9), Padding = new Thickness(7), Margin = new Thickness(0, 0, 0, 11) });
-        var favoritesHeading = Text("", 11, AssistantSecondary, true);
-        content.Children.Add(favoritesHeading);
-        var favorites = new StackPanel { Margin = new Thickness(0, 4, 0, 8) };
+        var pinned = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 164,
+            PanningMode = PanningMode.VerticalOnly };
+        content.Children.Add(new Border { Child = pinned, Background = SystemParameters.HighContrast ? null : assistantInset,
+            CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10), Margin = new Thickness(0, 0, 0, 14) });
+        content.Children.Add(Text("Favorites", 13, AssistantInk, true));
+        var favorites = new ContentControl { Margin = new Thickness(0, 6, 0, 12), HorizontalContentAlignment = HorizontalAlignment.Stretch };
         content.Children.Add(favorites);
-        var allHeading = Text("Other widgets", 11, AssistantSecondary, true);
-        content.Children.Add(allHeading);
-        var catalog = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            MaxHeight = Math.Clamp(window.Height - 398, 75, 220), Margin = new Thickness(0, 4, 0, 0) };
-        content.Children.Add(catalog);
         var status = Text("", 11, AssistantSecondary);
         status.TextWrapping = TextWrapping.Wrap;
+        status.Margin = new Thickness(0, 0, 0, 8);
+        status.Visibility = Visibility.Collapsed;
         content.Children.Add(status);
+        content.Children.Add(Text("All widgets", 13, AssistantInk, true));
+        var catalog = new ContentControl { Margin = new Thickness(0, 4, 0, 0), HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        content.Children.Add(catalog);
 
-        System.Threading.CancellationTokenSource? mounted = null;
-        window.Closed += (_, _) => ReleasePinned();
+        CancellationTokenSource? mounted = null;
+        content.Loaded += (_, _) => UpdateMount();
+        content.Unloaded += (_, _) => ReleasePinned();
+        content.IsVisibleChanged += (_, _) => UpdateMount();
+        content.IsHitTestVisibleChanged += (_, _) => UpdateMount();
         pinPicker.SelectionChanged += (_, _) =>
         {
             if (pinPicker.SelectedItem is not WidgetAction selected || selected.Id == layout.Pinned)
@@ -69,57 +67,70 @@ public partial class DashboardWindow
             try
             {
                 layout = DockWidgetLayout.Pin(selected.Id);
-                status.Text = "";
-                MountPinned();
+                ShowStatus("");
+                ReleasePinned();
+                UpdateMount();
                 RenderShortcuts();
                 RenderHomeFavorites();
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
                 pinPicker.SelectedItem = widgets.First(item => item.Id == layout.Pinned);
-                status.Text = "Could not save the pinned widget.";
+                ShowStatus("Could not save the pinned widget.");
             }
         };
 
-        MountPinned();
         RenderShortcuts();
-        window.Loaded += (_, _) => search.Focus();
-        window.Show();
+        return content;
 
         void ReleasePinned()
         {
-            mounted?.Cancel();
-            mounted?.Dispose();
+            if (mounted is not { } previous)
+                return;
+            mounted = null;
+            previous.Cancel();
+            previous.Dispose();
+            pinned.Content = null;
         }
 
-        void MountPinned()
+        void UpdateMount()
         {
-            ReleasePinned();
+            if (!content.IsLoaded || !content.IsVisible || !content.IsHitTestVisible)
+            {
+                ReleasePinned();
+                return;
+            }
+            if (mounted != null)
+                return;
             mounted = new();
             var body = new StackPanel();
             pinned.Content = body;
-            BuildPinnedWidget(layout.Pinned, window, body, mounted.Token);
+            BuildPinnedWidget(layout.Pinned, this, body, mounted.Token);
             pinned.ScrollToTop();
+        }
+
+        void ShowStatus(string message)
+        {
+            status.Text = message;
+            status.Visibility = message.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         void RenderShortcuts(string? focused = null)
         {
-            favorites.Children.Clear();
-            favoritesHeading.Text = $"Favorites   {layout.Favorites.Length}/{DockWidgetLayout.FavoriteLimit}";
-            if (layout.Favorites.Length == 0)
-                favorites.Children.Add(Text("Star a widget below to move it here.", 11, AssistantSecondary));
-            else
-                favorites.Children.Add(Group(layout.Favorites.Select(id => widgets.First(item => item.Id == id)), true));
+            favorites.Content = layout.Favorites.Length == 0
+                ? Text("Star a widget to add it here.", 12, AssistantSecondary)
+                : Group(layout.Favorites.Select(id => widgets.First(item => item.Id == id)), true);
             catalog.Content = Group(widgets.Where(item => item.Id != layout.Pinned && !layout.Favorites.Contains(item.Id)), false);
 
             Grid Group(IEnumerable<WidgetAction> group, bool favorite)
             {
-                var items = Columns(1, 1);
+                var columnCount = Width >= 840 ? (favorite ? 4 : 3) : 2;
+                var items = Columns(Enumerable.Repeat(1.0, columnCount).ToArray());
                 var index = 0;
                 foreach (var item in group)
                 {
                     var button = favorite
-                        ? MakeButton(IconLabel(item.Label, item.Icon, item.Color), item.Label, item.Action)
+                        ? MakeButton(IconLabel(item.Label, item.Icon, AssistantSecondary), item.Label, item.Action)
                         : WidgetTile(item, showArrow: false);
                     button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
                     button.Padding = new Thickness(8, favorite ? 7 : 5, 33, favorite ? 7 : 5);
@@ -135,17 +146,17 @@ public partial class DashboardWindow
                             try
                             {
                                 layout = DockWidgetLayout.SetFavorite(item.Id, !favorite);
-                                status.Text = !favorite && !layout.Favorites.Contains(item.Id)
-                                    ? "Remove a favorite to make room." : "";
+                                ShowStatus(!favorite && !layout.Favorites.Contains(item.Id)
+                                    ? "Remove a favorite to make room." : "");
                                 RenderShortcuts(item.Id);
                                 RenderHomeFavorites();
                             }
                             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                             {
-                                status.Text = "Could not save favorites.";
+                                ShowStatus("Could not save favorites.");
                             }
                         });
-                    ((TextBlock)star.Content).Foreground = favorite ? amber : AssistantSecondary;
+                    ((TextBlock)star.Content).Foreground = favorite ? AssistantInk : AssistantFaint;
                     star.HorizontalAlignment = HorizontalAlignment.Right;
                     star.VerticalAlignment = VerticalAlignment.Center;
                     star.Margin = new Thickness(0, 0, 3, 0);
@@ -153,8 +164,8 @@ public partial class DashboardWindow
                     row.Children.Add(button);
                     row.Children.Add(star);
                     if (item.Id == focused)
-                        window.Dispatcher.BeginInvoke(() => star.Focus(), System.Windows.Threading.DispatcherPriority.Input);
-                    Put(items, row, index / 2, index % 2);
+                        Dispatcher.BeginInvoke(() => star.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+                    Put(items, row, index / columnCount, index % columnCount);
                     index++;
                 }
                 return items;
@@ -216,7 +227,7 @@ public partial class DashboardWindow
 
     private WidgetAction[] WidgetActions() =>
     [
-        new("Audio switchboard", "Outputs, app mixer, and playback", "music media volume speakers headphones",
+        new("Audio switchboard", "Outputs, app volumes and playback", "music media volume speakers headphones",
             0xE767, purple, ShowAudioWidget, "audio", Wide: true),
         new("Audio presets", "Save and recall mixes", "headphones speaker mixer audio output", 0xE9E9, purple, ShowAudioPresets, "audio-presets"),
         new("Meetings", "Upcoming calls", "calendar schedule join", 0xE787, accent, ShowMeetingWidget, "meetings"),
@@ -226,7 +237,7 @@ public partial class DashboardWindow
         new("Downloads", "Files and transfers", "queue transfers files", 0xE896, accent, ShowDownloadWidget, "downloads"),
         new("Focus timer", "Sessions and breaks", "timer break do not disturb", 0xE916, green, ShowFocusWidget, "focus"),
         new("Notifications", "Review and summarize alerts", "alerts summary digest", 0xEA8F, pink, ShowNotificationWidget, "notifications"),
-        new("Assistant", "Choose a character", "AI model provider message research planning coding casual", 0xEAB7, purple, ShowAssistantPicker, "assistant"),
+        new("Assistant", "Lark, Fern, Bolt or Orbit", "AI model provider message research planning coding casual", 0xEAB7, purple, ShowAssistantPicker, "assistant"),
         new("Activity inbox", "Replies, approvals, and limits", "unread status finished quota", 0xEA8F, pink, ShowActivityInbox, "activity"),
         new("Assistant jobs", "Running tasks and saved results", "background delegate coding writing Scribe research", 0xE823, amber, ShowAssistantJobs, "jobs"),
         new("Calculator", "Calculate, convert, and save results", "calc math percentages units history favorites", 0xE8EF, accent, ShowCalculator, "calculator"),
@@ -248,9 +259,9 @@ public partial class DashboardWindow
         badge.Margin = new Thickness(0, 0, 8, 0);
         line.Children.Add(badge);
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        labels.Children.Add(Text(widget.Label, 12, strong: true));
-        var detail = Text(widget.Detail, 11, AssistantSecondary);
-        detail.Margin = new Thickness(0, 2, 0, 0);
+        labels.Children.Add(Text(widget.Label, 13));
+        var detail = Text(widget.Detail, 11, AssistantFaint);
+        detail.Margin = new Thickness(0, 1, 0, 0);
         labels.Children.Add(detail);
         line.Children.Add(labels);
         var button = MakeButton(line, widget.Label, widget.Action);
@@ -262,7 +273,11 @@ public partial class DashboardWindow
     private void OpenWidgetPage(DashboardPage page)
     {
         OpenMainDashboard();
-        ShowPage(page);
+        if (currentPage != page || !pageInitialized)
+            ShowPage(page);
+        if (!IsVisible)
+            Show();
+        Activate();
     }
 
     internal void ShowCommandPalette() => ShowCommandPalette(null);
@@ -283,12 +298,12 @@ public partial class DashboardWindow
         var search = Field("Search apps and actions", 150);
         commandInput = search;
         window.Closed += (_, _) => commandInput = null;
-        search.Tag = "Windows, chats, widgets, and apps…";
+        search.Tag = "Search windows, chats, widgets and apps";
         search.Margin = new Thickness(0, 0, 0, 8);
         content.Children.Add(search);
         var list = new StackPanel();
         content.Children.Add(list);
-        var hint = Text("↑ ↓ Select   ·   Enter Open   ·   Esc Close", 10, subdued);
+        var hint = Text("↑ ↓ to move, Enter to open. Start with window: to search open windows only.", 11, muted);
         hint.Margin = new Thickness(0, 7, 0, 0);
         content.Children.Add(hint);
         var favorites = FavoriteWidgets();
@@ -299,6 +314,22 @@ public partial class DashboardWindow
             var label = page == DashboardPage.Agents ? "Coding chats" : AutomationProperties.GetName(button);
             options.Add(new(label, "Dashboard", "dock page", 0xECAA, purple, () => OpenWidgetPage(page)));
         }
+        // Things that used to be pages of their own still answer to their old names.
+        foreach (var (label, where, words, page) in new[]
+        {
+            ("Calendar and reminders", "Today", "week agenda schedule date", DashboardPage.Home),
+            ("Weather", "Today", "forecast temperature rain", DashboardPage.Home),
+            ("Weather location and units", "Controls", "city celsius fahrenheit", DashboardPage.Controls),
+            ("Sound mixer", "Controls", "audio volume output speakers headphones app lyrics media", DashboardPage.Controls),
+            ("Wi-Fi and Bluetooth", "Controls", "network radio wireless", DashboardPage.Controls),
+            ("Accent colour", "Controls", "color theme appearance", DashboardPage.Controls),
+            ("Dock settings", "Controls", "start sign-in startup restore taskbar exit", DashboardPage.Controls),
+            ("System and battery", "Desk", "stats cpu memory drive network power uptime lock", DashboardPage.Desk),
+            ("Files", "Desk", "shelf drop drag", DashboardPage.Desk),
+            ("Wallpapers", "Desk", "background image desktop", DashboardPage.Desk),
+            ("Games", "Play", "snake copycat memory fun", DashboardPage.Play)
+        })
+            options.Add(new(label, where, words, 0xECAA, purple, () => OpenWidgetPage(page)));
         options.Add(new("Token usage", "Coding chats", "quota tokens reset Claude Codex", 0xE9D9, accent, ShowAgentUsage));
         for (var index = 0; index < AssistantPersonas.All.Length; index++)
         {
@@ -310,7 +341,7 @@ public partial class DashboardWindow
         foreach (var chat in RankedSessions(pendingApprovals).Take(40))
         {
             var provider = ProviderName(chat.Provider);
-            var detail = $"{provider} · {chat.Project} · {StateBadge(chat.State).Label}";
+            var detail = $"{StateBadge(chat.State).Label}, {provider}" + (string.IsNullOrWhiteSpace(chat.Project) ? "" : " in " + chat.Project);
             options.Add(new(chat.Title, detail, $"chat {provider} {chat.Project}", 0xE943, green, () => OpenPaletteChat(chat)));
         }
         foreach (var (label, target) in new[]
@@ -335,7 +366,7 @@ public partial class DashboardWindow
         var openWindows = new Lazy<WidgetAction[]>(() => ShellIntegration.Windows().Select(target =>
         {
             var app = Path.GetFileNameWithoutExtension(target.Path);
-            return new WidgetAction(target.Title, app.Length == 0 ? "Open window" : $"Open window · {app}",
+            return new WidgetAction(target.Title, app.Length == 0 ? "Open window" : $"Open window in {app}",
                 "open window running switch " + app, 0xE737, accent, () =>
                 {
                     if (ShellIntegration.Activate(target))
@@ -386,8 +417,8 @@ public partial class DashboardWindow
             var windowsOnly = query.StartsWith("window:", StringComparison.OrdinalIgnoreCase);
             if (windowsOnly)
                 query = query[7..].Trim();
-            hint.Text = "↑ ↓ Select   ·   Enter Open   ·   Esc Close";
-            hint.Foreground = subdued;
+            hint.Text = "↑ ↓ to move, Enter to open. Start with window: to search open windows only.";
+            hint.Foreground = muted;
             DockCalculation? calculation = null;
             string? calculationError = null;
             var calculated = !windowsOnly && DockCalculator.TryEvaluate(query, out calculation, out calculationError);
@@ -415,7 +446,8 @@ public partial class DashboardWindow
             {
                 var row = index;
                 var button = WidgetTile(matches[index], showArrow: false);
-                button.Margin = new Thickness(0, 0, 0, 4);
+                button.Margin = new Thickness(0, 0, 0, 1);
+                button.Background = button.BorderBrush = Brushes.Transparent;
                 button.HorizontalAlignment = HorizontalAlignment.Stretch;
                 button.GotKeyboardFocus += (_, _) => Select(row);
                 list.Children.Add(button);
@@ -424,7 +456,7 @@ public partial class DashboardWindow
             if (matches.Length > 0)
                 Select(0);
             if (matches.Length == 0)
-                list.Children.Add(Text("No matches.", 11, subdued));
+                list.Children.Add(Text("Nothing matches that.", 12, muted));
         }
 
         void Select(int index)
@@ -432,12 +464,12 @@ public partial class DashboardWindow
             if (selected >= 0)
             {
                 var previous = (Button)list.Children[selected];
-                previous.Background = AgentArt.Wash(matches[selected].Color, 12);
-                previous.BorderBrush = AgentArt.Wash(matches[selected].Color, 35);
+                previous.Background = Brushes.Transparent;
+                previous.BorderBrush = Brushes.Transparent;
             }
             var button = (Button)list.Children[index];
-            button.Background = AgentArt.Wash(purple, 45);
-            button.BorderBrush = AgentArt.Wash(purple, 100);
+            button.Background = controlSelected;
+            button.BorderBrush = controlSelected;
             selected = index;
         }
     }
@@ -535,7 +567,7 @@ public partial class DashboardWindow
                 list.Children.Add(card);
             }
             if (Workspaces().Count == 0)
-                list.Children.Add(Text("Group a project folder, websites, and apps into one shortcut.", 11, subdued));
+                list.Children.Add(Text("Group a project folder, websites and apps so they open together.", 12, subdued));
         }
 
         void Edit(WorkspaceShortcut? existing)

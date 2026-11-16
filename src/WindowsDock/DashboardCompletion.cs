@@ -29,7 +29,7 @@ public partial class DashboardWindow
             return;
         if (agentPanel is { IsVisible: true, Content: Border card })
             Glow(card);
-        else if (IsVisible && Opacity > 0)
+        else if (IsVisible && !surfaceHidden)
             Glow(Shell);
         else
             return;

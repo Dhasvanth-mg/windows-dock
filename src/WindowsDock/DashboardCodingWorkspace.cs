@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -44,14 +45,16 @@ public partial class DashboardWindow
         private readonly ListBox conversations = new();
         private readonly ComboBox chatPicker = new() { DisplayMemberPath = nameof(AgentSession.Title), Visibility = Visibility.Collapsed };
         private readonly TextBox search;
-        private readonly (AgentProvider? Provider, Button Button)[] filters;
+        private static readonly AgentProvider?[] filterChoices = [null, AgentProvider.Codex, AgentProvider.Claude];
+        private readonly Action<int> markFilter;
+        private readonly FrameworkElement toolbar;
+        private readonly Dictionary<Pane, Button> globalTabs = new();
         private readonly TextBlock empty;
         private readonly TextBlock title;
         private readonly TextBlock metadata;
         private readonly TextBlock notice;
         private readonly Button close;
         private Button? panelSwitcher;
-        private Button? lockButton;
         private readonly ContentControl portrait = new();
         private readonly Button openChat;
         private readonly Button back;
@@ -85,7 +88,7 @@ public partial class DashboardWindow
             close = dock.IconButton(0xE711, "Close coding chats", dock.Dismiss);
             var layout = new DockPanel();
             View = layout;
-            var toolbar = BuildToolbar();
+            toolbar = BuildToolbar();
             DockPanel.SetDock(toolbar, Dock.Top);
             layout.Children.Add(toolbar);
 
@@ -98,13 +101,14 @@ public partial class DashboardWindow
 
             search = dock.Field("Search chats", 100);
             search.Tag = "Search chats";
-            search.Margin = new Thickness(0, 0, 0, 7);
+            search.Margin = new Thickness(0, 0, 0, 8);
             search.TextChanged += (_, _) => Refresh();
-            filters = new (AgentProvider?, string)[] { (null, "All"), (AgentProvider.Codex, "Codex"), (AgentProvider.Claude, "Claude") }
-                .Select(item => (item.Item1, Tab(item.Item2, () => { filter = item.Item1; Refresh(); }))).ToArray();
-            var filterRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-            foreach (var (_, button) in filters)
-                filterRow.Children.Add(button);
+            var filterRow = dock.Segmented("Show chats from", ["All", "Codex", "Claude"], 0, index =>
+            {
+                filter = filterChoices[index];
+                Refresh();
+            }, out markFilter);
+            filterRow.Margin = new Thickness(0, 0, 0, 8);
 
             conversations.Background = Brushes.Transparent;
             conversations.BorderThickness = new Thickness(0);
@@ -132,8 +136,8 @@ public partial class DashboardWindow
             sidebar.Children.Add(listHost);
             rail = new Border
             {
-                Child = sidebar, Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantInset,
-                BorderBrush = AssistantRule, BorderThickness = new Thickness(0, 0, 1, 0), Padding = new Thickness(10)
+                Child = sidebar,
+                BorderBrush = AssistantRule, BorderThickness = new Thickness(0, 0, 1, 0), Padding = new Thickness(0, 0, 12, 0)
             };
             Grid.SetRow(rail, 1);
             workspace.Children.Add(rail);
@@ -159,16 +163,16 @@ public partial class DashboardWindow
                 Refresh();
             };
 
-            title = dock.Text("", 20, AssistantInk, true);
+            title = dock.Text("", 18, AssistantInk, true);
             metadata = dock.Text("", 12, AssistantSecondary);
-            metadata.Margin = new Thickness(0, 3, 0, 0);
+            metadata.Margin = new Thickness(0, 2, 0, 0);
             portrait.Margin = new Thickness(0, 0, 10, 0);
             portrait.VerticalAlignment = VerticalAlignment.Center;
             openChat = dock.ActionButton("Open chat", () => { if (chat != null) dock.OpenAgent(chat); });
             openChat.VerticalAlignment = VerticalAlignment.Center;
             back = dock.ActionButton("Back to chat", () => Back());
             back.VerticalAlignment = VerticalAlignment.Center;
-            var header = new DockPanel { Margin = new Thickness(16, 11, 12, 9), LastChildFill = true };
+            var header = new DockPanel { Margin = new Thickness(18, 0, 0, 8), LastChildFill = true };
             foreach (var button in new[] { openChat, back })
             {
                 DockPanel.SetDock(button, Dock.Right);
@@ -184,12 +188,24 @@ public partial class DashboardWindow
                 tabs.Add(target, button);
                 chatTabs.Children.Add(button);
             }
-            chatTabs.Margin = new Thickness(12, 0, 12, 0);
-            var tabsRule = new Border { Child = chatTabs, BorderBrush = AssistantRule, BorderThickness = new Thickness(0, 0, 0, 1) };
+            chatTabs.Margin = new Thickness(10, 0, 0, 0);
+            // Things that are about the chat sit on the left; Jobs, Activity and Setup belong to no one chat, so they
+            // sit apart on the right of the same row.
+            var everywhere = new StackPanel { Orientation = Orientation.Horizontal };
+            foreach (var (label, target) in new[] { ("Jobs", Pane.Jobs), ("Activity", Pane.Activity), ("Setup", Pane.Setup) })
+            {
+                var button = Tab(label, () => Navigate(target));
+                globalTabs.Add(target, button);
+                everywhere.Children.Add(button);
+            }
+            DockPanel.SetDock(everywhere, Dock.Right);
+            var tabRow = new DockPanel { Children = { everywhere, chatTabs } };
+            var tabsRule = new Border { Child = tabRow, BorderBrush = AssistantRule, BorderThickness = new Thickness(0, 0, 0, 1),
+                Padding = new Thickness(0, 0, 0, 3) };
             notice = dock.Text("", 11, AssistantSecondary);
             notice.TextWrapping = TextWrapping.Wrap;
-            notice.Margin = new Thickness(16, 2, 12, 5);
-            var work = new DockPanel { Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : Brush("#0C0C0C") };
+            notice.Margin = new Thickness(18, 4, 0, 0);
+            var work = new DockPanel();
             DockPanel.SetDock(header, Dock.Top);
             DockPanel.SetDock(tabsRule, Dock.Top);
             DockPanel.SetDock(notice, Dock.Bottom);
@@ -204,24 +220,17 @@ public partial class DashboardWindow
 
         private FrameworkElement BuildToolbar()
         {
-            var bar = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+            // Only the taskbar popup needs its own title; inside Dashboard the tab strip already says where you are.
+            var bar = new DockPanel { Margin = new Thickness(0, 4, 0, 12) };
             DockPanel.SetDock(close, Dock.Right);
             bar.Children.Add(close);
-            lockButton = dock.LockPanelButton("Coding chats", () => dock.codingPanelLocked, value => dock.codingPanelLocked = value);
+            var lockButton = dock.LockPanelButton("Coding chats", () => dock.codingPanelLocked, value => dock.codingPanelLocked = value);
             DockPanel.SetDock(lockButton, Dock.Right);
             bar.Children.Add(lockButton);
             panelSwitcher = dock.MakePanelSwitcher();
             DockPanel.SetDock(panelSwitcher, Dock.Right);
             bar.Children.Add(panelSwitcher);
-            foreach (var (label, target) in new[] { ("Setup", Pane.Setup), ("Activity", Pane.Activity), ("Jobs", Pane.Jobs) })
-            {
-                var button = dock.ActionButton(label, () => Navigate(target));
-                button.Padding = new Thickness(9, 4, 9, 4);
-                button.Margin = new Thickness(5, 0, 0, 0);
-                DockPanel.SetDock(button, Dock.Right);
-                bar.Children.Add(button);
-            }
-            var heading = dock.Text("Coding chats", 18, AssistantInk, true);
+            var heading = dock.Text("Coding chats", 17, AssistantInk, true);
             heading.VerticalAlignment = VerticalAlignment.Center;
             bar.Children.Add(heading);
             return bar;
@@ -295,8 +304,7 @@ public partial class DashboardWindow
             conversations.SelectedIndex = chatPicker.SelectedIndex = index;
             empty.Text = hasChats ? "No matching chats." : "No local coding chats yet.";
             empty.Visibility = matches.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-            foreach (var (provider, button) in filters)
-                SelectTab(button, provider == filter);
+            markFilter(Array.IndexOf(filterChoices, filter));
             selecting = false;
         }
 
@@ -304,12 +312,14 @@ public partial class DashboardWindow
         {
             var (state, color) = StateBadge(session.State);
             var face = dock.AgentAvatar(session.State, small: true);
-            face.Margin = new Thickness(0, 0, 8, 0);
+            face.Margin = new Thickness(0, 0, 10, 0);
             var line = new DockPanel { Children = { face } };
-            var heading = dock.Text(session.Title, 12, AssistantInk, true);
-            heading.Margin = new Thickness(0, 0, 0, 2);
-            var subline = dock.Text($"{ProviderName(session.Provider)} · {state}", 11,
-                SystemParameters.HighContrast ? AssistantSecondary : color);
+            var heading = dock.Text(session.Title, 13);
+            heading.Margin = new Thickness(0, 0, 0, 1);
+            // The state carries the colour; the provider is quiet context after it.
+            var subline = dock.Text("", 11, AssistantFaint);
+            subline.Inlines.Add(new Run(state) { Foreground = SystemParameters.HighContrast ? AssistantSecondary : color });
+            subline.Inlines.Add(new Run("   " + ProviderName(session.Provider)));
             line.Children.Add(new StackPanel { Children = { heading, subline } });
             var item = new ListBoxItem { Content = line, Tag = session, ToolTip = dock.AgentTooltip(session) };
             AutomationProperties.SetName(item, $"{session.Title}, {state}");
@@ -320,28 +330,35 @@ public partial class DashboardWindow
 
         private void UpdateHeader()
         {
-            close.Visibility = dock.compactAgents ? Visibility.Visible : Visibility.Collapsed;
-            if (lockButton != null)
-                lockButton.Visibility = close.Visibility;
+            toolbar.Visibility = dock.compactAgents ? Visibility.Visible : Visibility.Collapsed;
             title.Text = pane switch
             {
-                Pane.Setup => "Provider setup", Pane.Activity => "Activity", Pane.Jobs => jobTitle ?? "Assistant jobs",
-                _ => chat?.Title ?? "Select a conversation"
+                Pane.Setup => "Setup", Pane.Activity => "Activity", Pane.Jobs => jobTitle ?? "Jobs",
+                _ => chat?.Title ?? "Pick a chat"
             };
             title.ToolTip = title.Text;
-            metadata.Text = !GlobalPane && chat != null
-                ? string.Join(" · ", new[] { ProviderName(chat.Provider), chat.Project, StateBadge(chat.State).Label, chat.Model, chat.Effort }
-                    .Where(value => !string.IsNullOrWhiteSpace(value)))
-                : "";
-            metadata.ToolTip = metadata.Text;
-            metadata.Visibility = metadata.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+            metadata.Inlines.Clear();
+            if (!GlobalPane && chat != null)
+            {
+                var (state, color) = StateBadge(chat.State);
+                metadata.Inlines.Add(new Run(state) { Foreground = SystemParameters.HighContrast ? AssistantSecondary : color });
+                metadata.Inlines.Add(new Run("   " + ProviderName(chat.Provider) +
+                    (string.IsNullOrWhiteSpace(chat.Project) ? "" : " in " + chat.Project)));
+                var model = string.Join(" ", new[] { chat.Model, chat.Effort }.Where(value => !string.IsNullOrWhiteSpace(value)));
+                if (model.Length > 0)
+                    metadata.Inlines.Add(new Run("   " + model) { Foreground = AssistantFaint });
+            }
+            metadata.Visibility = metadata.Inlines.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+            foreach (var (target, button) in globalTabs)
+                SelectTab(button, target == pane);
             portrait.Visibility = !GlobalPane && chat != null ? Visibility.Visible : Visibility.Collapsed;
             if (chat != null && portraitState != chat.State)
             {
                 portraitState = chat.State;
                 var avatar = dock.AgentAvatar(chat.State);
-                avatar.Width = 44;
-                avatar.Height = 39;
+                avatar.Width = 42;
+                avatar.Height = 38;
+                avatar.CornerRadius = new CornerRadius(9);
                 if (avatar.Child is Image face) { face.Width = 32; face.Height = 24; }
                 portrait.Content = avatar;
             }
@@ -400,7 +417,7 @@ public partial class DashboardWindow
             pane = target;
             jobTitle = title;
             hasBody = true;
-            var content = new StackPanel { Margin = new Thickness(16, 12, 14, 8) };
+            var content = new StackPanel { Margin = new Thickness(18, 14, 2, 8) };
             reader.Content = content;
             reader.ScrollToTop();
             UpdateHeader();
@@ -448,12 +465,8 @@ public partial class DashboardWindow
                 showSummary = !showSummary;
                 Navigate(Pane.Reply);
             });
-            if (!showSummary && !SystemParameters.HighContrast)
-            {
-                toggle.Background = Brush("#D3EBDE");
-                toggle.BorderBrush = Brushes.Transparent;
-                toggle.Foreground = Brush("#132019");
-            }
+            if (!showSummary)
+                dock.MarkPrimary(toggle, true);
             DockPanel.SetDock(toggle, Dock.Right);
             row.Children.Add(toggle);
             if (!showSummary)
@@ -462,7 +475,7 @@ public partial class DashboardWindow
                 DockPanel.SetDock(copy, Dock.Right);
                 row.Children.Add(copy);
             }
-            var heading = dock.Text(showSummary ? "Reply summary" : "Latest reply", 15, AssistantInk, true);
+            var heading = dock.Text(showSummary ? "Summary" : "Latest reply", 12, AssistantSecondary);
             heading.VerticalAlignment = VerticalAlignment.Center;
             row.Children.Add(heading);
             content.Children.Add(row);

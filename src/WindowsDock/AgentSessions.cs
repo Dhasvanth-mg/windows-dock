@@ -37,10 +37,11 @@ internal static partial class AgentSessions
         {
             TryRead(() =>
             {
-                using var stream = Open(path);
-                if (stream.Length > 16_384)
-                    return;
-                var record = JsonSerializer.Deserialize<AgentSession>(stream);
+                var record = Cached(path, () =>
+                {
+                    using var stream = Open(path);
+                    return stream.Length > 16_384 ? null : JsonSerializer.Deserialize<AgentSession>(stream);
+                });
                 if (record == null || !Enum.IsDefined(record.Provider) || !Enum.IsDefined(record.State) ||
                     string.IsNullOrEmpty(record.Id) || record.Updated < now.AddDays(-3) || record.Updated > now.AddMinutes(1))
                     return;
@@ -109,32 +110,67 @@ internal static partial class AgentSessions
         {
             TryRead(() =>
             {
-                using var stream = Open(path);
-                if (stream.Length > 8_000_000)
-                    return;
-                using var doc = JsonDocument.Parse(stream);
-                var item = doc.RootElement;
-                if (item.TryGetProperty("isArchived", out var archived) && archived.ValueKind == JsonValueKind.True)
-                    return;
-                var desktopId = String(item, "sessionId");
-                var id = String(item, "cliSessionId") ?? desktopId;
-                if (string.IsNullOrWhiteSpace(id))
-                    return;
-                var project = ProjectName(String(item, "cwd"));
-                var title = Clip(String(item, "title"), project);
-                var updated = item.TryGetProperty("lastActivityAt", out var activity) && activity.ValueKind == JsonValueKind.Number &&
-                    activity.TryGetInt64(out var ms) && ms is > 0 and < 253402300799999
-                    ? DateTimeOffset.FromUnixTimeMilliseconds(ms) : File.GetLastWriteTimeUtc(path);
-                var summary = Property(item, "postTurnSummary");
-                var lastReply = String(item, "lastAssistantUuid");
-                var finished = lastReply != null && lastReply == String(summary, "summarizes_uuid") &&
-                    String(summary, "status_category") is "completed" or "review_ready";
-                sessions[(AgentProvider.Claude, id)] = new(AgentProvider.Claude, id, title, project,
-                    finished ? AgentState.Finished : AgentState.Recent, finished ? "Reply ready" : "Desktop chat",
-                    updated, desktopId, String(item, "model"), String(item, "effort"),
-                    String(item, "lastAssistantCliSessionId"), lastReply, String(item, "cwd"));
+                // These files can run to megabytes and almost never change between scans, so parse each version once.
+                if (Cached(path, () => ParseClaude(path)) is { } session)
+                    sessions[(AgentProvider.Claude, session.Id)] = session;
             });
         }
+    }
+
+    private static AgentSession? ParseClaude(string path)
+    {
+        using var stream = Open(path);
+        if (stream.Length > 8_000_000)
+            return null;
+        using var doc = JsonDocument.Parse(stream);
+        var item = doc.RootElement;
+        if (item.TryGetProperty("isArchived", out var archived) && archived.ValueKind == JsonValueKind.True)
+            return null;
+        var desktopId = String(item, "sessionId");
+        var id = String(item, "cliSessionId") ?? desktopId;
+        if (string.IsNullOrWhiteSpace(id))
+            return null;
+        var project = ProjectName(String(item, "cwd"));
+        var title = Clip(String(item, "title"), project);
+        var updated = item.TryGetProperty("lastActivityAt", out var activity) && activity.ValueKind == JsonValueKind.Number &&
+            activity.TryGetInt64(out var ms) && ms is > 0 and < 253402300799999
+            ? DateTimeOffset.FromUnixTimeMilliseconds(ms) : File.GetLastWriteTimeUtc(path);
+        var summary = Property(item, "postTurnSummary");
+        var lastReply = String(item, "lastAssistantUuid");
+        var finished = lastReply != null && lastReply == String(summary, "summarizes_uuid") &&
+            String(summary, "status_category") is "completed" or "review_ready";
+        return new(AgentProvider.Claude, id, title, project,
+            finished ? AgentState.Finished : AgentState.Recent, finished ? "Reply ready" : "Desktop chat",
+            updated, desktopId, String(item, "model"), String(item, "effort"),
+            String(item, "lastAssistantCliSessionId"), lastReply, String(item, "cwd"));
+    }
+
+    // What a file produced the last time it was read, kept for as long as its size and timestamp stay the same.
+    // The scan runs every few seconds in the background monitor, and nearly every file is unchanged between scans.
+    private static readonly Dictionary<string, (long Length, DateTime Modified, object? Value)> ParsedFiles =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    internal static T? Cached<T>(string path, Func<T?> read) where T : class
+    {
+        var info = new FileInfo(path);
+        if (!info.Exists)
+            return null;
+        var length = info.Length;
+        var modified = info.LastWriteTimeUtc;
+        lock (ParsedFiles)
+        {
+            if (ParsedFiles.TryGetValue(path, out var hit) && hit.Length == length && hit.Modified == modified)
+                return (T?)hit.Value;
+        }
+        // A failed read throws past here and is not remembered, so the next scan tries again.
+        var value = read();
+        lock (ParsedFiles)
+        {
+            if (ParsedFiles.Count > 400)
+                ParsedFiles.Clear();
+            ParsedFiles[path] = (length, modified, value);
+        }
+        return value;
     }
 
     private static readonly Dictionary<string, (long Length, DateTime Modified, AgentSession Session)> CodexRolloutCache =
@@ -142,10 +178,11 @@ internal static partial class AgentSessions
 
     private static void ReadCodex(Dictionary<(AgentProvider, string), AgentSession> sessions)
     {
-        var titles = new Dictionary<string, AgentSession>(StringComparer.Ordinal);
+        Dictionary<string, AgentSession>? titles = null;
         var index = Path.Combine(CodexHome, "session_index.jsonl");
-        TryRead(() =>
+        TryRead(() => titles = Cached(index, () =>
         {
+            var parsed = new Dictionary<string, AgentSession>(StringComparer.Ordinal);
             foreach (var line in Tail(index, 192_000))
             {
                 TryRead(() =>
@@ -155,12 +192,13 @@ internal static partial class AgentSessions
                     var id = String(item, "id");
                     if (string.IsNullOrWhiteSpace(id) || !DateTimeOffset.TryParse(String(item, "updated_at"), out var at))
                         return;
-                    titles[id] = new(AgentProvider.Codex, id, Clip(String(item, "thread_name"), "Codex chat"),
+                    parsed[id] = new(AgentProvider.Codex, id, Clip(String(item, "thread_name"), "Codex chat"),
                         "", AgentState.Recent, "Desktop chat", at);
                 });
             }
-        });
-        foreach (var (id, session) in titles.OrderByDescending(pair => pair.Value.Updated).Take(24))
+            return parsed;
+        }));
+        foreach (var (id, session) in (titles ?? []).OrderByDescending(pair => pair.Value.Updated).Take(24))
             sessions[(AgentProvider.Codex, id)] = session;
 
         var files = Files(Path.Combine(CodexHome, "sessions"), "rollout-*.jsonl", true, 12).ToArray();

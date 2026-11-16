@@ -119,9 +119,9 @@ public partial class DashboardWindow
         var size = small ? 23 : 61;
         var badge = new Border
         {
-            Width = size, Height = small ? 22 : 51, CornerRadius = new CornerRadius(small ? 6 : 13),
-            Background = AgentArt.Wash(color, small ? (byte)27 : (byte)31),
-            BorderBrush = AgentArt.Wash(color, small ? (byte)43 : (byte)75),
+            Width = small ? 26 : size, Height = small ? 24 : 51, CornerRadius = new CornerRadius(small ? 6 : 13),
+            Background = AgentArt.Wash(color, 30),
+            BorderBrush = Brushes.Transparent,
             BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center
         };
         if (SystemParameters.HighContrast)
@@ -178,7 +178,10 @@ public partial class DashboardWindow
     private UIElement ApprovalDetails(AgentApproval request)
     {
         var panel = new StackPanel();
-        panel.Children.Add(Text($"{ProviderName(request.Provider)} · {request.Project} · {request.Tool}", 13, amber, true));
+        var ask = Text($"{ProviderName(request.Provider)} wants to use {request.Tool}" +
+            (string.IsNullOrWhiteSpace(request.Project) ? "" : " in " + request.Project), 14, strong: true);
+        ask.TextWrapping = TextWrapping.Wrap;
+        panel.Children.Add(ask);
         if (!string.IsNullOrWhiteSpace(request.WorkingDirectory))
         {
             var directory = Text(request.WorkingDirectory, 11, subdued);
@@ -189,16 +192,16 @@ public partial class DashboardWindow
         details.IsReadOnly = true;
         details.Text = request.Details;
         details.TextWrapping = TextWrapping.Wrap;
-        details.MaxHeight = 122;
+        details.MaxHeight = 132;
         details.FontSize = 11;
-        details.FontFamily = new FontFamily("Consolas");
+        details.FontFamily = new FontFamily("Cascadia Mono, Consolas");
         details.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        details.Margin = new Thickness(0, 6, 0, 6);
+        details.Margin = new Thickness(0, 8, 0, 10);
         panel.Children.Add(details);
         var actions = new StackPanel { Orientation = Orientation.Horizontal };
         var allow = ActionButton("Allow once", () => _ = Decide(true));
         var deny = ActionButton("Deny", () => _ = Decide(false));
-        allow.Background = Brush("#245848");
+        MarkPrimary(allow, true);
         allow.Margin = new Thickness(0, 0, 6, 0);
         actions.Children.Add(allow);
         actions.Children.Add(deny);
@@ -267,7 +270,7 @@ public partial class DashboardWindow
         {
             status.Text = "Could not read the provider settings.";
         }
-        card.Children.Add(Text("Defaults for new sessions", 11, subdued, true));
+        card.Children.Add(Text("Defaults for new sessions", 12, subdued));
         model.Margin = new Thickness(0, 4, 0, 0);
         card.Children.Add(model);
         card.Children.Add(effort);

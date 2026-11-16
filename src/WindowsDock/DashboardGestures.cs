@@ -43,6 +43,8 @@ public partial class DashboardWindow
 
         var delta = (short)(wParam.ToInt64() >> 16);
         var horizontal = message == horizontalWheel;
+        if (!horizontal && currentPage == DashboardPage.Widgets)
+            return 0;
         var now = Environment.TickCount64;
         if (now - dashboardWheelAt > 220)
         {
@@ -102,7 +104,7 @@ public partial class DashboardWindow
 
     private FrameworkElement DockNavigation(Window window, DockSection selected)
     {
-        var footer = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        var footer = new StackPanel { Margin = new Thickness(0, 10, 0, -6) };
         var strip = Columns(1, 1, 1);
         var labels = new[] { "Widgets", "Coding chats", "Assistants" };
         for (var i = 0; i < labels.Length; i++)
@@ -133,7 +135,7 @@ public partial class DashboardWindow
             var target = (int)selected + (swipe == DockSwipe.Left ? 1 : -1);
             if (target >= 0 && target < labels.Length)
                 OpenDockSection(selected, (DockSection)target);
-        }, selected == DockSection.Widgets ? "Swipe sideways to switch. Down to close." : null, true));
+        }, null, true));
         return footer;
 
         void CloseSurface()
@@ -165,7 +167,7 @@ public partial class DashboardWindow
         var markOffset = new TranslateTransform();
         var mark = new Border
         {
-            Width = 36, Height = 3, CornerRadius = new CornerRadius(2), Background = AssistantSecondary,
+            Width = 36, Height = 3, CornerRadius = new CornerRadius(2), Background = AssistantFaint,
             Opacity = .7, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false, RenderTransform = markOffset
         };

@@ -51,7 +51,7 @@ public partial class DashboardWindow
                 return;
             }
 
-            var index = Array.FindLastIndex(lines, line => line.At <= song.Position);
+            var index = Array.FindLastIndex(lines, line => line.At <= LivePosition(song));
             active.Text = index >= 0 ? lines[index].Text : "♪";
             previous.Text = index > 0 ? lines[index - 1].Text : "";
             upcoming.Text = index + 1 < lines.Length ? lines[index + 1].Text : "";

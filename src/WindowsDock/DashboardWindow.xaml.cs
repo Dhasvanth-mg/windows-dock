@@ -23,13 +23,14 @@ public partial class DashboardWindow : Window
     private readonly bool releaseWhenIdle;
     private readonly bool trayMode;
     private readonly DispatcherTimer idleExit = new() { Interval = TimeSpan.FromSeconds(20) };
-    private SolidColorBrush subdued => AssistantSecondary;
-    private SolidColorBrush muted => AssistantSecondary;
-    private readonly SolidColorBrush accent = Brush("#9CC9FF");
-    private readonly SolidColorBrush green = Brush("#A1EDC5");
-    private readonly SolidColorBrush purple = Brush("#CAB4FF");
-    private readonly SolidColorBrush amber = Brush("#FFD187");
-    private readonly SolidColorBrush pink = Brush("#F4A6D4");
+    private static SolidColorBrush subdued => AssistantSecondary;
+    private static SolidColorBrush muted => AssistantFaint;
+    // The old per-card tints. Decoration now resolves to plain secondary ink; amber and green remain for real states.
+    private static SolidColorBrush accent => AssistantSecondary;
+    private static SolidColorBrush green => SystemParameters.HighContrast ? SystemColors.WindowTextBrush : good;
+    private static SolidColorBrush purple => AssistantSecondary;
+    private static SolidColorBrush amber => SystemParameters.HighContrast ? SystemColors.WindowTextBrush : warn;
+    private static SolidColorBrush pink => AssistantSecondary;
     private readonly TranslateTransform revealOffset = new();
     private DashboardPage currentPage;
     private Action? updatePage;
@@ -38,6 +39,7 @@ public partial class DashboardWindow : Window
     private bool positioning;
     private bool compactAgents;
     private bool pageInitialized;
+    private bool surfaceHidden;
     private long lastReveal;
     private bool WideDashboard => Width >= 840;
 
@@ -47,6 +49,8 @@ public partial class DashboardWindow : Window
         bool trayMode = false)
     {
         InitializeComponent();
+        LoadAccent();
+        DockWindowFrame.Attach(this, () => surfaceHidden);
         ApplyDashboardResources(this);
         this.controllerPid = controllerPid;
         this.releaseWhenIdle = releaseWhenIdle;
@@ -62,19 +66,16 @@ public partial class DashboardWindow : Window
         agentGrid = AgentGrid.Connect(controllerPid);
         ShowInTaskbar = controllerPid == 0;
 
-        AddTab(DashboardPage.Home, "Overview");
-        AddTab(DashboardPage.Media, "Audio");
-        AddTab(DashboardPage.Controls, "Controls");
-        AddTab(DashboardPage.Calendar, "Calendar");
-        AddTab(DashboardPage.Weather, "Weather");
+        // Tab order is the enum order, which is also the order a sideways swipe walks through.
+        AddTab(DashboardPage.Home, "Today");
+        AddTab(DashboardPage.Widgets, "Widgets");
         AddTab(DashboardPage.Agents, "Chats");
-        AddTab(DashboardPage.Stats, "Stats");
-        AddTab(DashboardPage.Shelf, "Files");
-        AddTab(DashboardPage.Wallpapers, "Wallpapers");
-        AddTab(DashboardPage.Power, "Power");
-        AddTab(DashboardPage.Settings, "Settings");
-        HeaderMark.Content = DockTaskbar.IconBadge(30);
-        HeaderActions.Children.Add(WidgetLauncherButton());
+        AddTab(DashboardPage.Notes, "Notes");
+        AddTab(DashboardPage.Controls, "Controls");
+        AddTab(DashboardPage.Desk, "Desk");
+        AddTab(DashboardPage.Play, "Play");
+        HeaderActions.Children.Add(AssistantShortcuts());
+        HeaderActions.Children.Add(SearchLauncherButton());
         dashboardPanelSwitcher = MakePanelSwitcher();
         HeaderActions.Children.Add(dashboardPanelSwitcher);
         HeaderActions.Children.Add(LockPanelButton("Dashboard", () => dashboardLocked, value => dashboardLocked = value));
@@ -104,7 +105,7 @@ public partial class DashboardWindow : Window
                     idleExit.Start();
                 return;
             }
-            if (IsHitTestVisible && !compactAgents)
+            if (!surfaceHidden && !compactAgents)
                 dashboardOpen = true;
             idleExit.Stop();
             lastReveal = Environment.TickCount64;
@@ -116,7 +117,7 @@ public partial class DashboardWindow : Window
                 UpdateDashboard();
                 if (agentGrid != null)
                     _ = RefreshAgentsAsync();
-                if (currentPage is DashboardPage.Weather or DashboardPage.Home)
+                if (currentPage is DashboardPage.Controls or DashboardPage.Home)
                     _ = RefreshSavedWeatherAsync();
             }, DispatcherPriority.ApplicationIdle);
             ticker.Start();
@@ -196,7 +197,17 @@ public partial class DashboardWindow : Window
         if (agentGrid != null)
             agentTicker.Tick += (_, _) => _ = RefreshAgentsAsync();
         InitializeFocus();
-        var page = Enum.TryParse<DashboardPage>(initialPage, true, out var initial) && Enum.IsDefined(initial)
+        // Eleven pages became five. Keep every old page name working from the command line.
+        var requested = initialPage?.ToLowerInvariant() switch
+        {
+            "power" or "stats" or "shelf" or "files" or "wallpapers" => nameof(DashboardPage.Desk),
+            "calendar" or "weather" => nameof(DashboardPage.Home),
+            "memos" or "stickies" => nameof(DashboardPage.Notes),
+            "settings" or "media" or "audio" => nameof(DashboardPage.Controls),
+            _ => initialPage
+        };
+        var page = requested != null && !int.TryParse(requested, out _) &&
+            Enum.TryParse<DashboardPage>(requested, true, out var initial) && Enum.IsDefined(initial)
             ? initial : DashboardPage.Home;
         LoadSavedWeather();
         if (!deferPage)
@@ -232,7 +243,8 @@ public partial class DashboardWindow : Window
 
     private void SetDashboardSurface(bool visible)
     {
-        Opacity = visible ? 1 : 0;
+        surfaceHidden = !visible;
+        DockWindowFrame.SetHidden(this, surfaceHidden);
         IsHitTestVisible = visible;
     }
 
@@ -244,16 +256,31 @@ public partial class DashboardWindow : Window
 
     private void AddTab(DashboardPage page, string label)
     {
-        var button = MakeButton(label, label, () => ShowPage(page));
+        object content = label;
+        if (page == DashboardPage.Agents)
+        {
+            // A dot beside Chats when a coding chat is waiting on an approval.
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(new TextBlock { Text = label });
+            chatsWaiting.Margin = new Thickness(6, 1, 0, 0);
+            row.Children.Add(chatsWaiting);
+            content = row;
+        }
+        var button = MakeButton(content, label, () => ShowPage(page));
         button.Style = (Style)FindResource("AssistantPickerButton");
-        button.Padding = new Thickness(9, 5, 9, 6);
-        button.Margin = new Thickness(0, 0, 3, 3);
-        button.MinHeight = 30;
+        button.Padding = new Thickness(9, 6, 9, 7);
+        button.Margin = new Thickness(0, 0, 2, 0);
+        button.MinHeight = 32;
         button.FontSize = 13;
         ToolTipService.SetIsEnabled(button, false);
         tabs[page] = button;
         DashboardTabs.Children.Add(button);
     }
+
+    private readonly System.Windows.Shapes.Ellipse chatsWaiting = new()
+    {
+        Width = 6, Height = 6, Fill = warn, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed
+    };
 
     private void ShowPage(DashboardPage page)
     {
@@ -272,55 +299,56 @@ public partial class DashboardWindow : Window
             lastDashboardPage = page;
         updatePage = null;
         homeFavorites = null;
+        weatherGlanceHost = weatherSettingsHost = null;
         foreach (var (key, button) in tabs)
         {
             button.Tag = key == page ? "Selected" : null;
             button.Foreground = key == page ? AssistantInk : AssistantSecondary;
-            button.FontWeight = key == page ? FontWeights.SemiBold : FontWeights.Normal;
             AutomationProperties.SetItemStatus(button, key == page ? "Current tab" : "");
         }
 
         PageHost.Content = page switch
         {
             DashboardPage.Home => HomePage(),
-            DashboardPage.Media => MediaPage(),
-            DashboardPage.Controls => ControlsPage(),
-            DashboardPage.Calendar => CalendarPage(),
-            DashboardPage.Weather => WeatherPage(),
+            DashboardPage.Widgets => WidgetsPage(),
             DashboardPage.Agents => AgentsPage(),
-            DashboardPage.Stats => StatsPage(),
-            DashboardPage.Shelf => ShelfPage(),
-            DashboardPage.Wallpapers => WallpapersPage(),
-            DashboardPage.Power => PowerPage(),
-            _ => SettingsPage()
+            DashboardPage.Desk => DeskPage(),
+            DashboardPage.Notes => NotesPage(),
+            DashboardPage.Play => PlayPage(),
+            _ => ControlsPage()
         };
 
         if (IsVisible)
         {
             UpdateDashboard();
-            if (currentPage is DashboardPage.Weather or DashboardPage.Home)
+            if (currentPage is DashboardPage.Controls or DashboardPage.Home)
                 _ = RefreshSavedWeatherAsync();
         }
     }
+    // Every repaint of the panel costs real CPU, so the clock only runs at one second when something on screen
+    // counts in seconds: a running timer, the live readings on Desk, lyrics, or an open widget panel.
+    private void TuneTicker()
+    {
+        var precise = focusEnds.HasValue || currentPage == DashboardPage.Desk || agentPanel != null ||
+            currentPage == DashboardPage.Controls && lyricsOpen;
+        var interval = TimeSpan.FromSeconds(precise ? 1 : 2);
+        if (ticker.Interval != interval)
+            ticker.Interval = interval;
+    }
+
     private void UpdateDashboard()
     {
+        TuneTicker();
         UpdateCompletionCue();
         RefreshFocusState();
         updateAudioWidget?.Invoke();
         updateFocusWidget?.Invoke();
-        var now = DateTime.Now;
-        HeaderTime.Text = now.ToString("t");
-        HeaderDate.Text = now.ToString("ddd, MMM d");
         var pending = AgentApprovals.Read();
         pendingApprovals = pending;
         RefreshVisibleUsage();
-        if (currentPage != DashboardPage.Agents)
-        {
-            var chats = tabs[DashboardPage.Agents];
-            chats.Background = pending.Length > 0 ? AgentArt.Wash(amber, 46) : Brushes.Transparent;
-            chats.BorderBrush = pending.Length > 0 ? AgentArt.Wash(amber, 75) : Brushes.Transparent;
-            chats.ToolTip = pending.Length > 0 ? "Coding chats · approval waiting" : "Coding chats";
-        }
+        chatsWaiting.Visibility = pending.Length > 0 && currentPage != DashboardPage.Agents
+            ? Visibility.Visible : Visibility.Collapsed;
+        AutomationProperties.SetHelpText(tabs[DashboardPage.Agents], pending.Length > 0 ? "An approval is waiting" : "");
         updatePage?.Invoke();
     }
 
@@ -341,7 +369,6 @@ public partial class DashboardWindow : Window
         if (compactAgents)
             DockNavigationHost.Content ??= DockNavigation(this, DockSection.Chats);
         DockNavigationHost.Visibility = compactAgents ? Visibility.Visible : Visibility.Collapsed;
-        HeaderClock.Visibility = Width < 580 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void PositionAtTaskbar()
@@ -389,12 +416,13 @@ public partial class DashboardWindow : Window
     private static void MoveWindowWithoutActivation(nint window, int x, int y) =>
         SetWindowPos(window, 0, x, y, 0, 0, 0x15);
 
+    // A quiet block for grouping related rows. No border and no per-card colour: the content carries the hierarchy.
     private Border Card(UIElement child, SolidColorBrush? tint = null) => new()
     {
         Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantInset,
-        BorderBrush = tint == null || SystemParameters.HighContrast ? AssistantRule : AgentArt.Wash(tint, 34),
-        BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(12), Child = child,
-        ClipToBounds = true
+        BorderBrush = SystemParameters.HighContrast ? AssistantRule : Brushes.Transparent,
+        BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 12, 14, 12),
+        Child = child, ClipToBounds = true
     };
 
     private static Grid Columns(params double[] weights)
@@ -414,7 +442,7 @@ public partial class DashboardWindow : Window
     {
         while (row >= grid.RowDefinitions.Count && row > 0)
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        element.Margin = new Thickness(column == 0 ? 0 : 7, row == 0 ? 0 : 7, 0, 0);
+        element.Margin = new Thickness(column == 0 ? 0 : 8, row == 0 ? 0 : 8, 0, 0);
         Grid.SetRow(element, row);
         Grid.SetColumn(element, column);
         Grid.SetColumnSpan(element, span);
@@ -423,30 +451,44 @@ public partial class DashboardWindow : Window
 
     private Button ActionButton(string label, Action? action = null) => MakeButton(label, label, action);
 
+    // The tint argument is kept for callers but no longer colours anything: icons are plain secondary ink.
     private Button AccentButton(string label, int icon, SolidColorBrush tint, Action? action = null)
     {
-        return MakeButton(IconLabel(label, icon, SystemParameters.HighContrast ? AssistantInk : tint), label, action);
+        return MakeButton(IconLabel(label, icon, AssistantSecondary), label, action);
     }
 
     private Button IconButton(int icon, string label, Action? action = null)
     {
-        var glyph = DockGlyph(icon, 13, AssistantInk);
+        var glyph = DockGlyph(icon, 13);
+        glyph.HorizontalAlignment = HorizontalAlignment.Center;
         var button = MakeButton(glyph, label, action);
+        button.ToolTip = label;
         button.Padding = new Thickness(0);
-        button.Width = 28;
-        button.Height = 26;
+        button.Width = 30;
+        button.Height = 28;
         button.Background = Brushes.Transparent;
         button.BorderBrush = Brushes.Transparent;
         button.Margin = new Thickness(1, 0, 1, 0);
         return button;
     }
 
-    private Button WidgetLauncherButton()
+    private Button SearchLauncherButton()
     {
-        var button = AccentButton("Widgets", 0xECAA, AssistantSecondary, ShowWidgets);
-        button.ToolTip = "Open Widgets or scroll up at the top of Dashboard";
-        button.Padding = new Thickness(8, 4, 8, 4);
-        button.Margin = new Thickness(3, 0, 3, 0);
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        var glyph = DockGlyph(0xE721, 12, AssistantSecondary);
+        glyph.Margin = new Thickness(0, 0, 7, 0);
+        row.Children.Add(glyph);
+        row.Children.Add(new TextBlock { Text = "Search", Foreground = AssistantSecondary, VerticalAlignment = VerticalAlignment.Center });
+        var keys = new TextBlock
+        {
+            Text = "Ctrl K", Foreground = AssistantFaint, FontSize = 11, FontFamily = smallFace,
+            Margin = new Thickness(22, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center
+        };
+        row.Children.Add(keys);
+        var button = MakeButton(row, "Search", ShowCommandPalette);
+        button.Padding = new Thickness(10, 5, 9, 5);
+        button.Margin = new Thickness(0, 0, 6, 0);
+        AutomationProperties.SetAcceleratorKey(button, "Ctrl+K");
         return button;
     }
 
@@ -466,15 +508,16 @@ public partial class DashboardWindow : Window
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         var glyph = DockGlyph(icon, 12, color);
-        glyph.Margin = new Thickness(0, 0, 6, 0);
+        glyph.Margin = new Thickness(0, 0, 7, 0);
         row.Children.Add(glyph);
         row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
         return row;
     }
 
+    // A bare icon at a fixed width so rows of them line up. No backplate, no tint.
     private Border GlyphBadge(int icon, SolidColorBrush tint, double size)
     {
-        var glyph = DockGlyph(icon, size * .6, SystemParameters.HighContrast ? AssistantInk : tint);
+        var glyph = DockGlyph(icon, size * .54, AssistantSecondary);
         glyph.HorizontalAlignment = HorizontalAlignment.Center;
         return new Border
         {
@@ -482,6 +525,7 @@ public partial class DashboardWindow : Window
         };
     }
 
+    // A plain heading with an optional action on the right. The icon and tint arguments are ignored on purpose.
     private DockPanel CardHeading(string title, int icon, SolidColorBrush tint, UIElement? action = null, string? detail = null)
     {
         var row = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
@@ -490,20 +534,17 @@ public partial class DashboardWindow : Window
             DockPanel.SetDock(action, Dock.Right);
             row.Children.Add(action);
         }
-        var badge = GlyphBadge(icon, tint, 28);
-        badge.Margin = new Thickness(0, 0, 8, 0);
-        row.Children.Add(badge);
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        labels.Children.Add(Text(title, 13, strong: true));
+        labels.Children.Add(Text(title, 14, strong: true));
         if (!string.IsNullOrEmpty(detail))
-            labels.Children.Add(Text(detail, 11, subdued));
+            labels.Children.Add(Text(detail, 12, subdued));
         row.Children.Add(labels);
         return row;
     }
 
     private Button MakeButton(object content, string name, Action? action)
     {
-        var button = new Button { Content = content, Style = (Style)FindResource("Chip"), ToolTip = name };
+        var button = new Button { Content = content, Style = (Style)FindResource("Chip") };
         AutomationProperties.SetName(button, name);
         if (action != null)
             button.Click += (_, _) => action();
@@ -512,7 +553,7 @@ public partial class DashboardWindow : Window
 
     private TextBlock Text(string value, double size = 12, Brush? color = null, bool strong = false) => new()
     {
-        Text = value, FontSize = size, Foreground = color ?? Foreground,
+        Text = value, FontSize = TypeSize(size), FontFamily = TypeFace(size), Foreground = color ?? AssistantInk,
         FontWeight = strong ? FontWeights.SemiBold : FontWeights.Normal,
         TextTrimming = TextTrimming.CharacterEllipsis
     };
@@ -559,5 +600,5 @@ public partial class DashboardWindow : Window
     [DllImport("user32")]
     private static extern bool SetWindowPos(nint window, nint insertAfter, int x, int y, int width, int height, uint flags);
 
-    private enum DashboardPage { Home, Media, Controls, Calendar, Weather, Agents, Stats, Shelf, Wallpapers, Power, Settings }
+    private enum DashboardPage { Home, Widgets, Agents, Notes, Controls, Desk, Play }
 }

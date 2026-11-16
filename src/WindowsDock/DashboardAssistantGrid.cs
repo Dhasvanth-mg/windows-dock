@@ -9,41 +9,6 @@ namespace WindowsDock;
 
 public partial class DashboardWindow
 {
-    private static readonly SolidColorBrush assistantShell = Brush("#000000");
-    private static readonly SolidColorBrush assistantInset = Brush("#141414");
-    private static readonly SolidColorBrush assistantRule = Brush("#272727");
-    private static readonly SolidColorBrush assistantInk = Brush("#F5F5F5");
-    private static readonly SolidColorBrush assistantSoftInk = Brush("#AEAEAE");
-    private static SolidColorBrush AssistantInk => SystemParameters.HighContrast ? SystemColors.WindowTextBrush : assistantInk;
-    private static SolidColorBrush AssistantSecondary => SystemParameters.HighContrast ? SystemColors.WindowTextBrush : assistantSoftInk;
-    private static SolidColorBrush AssistantRule => SystemParameters.HighContrast ? SystemColors.WindowTextBrush : assistantRule;
-
-    private static void ApplyDashboardResources(Window window)
-    {
-        var contrast = SystemParameters.HighContrast;
-        var surface = contrast ? SystemColors.WindowBrush : assistantInset;
-        var focus = contrast ? SystemColors.HighlightBrush : AssistantInk;
-        var hover = contrast ? SystemColors.ControlBrush : Brush("#10FFFFFF");
-        var selected = contrast ? SystemColors.ControlBrush : Brush("#22FFFFFF");
-        window.Resources["DockSurface"] = contrast ? SystemColors.WindowBrush : assistantShell;
-        window.Resources["DockStroke"] = AssistantRule;
-        foreach (var key in new[] { "ChipSurface", "FieldSurface", "InputSurface", "InputPopup" })
-            window.Resources[key] = surface;
-        foreach (var key in new[] { "ChipStroke", "FieldStroke", "InputStroke" })
-            window.Resources[key] = AssistantRule;
-        foreach (var key in new[] { "TextPrimary", "InputText", "InputMark" })
-            window.Resources[key] = AssistantInk;
-        window.Resources["TextSecondary"] = window.Resources["TextMuted"] = AssistantSecondary;
-        window.Resources["ChipHover"] = window.Resources["InputItemHover"] = hover;
-        window.Resources["InputItemSelected"] = window.Resources["InputChecked"] = selected;
-        window.Resources["ControlFocus"] = window.Resources["InputFocus"] = focus;
-        if (!contrast)
-        {
-            window.Resources[SystemParameters.VerticalScrollBarWidthKey] = 6.0;
-            window.Resources[SystemParameters.HorizontalScrollBarHeightKey] = 6.0;
-        }
-    }
-
     internal void ShowAssistantPicker()
     {
         if (agentPanel is { Title: "Assistants", IsVisible: true } picker)
@@ -51,7 +16,7 @@ public partial class DashboardWindow
             picker.Activate();
             return;
         }
-        var (window, content, _) = CreateDockPanel("Assistants", "", 366, 0, AssistantRule,
+        var (window, content, _) = CreateDockPanel("Assistants", "", 400, 0, AssistantRule,
             section: DockSection.Assistants);
         window.MinHeight = Math.Min(302, window.MaxHeight);
         var grid = Columns(1, 1, 1, 1);
@@ -63,7 +28,7 @@ public partial class DashboardWindow
             var slot = index;
             var persona = AssistantPersonas.All[index];
             var keyLabel = (index + 1).ToString();
-            var face = PersonaPortrait(persona, 64);
+            var face = PersonaPortrait(persona, 64, lively: true);
             var labels = new StackPanel { Margin = new Thickness(0, 3, 0, 0) };
             labels.Children.Add(face);
             var name = Text(persona.Name, 15, AssistantInk, strong: true);
@@ -85,20 +50,6 @@ public partial class DashboardWindow
             tile.ToolTip = persona.Bio;
             AutomationProperties.SetHelpText(tile, persona.Bio);
             AutomationProperties.SetAcceleratorKey(tile, keyLabel);
-            var delay = TimeSpan.FromMilliseconds(25 * index);
-            tile.Loaded += (_, _) =>
-            {
-                if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
-                {
-                    var lift = new TranslateTransform();
-                    face.RenderTransform = lift;
-                    lift.BeginAnimation(TranslateTransform.YProperty,
-                        new DoubleAnimation(4, 0, TimeSpan.FromMilliseconds(185)) { BeginTime = delay,
-                            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
-                    face.BeginAnimation(OpacityProperty,
-                        new DoubleAnimation(.3, 1, TimeSpan.FromMilliseconds(155)) { BeginTime = delay });
-                }
-            };
 
             var caption = persona.Id switch
             {
@@ -143,6 +94,23 @@ public partial class DashboardWindow
         window.Show();
     }
 
+    // The four assistants sit in the dashboard header, so talking to one is a single click from anywhere.
+    private FrameworkElement AssistantShortcuts()
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 10, 0) };
+        for (var index = 0; index < AssistantPersonas.All.Length; index++)
+        {
+            var slot = index;
+            var persona = AssistantPersonas.All[index];
+            var button = MakeButton(PersonaPortrait(persona, 26), "Talk to " + persona.Name, () => OpenAssistantConversation(slot));
+            button.Style = (Style)FindResource("AssistantPickerButton");
+            button.Padding = new Thickness(2);
+            button.ToolTip = $"{persona.Name}, {persona.Role.ToLowerInvariant()}";
+            row.Children.Add(button);
+        }
+        return row;
+    }
+
     private static SolidColorBrush PersonaTint(AssistantPersona persona)
     {
         var tint = new SolidColorBrush(persona.Color);
@@ -150,18 +118,8 @@ public partial class DashboardWindow
         return tint;
     }
 
-    private Border PersonaPortrait(AssistantPersona persona, double size)
-    {
-        var art = new Image
-        {
-            Source = persona.Face, Width = size * .82, Height = size * .82,
-            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
-        };
-        return new Border
-        {
-            Width = size, Height = size, CornerRadius = new CornerRadius(size / 3),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Child = art
-        };
-    }
+    // Lively figures sway while idle. The small ones in the header only blink and hop, so an open dashboard is not
+    // animating all the time.
+    private static AssistantFigure PersonaPortrait(AssistantPersona persona, double size, bool lively = false) =>
+        new(persona, size, lively);
 }

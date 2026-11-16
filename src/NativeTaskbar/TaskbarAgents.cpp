@@ -316,6 +316,19 @@ void TaskbarStyle::RefreshAgentGrid()
             *tile.title ? tile.title : L"Unassigned";
         xaml::Automation::AutomationProperties::SetName(button, name);
         xaml::Automation::AutomationProperties::SetHelpText(button, tile.step);
+        // Hovering a slot says exactly three things: which app, which chat, and how it is doing.
+        std::wstring tip;
+        if (tile.provider)
+        {
+            tip = tile.provider == 1 ? L"Claude Code" : L"Codex";
+            tip += L"\n";
+            tip += *tile.title ? tile.title : L"Untitled chat";
+            tip += L"\n";
+            tip += mood.label;
+        }
+        else
+            tip = *tile.title ? std::wstring(tile.title) + L"\nWaiting for a chat" : std::wstring(L"Empty slot");
+        controls::ToolTipService::SetToolTip(button, winrt::box_value(winrt::hstring(tip)));
         previous = tile;
         if (!newFace)
             continue;

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using Ellipse = System.Windows.Shapes.Ellipse;
 using ShapePath = System.Windows.Shapes.Path;
@@ -16,120 +17,8 @@ public partial class DashboardWindow
     private int focusMinutes = 25;
     private DateTime calendarWeek = DateTime.Today;
     private DateTime reminderDate = DateTime.Today;
-    private bool showReminders;
+
     private Action? updateFocusWidget;
-
-    private UIElement CalendarPage()
-    {
-        var content = new StackPanel();
-        var tabs = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 7) };
-        foreach (var (name, icon, selected) in new[] { ("Calendar", 0xE787, false), ("Reminders", 0xEA8F, true) })
-        {
-            var tab = MakeButton(IconLabel(name, icon, amber), name, () =>
-            {
-                showReminders = selected;
-                ShowPage(DashboardPage.Calendar);
-            });
-            tab.Background = selected == showReminders ? AgentArt.Wash(amber, 35) : Brushes.Transparent;
-            tab.BorderBrush = selected == showReminders ? AgentArt.Wash(amber, 65) : Brushes.Transparent;
-            tab.Margin = new Thickness(2, 0, 2, 0);
-            tabs.Children.Add(tab);
-        }
-        content.Children.Add(tabs);
-        content.Children.Add(showReminders ? RemindersContent() : CalendarContent());
-        return content;
-    }
-
-    private UIElement CalendarContent()
-    {
-        var grid = WideDashboard ? Columns(0.8, 2.35, 1.55) : Columns(0.9, 2.2);
-        var today = DateTime.Today;
-        var date = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
-        var stamp = GlyphBadge(0xE787, amber, 28);
-        stamp.HorizontalAlignment = HorizontalAlignment.Center;
-        stamp.Margin = new Thickness(0, 0, 0, 6);
-        date.Children.Add(stamp);
-        var heading = Text(today.ToString("dddd"), 11, amber, true);
-        heading.HorizontalAlignment = HorizontalAlignment.Center;
-        date.Children.Add(heading);
-        var day = Text(today.ToString("d MMM"), 23, strong: true);
-        day.HorizontalAlignment = HorizontalAlignment.Center;
-        date.Children.Add(day);
-        var todayButton = ActionButton("Today", () => { calendarWeek = DateTime.Today; ShowPage(DashboardPage.Calendar); });
-        todayButton.HorizontalAlignment = HorizontalAlignment.Center;
-        todayButton.Margin = new Thickness(0, 6, 0, 0);
-        date.Children.Add(todayButton);
-        Put(grid, Card(date, amber), 0);
-
-        var calendar = new StackPanel();
-        var nav = new DockPanel();
-        var earlier = IconButton(0xE76B, "Previous week", () =>
-        {
-            calendarWeek = calendarWeek.AddDays(-7);
-            ShowPage(DashboardPage.Calendar);
-        });
-        nav.Children.Add(earlier);
-        var later = IconButton(0xE76C, "Next week", () =>
-        {
-            calendarWeek = calendarWeek.AddDays(7);
-            ShowPage(DashboardPage.Calendar);
-        });
-        DockPanel.SetDock(later, Dock.Right);
-        nav.Children.Add(later);
-        var month = Text(calendarWeek.ToString("MMMM yyyy"), 12, strong: true);
-        month.TextAlignment = TextAlignment.Center;
-        month.VerticalAlignment = VerticalAlignment.Center;
-        nav.Children.Add(month);
-        calendar.Children.Add(nav);
-
-        var first = calendarWeek.AddDays(-(((int)calendarWeek.DayOfWeek + 6) % 7));
-        var week = new System.Windows.Controls.Primitives.UniformGrid { Columns = 7, Margin = new Thickness(0, 8, 0, 0) };
-        for (var i = 0; i < 7; i++)
-        {
-            var entry = first.AddDays(i);
-            var values = new StackPanel();
-            var isToday = entry == today;
-            var weekday = Text(entry.ToString("ddd"), 10, isToday ? amber : muted);
-            weekday.HorizontalAlignment = HorizontalAlignment.Center;
-            values.Children.Add(weekday);
-            var number = Text(entry.Day.ToString(), 14, isToday ? amber : Foreground, true);
-            number.HorizontalAlignment = HorizontalAlignment.Center;
-            values.Children.Add(number);
-            var button = MakeButton(values, entry.ToString("D"), () =>
-            {
-                reminderDate = entry;
-                showReminders = true;
-                ShowPage(DashboardPage.Calendar);
-            });
-            button.Background = isToday ? AgentArt.Wash(amber, 35) : AgentArt.Wash(purple, 15);
-            button.BorderBrush = isToday ? AgentArt.Wash(amber, 64) : Brushes.Transparent;
-            button.Padding = new Thickness(2, 6, 2, 6);
-            button.Margin = new Thickness(1, 0, 1, 0);
-            week.Children.Add(button);
-        }
-        calendar.Children.Add(week);
-        var meetings = ActionButton("Upcoming meetings", ShowMeetingWidget);
-        meetings.HorizontalAlignment = HorizontalAlignment.Left;
-        meetings.Margin = new Thickness(0, 9, 0, 0);
-        calendar.Children.Add(meetings);
-        Put(grid, Card(calendar), 1);
-
-        var focus = FocusCard(out var update);
-        if (WideDashboard)
-            Put(grid, focus, 2);
-        else
-        {
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Grid.SetRow(focus, 1);
-            Grid.SetColumnSpan(focus, 2);
-            focus.Margin = new Thickness(0, 7, 0, 0);
-            grid.Children.Add(focus);
-        }
-        updatePage = update;
-        return grid;
-    }
 
     private void ShowFocusWidget()
     {
@@ -141,173 +30,111 @@ public partial class DashboardWindow
     private void BuildPinnedFocus(StackPanel content, System.Threading.CancellationToken cancellation)
     {
         RefreshFocusState();
-        content.Children.Add(FocusCard(out var update, title: false));
+        content.Children.Add(FocusCard(out var update));
         updateFocusWidget = update;
         cancellation.Register(() => updateFocusWidget = null);
         update();
     }
 
-    private Border FocusCard(out Action update, bool title = true)
+    private FrameworkElement FocusStrip(out Action update) => FocusCard(out update, compact: true);
+
+    // Big numerals, a thin bar that drains, lengths as a segmented choice, one filled Start button.
+    // Compact is the version on Today: the same controls in three short rows.
+    private FrameworkElement FocusCard(out Action update, bool compact = false)
     {
-        var focus = new DockPanel { LastChildFill = true };
-        const double size = 74;
-        const double radius = 32;
-        var badge = new Grid { Width = size, Height = size, VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0) };
-        var dial = new Ellipse { Width = radius * 2, Height = radius * 2, Stroke = AgentArt.Wash(green, 43),
-            Fill = AgentArt.Wash(green, 17), StrokeThickness = 3 };
-        badge.Children.Add(dial);
-        var remaining = new ShapePath { Stroke = green, StrokeThickness = 3,
-            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
-        badge.Children.Add(remaining);
-        var reading = Text("", 17, green, true);
-        reading.HorizontalAlignment = HorizontalAlignment.Center;
-        reading.VerticalAlignment = VerticalAlignment.Center;
-        badge.Children.Add(reading);
-        focus.Children.Add(badge);
-        var controls = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        if (title)
-            controls.Children.Add(Text("Focus timer", 13, strong: true));
-        var presets = new WrapPanel { Margin = new Thickness(0, 4, 0, 4) };
-        var buttons = new List<(int Minutes, Button Button)>();
-        foreach (var minutes in new[] { 5, 10, 25, 50 })
-        {
-            var button = ActionButton(minutes + "m", () =>
+        var focus = new StackPanel();
+        var reading = Text("", compact ? 24 : 38, strong: true);
+        Typography.SetNumeralAlignment(reading, FontNumeralAlignment.Tabular);
+        var remaining = Progress(AccentFill);
+        remaining.Height = 3;
+        int[] lengths = [5, 10, 25, 50];
+        var presets = Segmented("Timer length", lengths.Select(minutes => minutes + (compact ? "m" : " min")).ToArray(),
+            Array.IndexOf(lengths, focusMinutes), index =>
             {
-                focusMinutes = minutes;
+                focusMinutes = lengths[index];
                 focusEnds = null;
                 PersistFocus();
                 UpdateDashboard();
-            });
-            button.Padding = new Thickness(6, 4, 6, 4);
-            button.Margin = new Thickness(0, 0, 3, 0);
-            buttons.Add((minutes, button));
-            presets.Children.Add(button);
-        }
-        controls.Children.Add(presets);
-        var actions = new WrapPanel();
-        var toggle = AccentButton("Start", 0xE768, green, () =>
+            }, out var markPreset);
+        var toggle = PrimaryButton("Start", () =>
         {
             focusEnds = focusEnds == null ? DateTimeOffset.Now.AddMinutes(focusMinutes) : null;
             PersistFocus();
             UpdateDashboard();
         });
-        toggle.Margin = new Thickness(0, 0, 4, 4);
-        actions.Children.Add(toggle);
-        var quiet = ActionButton("Windows Focus", () => OpenTarget("ms-settings:quiethours"));
-        quiet.ToolTip = "Start a Windows Focus session with Do Not Disturb";
-        actions.Children.Add(quiet);
-        controls.Children.Add(actions);
-        focus.Children.Add(controls);
+        toggle.MinWidth = 64;
+        toggle.VerticalAlignment = VerticalAlignment.Center;
+        // On Today there is only room for an icon; the widget has space for the words.
+        var quiet = compact ? IconButton(0xE708, "Do not disturb", () => OpenTarget("ms-settings:quiethours"))
+            : QuietButton("Do not disturb in Windows", () => OpenTarget("ms-settings:quiethours"));
+        quiet.ToolTip = "Opens Windows Focus, which silences notifications.";
+        ToolTipService.SetIsEnabled(quiet, true);
+        if (compact)
+        {
+            var top = new DockPanel { Margin = new Thickness(0, -4, 0, 4) };
+            DockPanel.SetDock(toggle, Dock.Right);
+            top.Children.Add(toggle);
+            var caption = Text("Focus", 12, AssistantSecondary);
+            caption.VerticalAlignment = VerticalAlignment.Bottom;
+            caption.Margin = new Thickness(0, 0, 9, 4);
+            top.Children.Add(caption);
+            top.Children.Add(reading);
+            focus.Children.Add(top);
+            remaining.Margin = new Thickness(0, 0, 0, 8);
+            focus.Children.Add(remaining);
+            var bottom = new DockPanel();
+            quiet.VerticalAlignment = VerticalAlignment.Center;
+            DockPanel.SetDock(quiet, Dock.Right);
+            bottom.Children.Add(quiet);
+            bottom.Children.Add(presets);
+            focus.Children.Add(bottom);
+        }
+        else
+        {
+            reading.Margin = new Thickness(0, -6, 0, 4);
+            focus.Children.Add(reading);
+            remaining.Margin = new Thickness(0, 0, 0, 12);
+            focus.Children.Add(remaining);
+            var actions = new DockPanel();
+            toggle.Margin = new Thickness(10, 0, 0, 0);
+            DockPanel.SetDock(toggle, Dock.Right);
+            actions.Children.Add(toggle);
+            actions.Children.Add(presets);
+            focus.Children.Add(actions);
+            quiet.HorizontalAlignment = HorizontalAlignment.Left;
+            quiet.Margin = new Thickness(0, 10, 0, 0);
+            focus.Children.Add(quiet);
+        }
         bool? showingTimer = null;
         var displayedPreset = 0;
         var displayedSeconds = -1;
-        var track = AgentArt.Wash(green, 43);
         update = () =>
         {
             var running = focusEnds.HasValue;
             var duration = TimeSpan.FromMinutes(focusMinutes);
             var seconds = (int)Math.Ceiling(Math.Clamp((focusEnds - DateTimeOffset.Now ?? duration).TotalSeconds, 0, duration.TotalSeconds));
-            if (displayedSeconds != seconds || displayedPreset != focusMinutes)
+            if (displayedSeconds != seconds || displayedPreset != focusMinutes || showingTimer != running)
             {
                 displayedSeconds = seconds;
-                var ratio = seconds / duration.TotalSeconds;
                 reading.Text = FormatTime(TimeSpan.FromSeconds(seconds));
-                dial.Stroke = ratio >= 1 ? green : track;
-                if (ratio is > 0 and < 1)
-                {
-                    var middle = size / 2;
-                    var angle = (ratio * 2 - .5) * Math.PI;
-                    var end = new Point(middle + radius * Math.Cos(angle), middle + radius * Math.Sin(angle));
-                    var arc = new ArcSegment(end, new Size(radius, radius), 0, ratio > .5, SweepDirection.Clockwise, true);
-                    remaining.Data = new PathGeometry(new[] { new PathFigure(new Point(middle, middle - radius), new[] { arc }, false) });
-                }
-                else
-                    remaining.Data = null;
+                // Empty while idle, so a full bar always means a session that has just started.
+                remaining.Value = running ? seconds / duration.TotalSeconds * 100 : 0;
             }
             if (showingTimer != running)
             {
                 showingTimer = running;
                 var label = running ? "Reset" : "Start";
-                toggle.Content = IconLabel(label, running ? 0xE72C : 0xE768, green);
+                toggle.Content = label;
+                MarkPrimary(toggle, !running);
                 System.Windows.Automation.AutomationProperties.SetName(toggle, label);
             }
             if (displayedPreset != focusMinutes)
             {
                 displayedPreset = focusMinutes;
-                foreach (var (minutes, button) in buttons)
-                {
-                    button.Background = minutes == focusMinutes ? AgentArt.Wash(green, 35) : Brushes.Transparent;
-                    button.BorderBrush = minutes == focusMinutes ? AgentArt.Wash(green, 65) : Brushes.Transparent;
-                }
+                markPreset(Array.IndexOf(lengths, focusMinutes));
             }
         };
-        return Card(focus, green);
-    }
-
-    private UIElement RemindersContent()
-    {
-        var reminders = DockReminders.Load();
-        var grid = Columns(1.35, 1);
-        var compose = new StackPanel();
-        compose.Children.Add(CardHeading("Add reminder", 0xEA8F, amber));
-        var input = Field("Reminder", 160);
-        input.Margin = new Thickness(0, 6, 0, 5);
-        compose.Children.Add(input);
-        var actions = new DockPanel();
-        var picker = Field("Reminder date", 24);
-        picker.Text = reminderDate.ToString("d");
-        picker.ToolTip = "Enter a date in your local format";
-        picker.Width = 134;
-        actions.Children.Add(picker);
-        var add = ActionButton("Add", () =>
-        {
-            if (string.IsNullOrWhiteSpace(input.Text))
-                return;
-            if (!DateTime.TryParse(picker.Text, out var chosen))
-            {
-                picker.Focus();
-                ShowOwnedMessage("Enter a valid reminder date.");
-                return;
-            }
-            reminderDate = chosen.Date;
-            try
-            {
-                DockReminders.Add(new(input.Text.Trim(), reminderDate));
-                ShowPage(DashboardPage.Calendar);
-            }
-            catch (Exception error) when (DockActions.IsActionError(error)) { ShowOwnedMessage(error.Message); }
-        });
-        add.Background = AgentArt.Wash(amber, 35);
-        add.BorderBrush = AgentArt.Wash(amber, 65);
-        DockPanel.SetDock(add, Dock.Right);
-        actions.Children.Add(add);
-        compose.Children.Add(actions);
-        Put(grid, Card(compose, amber), 0);
-
-        var pending = new StackPanel();
-        pending.Children.Add(Text("Pending", 12, subdued, true));
-        foreach (var item in reminders.OrderBy(item => item.Date).Take(30))
-        {
-            var row = new DockPanel { Margin = new Thickness(0, 5, 0, 0) };
-            var done = IconButton(0xE73E, "Complete " + item.Title, () =>
-            {
-                try
-                {
-                    DockReminders.Change(item, null);
-                    ShowPage(DashboardPage.Calendar);
-                }
-                catch (Exception error) when (DockActions.IsActionError(error)) { ShowOwnedMessage(error.Message); }
-            });
-            DockPanel.SetDock(done, Dock.Right);
-            row.Children.Add(done);
-            row.Children.Add(Text($"{item.Date:MMM d}   {item.Title}", 11));
-            pending.Children.Add(row);
-        }
-        if (reminders.Count == 0)
-            pending.Children.Add(Text("No pending reminders", 12, muted));
-        Put(grid, Card(new ScrollViewer { Content = pending, MaxHeight = 96, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }), 1);
-        return grid;
+        return focus;
     }
 
     private void InitializeFocus()

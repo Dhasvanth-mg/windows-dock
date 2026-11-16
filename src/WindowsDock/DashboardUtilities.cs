@@ -16,71 +16,96 @@ public partial class DashboardWindow
     private int wallpaperIndex;
     private string? wallpaperStatus;
 
-    private UIElement ShelfPage()
+    // Files: a short list you can drop things onto and drag things back out of.
+    private FrameworkElement ShelfPane()
     {
         shelf ??= ReadJson<List<string>>("files.json") ?? [];
-        var content = new StackPanel { MinHeight = 81 };
-        var browse = AccentButton("Add files…", 0xE710, green, () => ChooseFiles(false));
-        content.Children.Add(CardHeading("File shelf", 0xE8B7, green, browse));
+        var content = new DockPanel { LastChildFill = true };
+        var heading = new DockPanel { Margin = new Thickness(0, -4, 0, 2) };
+        var browse = IconButton(0xE710, "Add files", () => ChooseFiles(false));
+        browse.Margin = new Thickness(0, 0, -6, 0);
+        DockPanel.SetDock(browse, Dock.Right);
+        heading.Children.Add(browse);
+        var title = SectionTitle("Files");
+        title.Margin = new Thickness(0);
+        title.VerticalAlignment = VerticalAlignment.Center;
+        heading.Children.Add(title);
+        DockPanel.SetDock(heading, Dock.Top);
+        content.Children.Add(heading);
+
         if (shelf.Count == 0)
         {
-            var hint = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-            var badge = GlyphBadge(0xE896, green, 32);
-            badge.HorizontalAlignment = HorizontalAlignment.Center;
-            badge.Margin = new Thickness(0, 0, 0, 5);
-            hint.Children.Add(badge);
-            hint.Children.Add(Text("Drop files or folders here", 13, subdued));
-            var target = new Border { Background = AgentArt.Wash(green, 13), BorderBrush = AgentArt.Wash(green, 50),
-                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(11), Padding = new Thickness(10), Child = hint };
-            content.Children.Add(target);
+            // A dashed outline is the one place a border earns its keep: it says "drop here".
+            var outline = new System.Windows.Shapes.Rectangle
+            {
+                Stroke = AssistantFaint, StrokeThickness = 1, StrokeDashArray = [4, 4], RadiusX = 10, RadiusY = 10,
+                SnapsToDevicePixels = true
+            };
+            var hint = Text("Drop files or folders here to keep them handy. Drag them back out into any app.", 12, subdued);
+            hint.TextWrapping = TextWrapping.Wrap;
+            hint.TextAlignment = TextAlignment.Center;
+            hint.Margin = new Thickness(22, 0, 22, 0);
+            hint.VerticalAlignment = VerticalAlignment.Center;
+            content.Children.Add(new Grid { MinHeight = 150, Children = { outline, hint } });
         }
         else
         {
-            var items = new WrapPanel { Margin = new Thickness(0, 7, 0, 0) };
+            var items = new StackPanel();
             foreach (var path in shelf)
             {
-                var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
-                var open = ActionButton(string.IsNullOrEmpty(name) ? path : name, () =>
+                var trimmed = path.TrimEnd(Path.DirectorySeparatorChar);
+                var name = Path.GetFileName(trimmed);
+                var folder = Directory.Exists(path);
+                var line = new DockPanel();
+                var glyph = DockGlyph(folder ? 0xE8B7 : 0xE7C3, 14, AssistantSecondary);
+                glyph.Margin = new Thickness(0, 0, 10, 0);
+                line.Children.Add(glyph);
+                var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                labels.Children.Add(Text(string.IsNullOrEmpty(name) ? path : name, 13));
+                labels.Children.Add(Text(Path.GetDirectoryName(trimmed) ?? "", 11, muted));
+                line.Children.Add(labels);
+                var open = PlainButton(line, "Open " + (string.IsNullOrEmpty(name) ? path : name), () =>
                 {
                     if (!File.Exists(path) && !Directory.Exists(path))
                     {
-                        ShowOwnedMessage("This item has moved or is unavailable.");
+                        ShowOwnedMessage("This item has moved or is no longer there.");
                         return;
                     }
                     OpenTarget(path);
                 });
-                open.MaxWidth = 185;
-                open.Margin = new Thickness(0, 0, 5, 5);
+                open.Margin = new Thickness(0);
+                open.Padding = new Thickness(8, 5, 34, 5);
+                open.HorizontalContentAlignment = HorizontalAlignment.Stretch;
                 open.ToolTip = path;
                 EnableDrag(open, () => File.Exists(path) || Directory.Exists(path)
                     ? new DataObject(DataFormats.FileDrop, new[] { path }) : null);
-                var menu = new ContextMenu();
-                var remove = new MenuItem { Header = "Remove from shelf" };
-                remove.Click += (_, _) =>
+                var remove = IconButton(0xE711, "Remove " + name + " from the shelf", () =>
                 {
                     shelf.Remove(path);
                     WriteJson("files.json", shelf);
-                    ShowPage(DashboardPage.Shelf);
-                };
-                menu.Items.Add(remove);
-                open.ContextMenu = menu;
-                items.Children.Add(open);
+                    ShowPage(DashboardPage.Desk);
+                });
+                remove.HorizontalAlignment = HorizontalAlignment.Right;
+                remove.VerticalAlignment = VerticalAlignment.Center;
+                remove.Margin = new Thickness(0, 0, 2, 0);
+                ((TextBlock)remove.Content).FontSize = 10;
+                ((TextBlock)remove.Content).Foreground = AssistantSecondary;
+                items.Children.Add(new Grid { Margin = new Thickness(-8, 0, -8, 1), Children = { open, remove } });
             }
-            content.Children.Add(new ScrollViewer { Content = items, MaxHeight = 115, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+            content.Children.Add(new ScrollViewer { Content = items, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 310 });
         }
-        var card = Card(content, green);
-        card.AllowDrop = true;
-        card.DragOver += (_, e) =>
+        var pane = new Border { Child = content, Background = Brushes.Transparent, AllowDrop = true };
+        pane.DragOver += (_, e) =>
         {
             e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         };
-        card.Drop += (_, e) =>
+        pane.Drop += (_, e) =>
         {
             if (e.Data.GetData(DataFormats.FileDrop) is string[] paths)
                 AddFiles(paths);
         };
-        return card;
+        return pane;
     }
 
     private void ChooseFiles(bool imageOnly)
@@ -100,7 +125,7 @@ public partial class DashboardWindow
                 wallpapers ??= [];
                 wallpapers = wallpapers.Concat(picker.FileNames).Distinct(StringComparer.OrdinalIgnoreCase).Take(30).ToList();
                 WriteJson("wallpapers.json", wallpapers);
-                ShowPage(DashboardPage.Wallpapers);
+                ShowPage(DashboardPage.Desk);
             }
             else
                 AddFiles(picker.FileNames);
@@ -114,179 +139,91 @@ public partial class DashboardWindow
         shelf = shelf.Concat(paths.Where(path => File.Exists(path) || Directory.Exists(path)))
             .Distinct(StringComparer.OrdinalIgnoreCase).Take(40).ToList();
         WriteJson("files.json", shelf);
-        if (currentPage == DashboardPage.Shelf)
-            ShowPage(DashboardPage.Shelf);
+        if (currentPage == DashboardPage.Desk)
+            ShowPage(DashboardPage.Desk);
     }
 
-    private UIElement WallpapersPage()
+    private FrameworkElement WallpaperPane()
     {
         wallpapers ??= ReadJson<List<string>>("wallpapers.json") ?? [];
         var available = wallpapers.Where(File.Exists).Take(30).ToArray();
-        var content = new StackPanel();
-        var add = AccentButton("Add wallpapers…", 0xE710, pink, () => ChooseFiles(true));
-        content.Children.Add(CardHeading("Wallpaper library", 0xE91B, pink, add));
+        var pane = new StackPanel();
+        pane.Children.Add(SectionTitle("Wallpaper"));
         if (available.Length == 0)
         {
-            content.Children.Add(Text("Add images to build your wallpaper library.", 13, subdued));
-            return Card(content, pink);
+            var help = Text("Add a few images and switch between them from here.", 12, subdued);
+            help.TextWrapping = TextWrapping.Wrap;
+            help.Margin = new Thickness(0, 4, 0, 12);
+            pane.Children.Add(help);
+            var first = ActionButton("Add images…", () => ChooseFiles(true));
+            first.HorizontalAlignment = HorizontalAlignment.Left;
+            pane.Children.Add(first);
+            return pane;
         }
 
         wallpaperIndex = Math.Clamp(wallpaperIndex, 0, available.Length - 1);
         var selection = available[wallpaperIndex];
-        var image = new Image { Height = 127, Stretch = Stretch.UniformToFill };
+        var preview = new Border { CornerRadius = new CornerRadius(8), Background = ControlFill, Height = 156, Margin = new Thickness(0, 2, 0, 10) };
         try
         {
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.UriSource = new Uri(selection);
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.DecodePixelWidth = 640;
+            bitmap.DecodePixelWidth = 560;
             bitmap.EndInit();
-            image.Source = bitmap;
+            bitmap.Freeze();
+            preview.Background = new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill };
         }
         catch (Exception error) when (error is IOException or NotSupportedException or FormatException or ArgumentException) { }
-        var controls = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        controls.Children.Add(Text(Path.GetFileNameWithoutExtension(selection), 15, strong: true));
-        controls.Children.Add(Text($"{wallpaperIndex + 1} of {available.Length}", 11, muted));
-        var actions = new WrapPanel { Margin = new Thickness(0, 7, 0, 0) };
-        foreach (var (name, action) in new (string, Action)[]
+        pane.Children.Add(preview);
+
+        var caption = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
+        var position = Text($"{wallpaperIndex + 1} of {available.Length}", 11, muted);
+        position.VerticalAlignment = VerticalAlignment.Center;
+        position.Margin = new Thickness(10, 0, 0, 0);
+        DockPanel.SetDock(position, Dock.Right);
+        caption.Children.Add(position);
+        var name = Text(Path.GetFileNameWithoutExtension(selection), 13);
+        name.ToolTip = selection;
+        caption.Children.Add(name);
+        pane.Children.Add(caption);
+
+        var actions = new DockPanel();
+        var next = IconButton(0xE76C, "Next image", () => Step(1));
+        var previous = IconButton(0xE76B, "Previous image", () => Step(-1));
+        previous.IsEnabled = next.IsEnabled = available.Length > 1;
+        next.Margin = new Thickness(0, 0, -6, 0);
+        DockPanel.SetDock(next, Dock.Right);
+        DockPanel.SetDock(previous, Dock.Right);
+        actions.Children.Add(next);
+        actions.Children.Add(previous);
+        var apply = PrimaryButton("Set as wallpaper", () =>
         {
-            ("Previous", () => Step(-1)),
-            ("Next", () => Step(1)),
-            ("Apply wallpaper", () =>
-            {
-                wallpaperStatus = SetWallpaper(0x0014, 0, selection, 3) ? "Wallpaper applied." : "Windows could not apply this image.";
-                ShowPage(DashboardPage.Wallpapers);
-            })
-        })
-        {
-            var button = ActionButton(name, action);
-            button.Margin = new Thickness(0, 0, 4, 4);
-            actions.Children.Add(button);
-        }
-        controls.Children.Add(actions);
+            wallpaperStatus = SetWallpaper(0x0014, 0, selection, 3) ? "Done. That is your wallpaper now." : "Windows would not use this image.";
+            ShowPage(DashboardPage.Desk);
+        });
+        apply.HorizontalAlignment = HorizontalAlignment.Left;
+        actions.Children.Add(apply);
+        pane.Children.Add(actions);
         if (wallpaperStatus != null)
-            controls.Children.Add(Text(wallpaperStatus, 11, subdued));
-        var row = Columns(1.35, 1);
-        Put(row, Card(image), 0);
-        Put(row, Card(controls, pink), 1);
-        content.Children.Add(row);
-        return content;
+        {
+            var status = Text(wallpaperStatus, 12, subdued);
+            status.Margin = new Thickness(0, 8, 0, 0);
+            pane.Children.Add(status);
+        }
+        var add = QuietButton("Add more images…", () => ChooseFiles(true));
+        add.HorizontalAlignment = HorizontalAlignment.Left;
+        add.Margin = new Thickness(0, 10, 0, 0);
+        pane.Children.Add(add);
+        return pane;
 
         void Step(int direction)
         {
             wallpaperStatus = null;
             wallpaperIndex = (wallpaperIndex + direction + available.Length) % available.Length;
-            ShowPage(DashboardPage.Wallpapers);
+            ShowPage(DashboardPage.Desk);
         }
-    }
-
-    private UIElement SettingsPage()
-    {
-        var row = Columns(1.3, 1);
-        var general = new StackPanel();
-        general.Children.Add(CardHeading("Windows taskbar", 0xECAA, purple));
-        var layoutHelp = Text(trayMode
-            ? "Tray mode is active. Open coding chats from the Windows Dock icon or with Ctrl+Alt+D."
-            : "App pins, tray icons, and auto-hide use Windows settings.", 12, subdued);
-        layoutHelp.TextWrapping = TextWrapping.Wrap;
-        general.Children.Add(layoutHelp);
-        var actions = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-        var windows = AccentButton("Taskbar settings", 0xE713, purple, () => OpenTarget("ms-settings:taskbar"));
-        windows.Margin = new Thickness(0, 0, 6, 0);
-        actions.Children.Add(windows);
-        if (controllerPid > 0)
-        {
-            actions.Children.Add(ActionButton(trayMode ? "Exit Windows Dock" : "Restore taskbar appearance", () =>
-            {
-                if (System.Threading.EventWaitHandle.TryOpenExisting(
-                    @"Local\WindowsDock.NativeTaskbar." + controllerPid + ".Stop", out var stop))
-                {
-                    using (stop)
-                        stop.Set();
-                }
-                Close();
-            }));
-        }
-        general.Children.Add(actions);
-        var signIn = ActionButton(DockStartup.Enabled() ? "Start at sign-in: On" : "Start at sign-in: Off");
-        signIn.HorizontalAlignment = HorizontalAlignment.Left;
-        signIn.Margin = new Thickness(0, 8, 0, 0);
-        signIn.Click += (_, _) =>
-        {
-            try
-            {
-                var enabled = !DockStartup.Enabled();
-                DockStartup.Set(enabled, trayMode);
-                var label = enabled ? "Start at sign-in: On" : "Start at sign-in: Off";
-                signIn.Content = label;
-                System.Windows.Automation.AutomationProperties.SetName(signIn, label);
-            }
-            catch (Exception error) when (DockActions.IsActionError(error)) { ShowOwnedMessage(error.Message); }
-        };
-        general.Children.Add(signIn);
-        Put(row, Card(general, purple), 0);
-        var power = new StackPanel();
-        power.Children.Add(CardHeading("Power and display", 0xE7E8, amber));
-        var battery = System.Windows.Forms.SystemInformation.PowerStatus;
-        power.Children.Add(Text(battery.BatteryChargeStatus.HasFlag(System.Windows.Forms.BatteryChargeStatus.NoSystemBattery)
-            ? "Desktop power" : $"Battery  {battery.BatteryLifePercent:P0}", 12, subdued));
-        var controls = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-        var powerOptions = ActionButton("Power settings", () => OpenTarget("ms-settings:powersleep"));
-        powerOptions.Margin = new Thickness(0, 0, 6, 0);
-        controls.Children.Add(powerOptions);
-        controls.Children.Add(ActionButton("Display settings", () => OpenTarget("ms-settings:display")));
-        power.Children.Add(controls);
-        Put(row, Card(power, amber), 1);
-        return row;
-    }
-
-    private UIElement PowerPage()
-    {
-        var row = Columns(1, 1);
-        var summary = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        var battery = System.Windows.Forms.SystemInformation.PowerStatus;
-        var hasBattery = !battery.BatteryChargeStatus.HasFlag(System.Windows.Forms.BatteryChargeStatus.NoSystemBattery);
-        var charge = Math.Clamp(battery.BatteryLifePercent, 0, 1);
-        var charging = battery.PowerLineStatus == System.Windows.Forms.PowerLineStatus.Online;
-        var chargeBrush = !charging && charge < .2 ? amber : green;
-        var badge = new Grid { Width = 54, Height = 23, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 7) };
-        badge.Children.Add(new Border { CornerRadius = new CornerRadius(5), BorderBrush = subdued,
-            BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 3, 0) });
-        badge.Children.Add(new Border { CornerRadius = new CornerRadius(1), Background = subdued, Width = 2, Height = 7,
-            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center });
-        if (hasBattery)
-        {
-            badge.Children.Add(new Border { Width = Math.Max(2, 45 * charge), CornerRadius = new CornerRadius(2), Background = chargeBrush,
-                Margin = new Thickness(3, 3, 0, 3), HorizontalAlignment = HorizontalAlignment.Left });
-            summary.Children.Add(badge);
-        }
-        summary.Children.Add(Text(hasBattery ? charging ? "Connected to power" : "On battery" : "Desktop power", 11, subdued, true));
-        summary.Children.Add(Text(hasBattery ? $"{charge:P0}" : "Plugged in", 28, strong: true));
-        var uptime = TimeSpan.FromMilliseconds(Environment.TickCount64);
-        summary.Children.Add(Text($"Uptime  {uptime.Days}d {uptime.Hours}h {uptime.Minutes}m", 11, muted));
-        Put(row, Card(summary, hasBattery ? chargeBrush : amber), 0);
-
-        var actions = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        actions.Children.Add(CardHeading("System power", 0xE7E8, amber));
-        if (hasBattery && controllerPid > 0)
-        {
-            var alerts = Text("Low battery alerts at 25%, 20%, 15%, 10%, and 5% while unplugged.", 11, subdued);
-            alerts.TextWrapping = TextWrapping.Wrap;
-            actions.Children.Add(alerts);
-        }
-        var buttons = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
-        var power = ActionButton("Power settings", () => OpenTarget("ms-settings:powersleep"));
-        power.Margin = new Thickness(0, 0, 6, 0);
-        buttons.Children.Add(power);
-        buttons.Children.Add(ActionButton("Lock Windows", () =>
-        {
-            if (LockWorkStation())
-                Dismiss();
-        }));
-        actions.Children.Add(buttons);
-        Put(row, Card(actions), 1);
-        return row;
     }
 
     [DllImport("user32", EntryPoint = "SystemParametersInfoW", CharSet = CharSet.Unicode, ExactSpelling = true)]

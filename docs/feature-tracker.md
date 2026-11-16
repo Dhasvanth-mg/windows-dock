@@ -1,5 +1,22 @@
 # Feature tracker
 
+## Require the modified taskbar and integrate Widgets into Dashboard
+
+- Status: In progress.
+- Scope: Run Windows Dock on the modified native taskbar and put Widgets in the main Dashboard window.
+- Acceptance criteria: Normal launch attaches the modified taskbar and retains it across dock restarts. Attachment problems are surfaced and retried without switching to tray mode. The Widgets button, tab, gestures, and return actions navigate within Dashboard. Existing pinned widgets and favorites carry over.
+- Remaining work: Diagnose attachment in the current Explorer session, implement native startup and inline Widgets, then build and verify the installed result.
+
+## Restart the installed dock
+
+- Status: Restarted and verified.
+- Scope: Restart the running Windows Dock installation and reopen Dashboard.
+- Acceptance criteria: The old controller exits, the same installed build starts with a new process ID, and Dashboard becomes visible.
+- Implementation: Stopped the installed controller through its shutdown signal and started the same executable with Dashboard open.
+- Verification: The old controller exited, the replacement reported readiness with a new process ID, and Windows UI Automation found the visible Dashboard and its close button.
+- Limitations: The controller started in tray mode. Native launcher recovery remains tracked under System expansion features.
+- Remaining work: None for the restart.
+
 ## System expansion features
 
 - Status: First feature increment built, installed, and verified in the tray session. The wider specification is in progress.
@@ -65,6 +82,68 @@
 - Implementation: Refined the shared acrylic, grouped the launcher, four wider animated slots, system tray, and clock, and shortened the upward pull threshold. A launcher press can start the hidden dashboard ahead of the release gesture. The managed panel renders before its live refresh, pauses its scan while hidden, and uses a compact 896 DIP main width with the same 454 DIP height.
 - Verification: Reviewed the original brief and reference video. Windows UI Automation found the visible launcher and four same-row slots, opened a selected chat inline, and measured 896-by-454 and 764-by-454 panels at 96 DPI. Captured the real taskbar. On this machine, the earlier tray run recorded 2,692 ms cold and a 446 ms warm median. The final native run recorded 687 ms cold and a 15 ms warm median across five warm samples, with one 381 ms warm sample.
 - Remaining work: None for this visual and reveal pass.
+
+## Run the current dashboard redesign
+
+- Status: Running and verified in tray mode. Native taskbar attachment remains unresolved on this Explorer session.
+- Scope: Build and run the current checkout, including the local review commit and uncommitted redesign, in place of the previous installed dashboard.
+- Acceptance criteria: Managed and native Release builds succeed, available tests pass, and the real taskbar launches the redesigned Dashboard and Coding chats. Preserve the source working tree, sign-in preference, and any active dock jobs.
+- Implementation: Published the current working snapshot in an isolated x64 folder because the previous install is held open by the existing Claude Code and Codex MCP clients. Started the new controller and Dashboard, and pointed the enabled Windows sign-in entry at the new build in tray mode.
+- Verification: The native Release build and self-contained managed publish passed, and 43 of 43 tests passed. Windows UI Automation opened Notes, both Play choices, and the inline Coding chats view. Dashboard remained 960 by 454 pixels across page changes, and the compact 764 by 454 chat view reused the same window. The published source hashes match the working snapshot.
+- Limitations: Explorer rejected native attachment with Hitodama active and during a retry after Hitodama acknowledged its styling pause. Hitodama's original taskbar rules were restored. The launcher and status icon are available from the notification area and keyboard shortcuts in the working tray mode. The sign-in command was inspected in the current session.
+- Remaining work: Verify the native launcher and four visible slots in a clean Explorer session.
+
+## Dashboard redesign: less generated, more hand-made
+
+- Status: Built and checked in the running standalone dashboard with rendered screenshots of every page and panel. Committed. The owner is running a published copy of this working tree in tray mode (see "Run the current dashboard redesign").
+- Scope: Redesign the WPF dashboard and its panels (Dashboard pages, Widgets, Coding chats, Assistants, shared controls) so they stop reading as a generated dark dashboard: fewer outlined chips and tinted cards, one neutral control language, colour kept for chat status and the characters, plainer copy, and a tighter header. Functionality may change where it makes a screen more useful.
+- Acceptance criteria: Managed Release build and the committed tests pass. Every existing feature stays reachable by click and keyboard. The window keeps its fixed size and taskbar anchor. The result is checked in the running standalone dashboard with screenshots, not only compiled.
+- Implementation: `DashboardTheme.cs` holds the palette, type scale, and shared controls (primary button, quiet link, segmented switch, on/off switch, setting row). Buttons are filled blocks instead of outlined chips, cards lost their borders and tints, headings lost their icon badges, hand cursors and label-repeating tooltips are gone, and text fields no longer apply their padding twice. The brand row and clock were removed from the header. Coding chats lost its own title bar inside Dashboard, filters are a segmented switch, Jobs, Activity and Setup sit on the tab row, and the Summarize and Allow buttons are the single filled action. The assistant chat puts the conversation and message box first and folds provider, model and account behind one link that opens by itself when setup is unfinished.
+- Verification: 0 warnings and 0 errors on the managed Release build. A scratch harness rendered each page and panel before and after.
+- Limitations: The Stats, Power, Settings, Calendar, Weather, Audio, Files and Wallpapers pages no longer exist as pages; their old names still open the right place from the command line and from search. The ignored `artifacts/WidgetSmoke` harness was written against the old layout and was not updated.
+- Remaining work: None for this pass. The assistant chat itself is being reworked under a later request.
+
+### Colour, games, and a lighter dashboard
+
+- Status: Built, tested, and measured. Committed.
+- Scope: Message received during the redesign. Colour is welcome, more features are welcome, the dashboard should be very light and responsive, it should have some quirk, and it should include a game or two.
+- Acceptance criteria: An accent colour the owner can choose and that survives a restart. A Play tab with two small games that only run a timer while a game is actually being played. Less work on the once-a-second tick. Pages stack instead of squeezing when the window is narrow. Game rules covered by committed tests.
+- Implementation: Six named accents (Marmalade by default) in Controls, saved in `accent.json`, used for the main action on a view, switches, the current tab, sliders, and the focus bar. Play has Token snake (the coding-chat cat with a growing tail, wrap-around edges) and Copycat (repeat the order the four assistants light up in), with best scores in `games.json`. Rules live in `DockGames.cs`. Stickies and memos live in `DockNotes.cs` and `DashboardNotes.cs`.
+- Lighter: Dock windows are no longer per-pixel transparent WPF windows. They are ordinary hardware-accelerated windows with Windows 11 rounded corners (`DockWindowFrame.cs`), which cut the cost of one repaint from about 65 ms of CPU to about 20 to 30 ms on this PC. `AgentSessions.Read` remembers what each unchanged file produced, so a repeat scan of 36 chats went from 200 to 330 ms to about 3 ms; the background monitor runs that scan every six seconds. Media session reads dropped from every second to every four, with the position worked out from the clock in between. The dashboard clock ticks every two seconds unless a timer, the Desk readings, lyrics, or a widget panel needs one second.
+- Verification: 80 of 80 tests pass, 12 of them new for the snake, Copycat, notes, and accent lookup. With the window away from the mouse pointer and after start-up settled, Today idled at 1.5% of one core (1.7% with a synthetic track playing) against 2.8% for commit `1358025`; Chats idled at 1.7% against 13.5%; Notes, Controls and Play at 0.2 to 0.4%.
+- Limitations: Measurements came from one PC, with a scratch harness hosting the dashboard in-process. Working set stayed around 220 to 310 MB with the dashboard open, so the 120 MB target in the expansion specification is not met while a WPF dashboard is showing. A repaint still costs 20 to 30 ms here for a reason that was not found. The owner then asked to set performance targets aside.
+- Remaining work: None requested.
+
+### Fewer tabs, pages and clicks
+
+- Status: Built and rendered. Committed.
+- Scope: Second message received during the redesign. Minimise the number of interactions, tabs and pages, prefer the smaller option when in doubt, do not remove functionality, and make it easier to navigate.
+- Acceptance criteria: Fewer top-level tabs, with every earlier function still reachable by click and from search. Everyday things usable from the first page without navigating. Old page names passed on the command line still open the right place.
+- Implementation: Eleven pages became Today, Chats, Notes, Controls, Desk, and Play. Today holds the date, a week strip, reminders with meetings mixed in, a pinned sticky note, now playing with volume, the focus timer, a five-day forecast, the top coding chats with Allow and Deny inline when one is waiting, favourite shortcuts, and CPU, memory and battery. Controls holds the sound mixer and lyrics on the left and Wi-Fi, Bluetooth, start at sign-in, accent, weather location and units, and dock settings on the right. Desk holds system readings, the file shelf, and wallpapers. The four assistants are one click away in the header. Search knows the old page names.
+- Verification: Rendered every page. Inline approvals were exercised only through the build, not against a live provider request.
+- Limitations: Reminders can now only be dated by picking a day in the week strip, not by typing a date. A separate session added a Widgets tab afterwards, so the strip currently shows seven tabs.
+- Remaining work: Fold the remaining popup panels into the dashboard window (requested later).
+
+### Coucou-style assistants, more chat control, no dead space
+
+- Status: Partly done. Committed.
+- Scope: Third message received during the redesign. Make the assistants look and move like the agents in Coucou. Do as much as possible from the dock with Claude Code and Codex chats: permissions, sending messages, excerpts. Remove dead space and put small quick features there.
+- Outcome: Coucou (`Louis-CFM/coucou`) has MIT-licensed code, but its `LICENSE-ASSETS.md` reserves the Mochi character's design, expressions and animations and asks forks to use their own character, so nothing was copied. The dock's own four characters now blink, sway, hop on hover, wobble while thinking, and hop when a reply lands (`AssistantFigure.cs`), with motion off when Windows animations are off. Approvals can be answered from Today. Dead space on Today, Desk and Controls now holds the sticky note, Task Manager and screen-snip links, and lyrics.
+- Not done: Sending a message into a Claude Code or Codex session from the dock, and reply excerpts on Today. Both need a design for how a headless turn is permitted to act in a project and a live test on the owner's accounts.
+
+### Hover details on the taskbar slots, and commit
+
+- Status: Tooltip built and compiled, not yet run inside Explorer. Committed.
+- Scope: Messages received during the redesign. Hovering a slot in the taskbar widget should show which app the chat is from, which chat it is, and its status, and nothing else. Commit everything.
+- Implementation: `TaskbarAgents.cpp` sets a three-line tooltip per slot: Claude Code or Codex, the chat title, and the state label.
+- Verification: The native Release build compiled in a scratch directory. The module was not loaded into Explorer by this session.
+- Remaining work: Confirm the tooltip on the real taskbar once native attachment works again.
+
+### Assistant chats like ChatGPT or Claude, files, history, memory, fewer popups
+
+- Status: Not started.
+- Scope: Messages received during the redesign. Assistant chats should look like a ChatGPT or Claude conversation, accept attached files, keep earlier conversations, and learn from the owner's behaviour. Minimise popups and extra windows. Performance targets are set aside for now in favour of feature work.
+- Remaining work: All of it. A separate session is already moving Widgets into the dashboard window, so this work needs to be coordinated with that one.
 
 ## Fix top repository-analysis findings
 

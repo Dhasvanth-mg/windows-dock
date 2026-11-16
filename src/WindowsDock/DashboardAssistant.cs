@@ -81,28 +81,32 @@ public partial class DashboardWindow
         var persona = AssistantPersonas.All[slot];
         var chat = assistantConversations[slot];
         var tint = AssistantInk;
+        var figure = PersonaPortrait(persona, 38, lively: true);
         var (window, content, cancellation) = CreateDockPanel(persona.Name, persona.Role, 506, 0xEAB7, tint,
-            backAction: ShowAssistantPicker, backLabel: "Back to assistants", portrait: PersonaPortrait(persona, 38));
-        var intro = Text(persona.Greeting, 14, AssistantInk, strong: true);
-        intro.Margin = new Thickness(0, 0, 0, 6);
+            backAction: ShowAssistantPicker, backLabel: "Back to assistants", portrait: figure);
+        var intro = Text(persona.Greeting, 15, AssistantInk, strong: true);
+        intro.TextWrapping = TextWrapping.Wrap;
+        intro.Margin = new Thickness(0, 2, 0, 8);
         content.Children.Add(intro);
-        var toolRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 7) };
+        var toolRow = new WrapPanel();
+        // Provider, model and account live behind one quiet link once they are working.
+        var setup = new StackPanel { Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
+        var setupToggle = QuietButton("Model", () =>
+            setup.Visibility = setup.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible);
+        AutomationProperties.SetName(setupToggle, "Model and account");
+        toolRow.Children.Add(setupToggle);
         var availableSources = AssistantConnections.For(persona.Id);
         if (availableSources.Length > 0)
         {
-            var connections = AccentButton("MCP connections", 0xE8A7, tint, () => ShowAssistantConnections(persona));
-            connections.Padding = new Thickness(7, 4, 7, 4);
+            var connections = QuietButton("Connections", () => ShowAssistantConnections(persona));
+            AutomationProperties.SetName(connections, "MCP connections");
             toolRow.Children.Add(connections);
         }
-        var jobs = ActionButton("Jobs", ShowAssistantJobs);
-        jobs.Margin = new Thickness(5, 0, 0, 0);
-        jobs.Padding = new Thickness(7, 4, 7, 4);
+        var jobs = QuietButton("Jobs", ShowAssistantJobs);
         toolRow.Children.Add(jobs);
         if (persona.Id is "coding" or "casual")
         {
-            var quick = ActionButton(AssistantQuickLabel(persona), () => OpenAssistantQuickAction(slot));
-            quick.Padding = new Thickness(7, 4, 7, 4);
-            quick.Margin = new Thickness(toolRow.Children.Count > 0 ? 5 : 0, 0, 0, 0);
+            var quick = QuietButton(AssistantQuickLabel(persona), () => OpenAssistantQuickAction(slot));
             toolRow.Children.Add(quick);
         }
         content.Children.Add(toolRow);
@@ -154,7 +158,7 @@ public partial class DashboardWindow
         content.Children.Add(credentials);
 
         var messages = new StackPanel();
-        var conversation = new ScrollViewer { Content = messages, MaxHeight = 218, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        var conversation = new ScrollViewer { Content = messages, MaxHeight = 232, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
         content.Children.Add(conversation);
         var prompt = Field("Message", AssistantMessageLimit);
@@ -162,7 +166,7 @@ public partial class DashboardWindow
         prompt.TextWrapping = TextWrapping.Wrap;
         prompt.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         prompt.Height = 68;
-        prompt.Tag = "Write a message";
+        prompt.Tag = "Message " + persona.Name;
         prompt.Margin = new Thickness(0, 9, 0, 0);
         content.Children.Add(prompt);
         var attachment = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
@@ -177,10 +181,15 @@ public partial class DashboardWindow
         content.Children.Add(fallback);
 
         var actions = new WrapPanel();
-        var send = AccentButton("Send message", 0xE724, tint);
+        var send = PrimaryButton("Send");
+        AutomationProperties.SetName(send, "Send message");
         send.ToolTip = "Send message (Ctrl+Enter)";
-        send.Margin = new Thickness(0, 0, 5, 0);
-        var clear = ActionButton("New chat");
+        send.MinWidth = 68;
+        send.Margin = new Thickness(0, 0, 6, 0);
+        var clear = QuietButton("Start over");
+        clear.Margin = new Thickness(8, 0, 0, 0);
+        clear.VerticalAlignment = VerticalAlignment.Center;
+        AutomationProperties.SetName(clear, "New chat");
         var cancel = ActionButton("Cancel");
         cancel.Margin = new Thickness(0, 0, 5, 0);
         cancel.Visibility = Visibility.Collapsed;
@@ -220,8 +229,8 @@ public partial class DashboardWindow
                 prompt.Focus();
                 prompt.CaretIndex = prompt.Text.Length;
             });
-            button.Padding = new Thickness(7, 4, 7, 4);
-            button.Margin = new Thickness(0, 0, 5, 3);
+            button.Padding = new Thickness(10, 5, 10, 5);
+            button.Margin = new Thickness(0, 0, 6, 6);
             starters.Children.Add(button);
         }
         providers.SelectionChanged += (_, _) =>
@@ -279,6 +288,15 @@ public partial class DashboardWindow
         RenderProposal();
         SetProvider();
         SetBusy(false);
+        // Lay the chat out the way it is used: the conversation, the message box, then the tools you reach for less.
+        content.Children.Clear();
+        foreach (var part in new UIElement[] { settings, accountUI, credentials })
+            setup.Children.Add(part);
+        foreach (Button link in toolRow.Children)
+            link.Margin = new Thickness(0, 0, 18, 0);
+        foreach (var part in new UIElement[] { intro, starters, conversation, prompt, attachment, proposal, status, fallback, actions,
+            Rule(12, 8), toolRow, setup })
+            content.Children.Add(part);
         window.Show();
         cooldownTimer.Start();
         WatchActiveSignIn();
@@ -314,6 +332,12 @@ public partial class DashboardWindow
                 RefreshAccounts();
                 _ = LoadModelsAsync();
             }
+            // Open the setup by itself only when something still needs doing before a message can be sent.
+            setupToggle.Content = "Model: " + source.Label;
+            var ready = plan ? (accounts.SelectedItem as PlanAccount)?.Refresh.Length > 0 :
+                local ? localModels.SelectedItem is string : cli || AssistantKey(index) != null;
+            if (!ready)
+                setup.Visibility = Visibility.Visible;
             SetDisclosure();
             SetBusy(busy);
             if (local)
@@ -337,6 +361,11 @@ public partial class DashboardWindow
 
         void SetBusy(bool busy)
         {
+            // The character wobbles while it works and hops when the answer lands.
+            var wasThinking = figure.Thinking;
+            figure.Thinking = busy;
+            if (wasThinking && !busy)
+                figure.Hop();
             var provider = AssistantSources[chat.SourceIndex].Provider;
             var isPlan = provider == AssistantProvider.ChatGptPlan;
             var account = accounts.SelectedItem as PlanAccount;
@@ -507,7 +536,7 @@ public partial class DashboardWindow
                     DockPanel.SetDock(copy, Dock.Right);
                     heading.Children.Add(copy);
                 }
-                var author = Text(name, 10, messageTint, true);
+                var author = Text(name, 11, AssistantSecondary);
                 author.VerticalAlignment = VerticalAlignment.Center;
                 heading.Children.Add(author);
                 line.Children.Add(heading);
@@ -520,10 +549,10 @@ public partial class DashboardWindow
                 message.Padding = new Thickness(0, 3, 0, 0);
                 line.Children.Add(message);
                 var card = Card(line);
-                card.Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantInset;
-                card.BorderBrush = AssistantRule;
-                card.Padding = new Thickness(8, 6, 8, 6);
-                card.Margin = new Thickness(user ? 27 : 0, 0, user ? 0 : 27, 5);
+                card.Background = user ? ControlFill : System.Windows.Media.Brushes.Transparent;
+                card.BorderBrush = System.Windows.Media.Brushes.Transparent;
+                card.Padding = user ? new Thickness(11, 7, 11, 8) : new Thickness(0, 2, 0, 4);
+                card.Margin = new Thickness(user ? 56 : 0, 0, 0, 8);
                 messages.Children.Add(card);
             }
             conversation.ScrollToEnd();

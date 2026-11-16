@@ -92,7 +92,7 @@ public partial class DashboardWindow
             {
                 var (label, tint) = StateBadge(item.State);
                 var time = item.At.ToLocalTime().ToString("g");
-                var detail = $"{ProviderName(item.Provider)} · {label} · {time}";
+                var detail = $"{label}, {ProviderName(item.Provider)}, {time}";
                 var button = WidgetTile(new(item.Title, detail, "", item.State switch
                 {
                     AgentState.Attention => 0xEA8F,
