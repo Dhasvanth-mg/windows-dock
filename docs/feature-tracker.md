@@ -1,5 +1,52 @@
 # Feature tracker
 
+## System expansion features
+
+- Status: First feature increment built, installed, and verified in the tray session. The wider specification is in progress.
+- Scope: Implement the feature workflows from the supplied system expansion specification in working increments. Reuse the current design and integrated dock surfaces. Preserve the existing redesign, settings, and taskbar behavior.
+- Acceptance criteria: Confirm the installed baseline and run the existing suite. Each shipped increment has a real entry point, functional behavior and an error path, persistence where applicable, and targeted verification. Record live, simulated, and deferred work distinctly.
+- Implementation: Added global Search with Ctrl+Alt+K, offline calculator results and history, Wi-Fi and Bluetooth panels, grouped favorites, and named workspace window layouts. Search and Widgets share the new entries. Bluetooth pairing and new Wi-Fi credentials use Windows Settings. Existing shortcut-only workspaces remain supported.
+- Verification: The original native installation and 43 baseline tests passed. The final working-tree suite passed all 80 tests, and the staged feature snapshots passed their own suites. The x64 native controller and managed Release publish built. Windows UI Automation verified a calculator result, Wi-Fi signal and paired Bluetooth status, saving and finding a favorite again, and capturing open windows. Unit tests checked workspace placement on a secondary and a smaller work area.
+- Performance: One warm tray Search reveal took 120 ms from the controller's hotkey message to visible panel. Windows released the dashboard worker after closing it. The tray controller and monitor then used 37.7 MiB private memory and an 83 MiB combined working set, with no CPU time measured during the five-second idle sample.
+- Limitations: Live radio toggling, switching networks, and moving the owner's open windows were left untested. Workspace capture stores supported visible windows and geometry. Exact app state, browser tabs, and documents still depend on manual workspace links or the application restoring its own session. The calculator works offline and has no live exchange rates.
+- Remaining work: Restore the native launcher in a shell session that accepts the existing taskbar connection. Continue the remaining Windows control and workspace features, provider and MCP expansion, calendar and document integrations, voice, local indexing, knowledge graph, encrypted vault, and broader performance checks.
+
+### Continue implementation and installed-build checks
+
+- Status: Installed. Search and the feature entry points were checked on Windows. Native launcher recovery is pending.
+- Scope: Continue the feature expansion and finish the installed-build checks for Search, the Windows controls, favorites, workspaces, sign-in, and panel locking.
+- Acceptance criteria: Verify the installed entry points and behavior, recover the native launcher if Explorer accepts the connection, and record any remaining limitations.
+- Outcome: Ctrl+Alt+K registered in the running controller and opens Search. Windows already had Ctrl+Alt+Space registered. The new and previous controllers both fell back to the tray after Explorer rejected the existing taskbar connection. The installed build stays on the native-preferred startup path and can use its tray launcher while the current Explorer session rejects the connection.
+- Remaining work: Verify the taskbar launcher and four-slot row when Explorer accepts native attachment again.
+
+### Ollama for Assistants
+
+- Status: Installed. Simulated model discovery and conversations are verified.
+- Scope: Allow Assistants to use installed Ollama text models through the local Ollama service.
+- Acceptance criteria: Selecting Ollama lists available local models and requires no API key. The assistant sends to the loopback service, retains the existing dock action approval flow, and handles missing models or a stopped service. Simulated tests cover listing and sending.
+- Implementation: Added Ollama to the Assistant provider picker. It fetches installed local models on selection or refresh. It checks that the selected model is still installed before sending, filters cloud-backed aliases, and uses a 30-second model keep-alive so the local service can release model memory after a turn.
+- Verification: The provider tests covered request formatting, roles, loopback transport and rejection of remote or uninstalled models before sending any message. The installed app handled a stopped service, refreshed against a synthetic loopback service, selected the local model, and displayed its reply. The staged suite passed all 68 tests.
+- Remaining work: Verify generation time and memory with an actual installed local model. No Ollama model was installed during this check.
+
+### ChatGPT browser sign-in
+
+- Status: Implemented, installed, and verified with synthetic OAuth callbacks. A real account sign-in still requires the owner.
+- Scope: Fix the ChatGPT plan callback that reached an unavailable loopback listener.
+- Acceptance criteria: The active sign-in can survive using the browser and leaving the assistant panel. It is cancelable, expires cleanly, and still validates the OAuth state and account before saving credentials. Verify the callback with synthetic data.
+- Implementation: The dock session owns the sign-in task for up to five minutes. The assistant panel can close or switch without canceling its loopback listener. Reopening the assistant can resume observing that task. Explicit cancel and dock shutdown still stop the attempt.
+- Verification: The TCP callback tests accepted a matching synthetic response after the panel observer closed, rejected a mismatched state, and confirmed single-attempt and cancel behavior. No real account tokens were requested during verification.
+- Remaining work: Start a fresh browser sign-in through Continue with ChatGPT and confirm the owner's account exchange and access.
+
+### Independent panel dismissal and locks
+
+- Status: Implemented, installed, and verified from Windows UI Automation.
+- Scope: Close only the selected agent or tool panel and restore Dashboard when it was open. Closing Dashboard closes its unlocked panels. Add a session lock to Dashboard and each panel.
+- Acceptance criteria: Close buttons, Escape, and panel gestures respect the active panel. A locked panel survives navigation and another panel's dismissal and can be unlocked from the dock. A normal Dashboard close returns the dock to its idle state when no locked panel or task remains.
+- Implementation: Tool close returns to the previously open Dashboard. Dashboard close dismisses unlocked panels. Dashboard, compact Coding chats, and tools have session locks. The Locked panels menu returns to a locked panel after switching surfaces. Closing a surface leaves any active background job or browser sign-in running.
+- Verification: The installed build passed Dashboard lock and unlock, Assistants-only and Coding-chats-only close, restoration of a previously open Dashboard, and survival of the same locked Assistants window after Dashboard closed.
+- Limitations: Locks reset when the dock process exits. Explicit application exit closes its surfaces.
+- Remaining work: None for the verified close-button flows.
+
 ## Dock startup and panel reliability
 
 - Status: Implemented, verified, and installed in native taskbar mode.
