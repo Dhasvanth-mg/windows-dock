@@ -40,6 +40,12 @@ CLI summaries run in a temporary directory with model tools disabled and session
 
 **Usage** shows the selected chat's recorded token counts, Codex account usage and quota reset times, and Claude Desktop's last cached plan percentages. The Claude usage page opens from the panel for reset times that aren't in its local cache.
 
+## Assistant conversations
+
+Open an assistant to search previous Windows Dock conversations or start a new one. The provider and model are selected from one menu inside the message box. Use the attachment button or drop in a file to preview it before sending. Text and Word documents can be used with any assistant provider. PDF, PNG, and JPEG uploads require an eligible ChatGPT plan, Claude API, or Gemini model.
+
+Choose **Chat storage folder** in the sidebar to put the chat library under a folder you select. Windows Dock copies past chats, attachment copies, and exports into the new library. Each conversation has its own transcript, attachments, and files. Named text and code files are saved automatically when **Auto-save named files** is enabled. The controls beside replies let you save a Markdown copy or individual code blocks.
+
 ## Widgets
 
 Choose **Widgets** from the dashboard or the compact Coding chats panel. Pick one live widget from the **Pinned** menu, then star up to four other widgets for compact shortcuts below it and on Overview. If you pin a favorite, the previous pinned widget takes its shortcut slot. Press **Ctrl+K** in any dock panel to search open windows, chats, widgets, apps, workspaces, and settings. Type `window:` to limit the search to open windows on your current desktop. Use **↑** and **↓** to select a result, **Enter** to open it, and **Esc** to close the popup.

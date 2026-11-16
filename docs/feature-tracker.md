@@ -1,5 +1,24 @@
 # Feature tracker
 
+## Assistant chat history, attachments, and shared storage
+
+- Status: Built, verified, and installed.
+- Scope: Give Assistants a conversation layout with saved chats, file and image attachments, and a configurable directory for chat data and generated files.
+- Acceptance criteria: Previous dock conversations reopen and continue. Attachments can be reviewed before sending and survive with their conversation. The chosen directory holds transcripts, attachment copies, and exported files. Folder changes preserve existing chats. Unsupported providers and file types surface a clear error.
+- Implementation: Added a searchable conversation sidebar, Markdown replies, an anchored message box, file upload and preview, and a shared chat folder. Selecting a new folder copies the current library and retains the original copy. Conversations store their transcript, original attachments, and output files together. Named text and code files are saved automatically unless switched off. Replies and code blocks can also be saved individually.
+- Verification: All 86 tests passed. Tests covered folder migration and failure recovery, media request formats, complete transcript history, and output name collisions. The Windows fixture reopened a saved chat, displayed its image, and saved a code block with matching bytes. The Release publish succeeded and the installed managed files matched the tested package.
+- Limitations: Image and PDF request formats were verified without live account credentials. Upload limits are four MB per file, six files per message, and ten MB combined for images and PDFs. History covers Windows Dock conversations saved by this version. The current Explorer session is still retrying native attachment.
+- Remaining work: Verify live image and PDF uploads with an eligible provider account.
+
+### Provider and model menu in the composer
+
+- Status: Built, verified, and installed.
+- Scope: Place provider and model selection behind one control in the message box, following the supplied composer reference.
+- Acceptance criteria: The control shows the current provider and model. One menu exposes both choices and the relevant account or API key controls. Changing either updates the composer without leaving the conversation.
+- Implementation: Moved the provider, model, account, and API key controls into one menu opened from the message box. The button displays the current provider and model beside Send.
+- Verification: The isolated Windows fixture changed the provider and model inside the same popup and confirmed that the composer showed both selected values.
+- Remaining work: None for the verified selection flow.
+
 ## Require the modified taskbar and integrate Widgets into Dashboard
 
 - Status: Widgets is integrated and verified. The installed controller is retrying native attachment in the current Explorer session.

@@ -192,7 +192,7 @@ internal static class ChatGptPlan
     }
 
     internal static async Task<string> SendAsync(PlanAccount account, string model, string instructions,
-        (bool User, string Text)[] turns, CancellationToken cancellation)
+        (bool User, string Text)[] turns, CancellationToken cancellation, IReadOnlyDictionary<int, ChatMedia[]>? media = null)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         timeout.CancelAfter(TimeSpan.FromSeconds(90));
@@ -202,7 +202,8 @@ internal static class ChatGptPlan
         request.Content = JsonContent.Create(new
         {
             model, instructions, store = false, stream = true,
-            input = turns.Select(turn => new { role = turn.User ? "user" : "assistant", content = turn.Text })
+            input = turns.Select((turn, index) => new { role = turn.User ? "user" : "assistant",
+                content = ChatMediaRequest.Content(AssistantProvider.ChatGptPlan, turn.Text, media?.GetValueOrDefault(index)) })
         });
         using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
         await EnsureResponseAsync(response, token);

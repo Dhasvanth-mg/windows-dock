@@ -683,7 +683,7 @@ public partial class DashboardWindow
     private (Window Window, StackPanel Content, CancellationToken Cancellation) CreateDockPanel(
         string title, string subtitle, double width, int icon, SolidColorBrush tint, bool widget = false,
         Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null,
-        DockSection? section = null)
+        DockSection? section = null, UIElement? body = null, double? height = null)
     {
         ParkToolPanel();
         ShowDockPanelHost();
@@ -723,14 +723,14 @@ public partial class DashboardWindow
         var dpi = VisualTreeHelper.GetDpi(this);
         var room = Math.Max(160, (DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - screen.Bounds.Top) /
             dpi.DpiScaleY - 12);
-        var panelHeight = title switch
+        var panelHeight = height ?? (title switch
         {
             "Assistants" => 302,
             "Widgets" => 558,
             "Notification summary" => 468,
             "Focus timer" => 218,
             _ => 436
-        };
+        });
         window = new Window
         {
             Owner = this, Title = title, Width = Math.Min(width, screen.WorkingArea.Width / dpi.DpiScaleX - 24),
@@ -758,7 +758,7 @@ public partial class DashboardWindow
         }, null, false);
         DockPanel.SetDock(footer, Dock.Bottom);
         frame.Children.Add(footer);
-        frame.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
+        frame.Children.Add(body ?? new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
             PanningMode = PanningMode.VerticalOnly });
         var card = Card(frame);
         card.CornerRadius = new CornerRadius(8);

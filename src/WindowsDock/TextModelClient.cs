@@ -35,7 +35,8 @@ internal static class TextModelClient
         => await SendChat(gemini ? AssistantProvider.Gemini : AssistantProvider.Groq, model, key, turns, cancellation, systemInstruction);
 
     internal static async Task<string> SendChat(AssistantProvider provider, string model, string key,
-        (bool User, string Text)[] turns, CancellationToken cancellation, string? systemInstruction = null)
+        (bool User, string Text)[] turns, CancellationToken cancellation, string? systemInstruction = null,
+        IReadOnlyDictionary<int, ChatMedia[]>? media = null)
     {
         var gemini = provider == AssistantProvider.Gemini;
         var url = provider switch
@@ -52,7 +53,8 @@ internal static class TextModelClient
             request.Headers.Add("x-goog-api-key", key);
             var body = new Dictionary<string, object>
             {
-                ["contents"] = turns.Select(turn => new { role = turn.User ? "user" : "model", parts = new[] { new { text = turn.Text } } }),
+                ["contents"] = turns.Select((turn, index) => new { role = turn.User ? "user" : "model",
+                    parts = ChatMediaRequest.Content(provider, turn.Text, media?.GetValueOrDefault(index)) }),
                 ["generationConfig"] = new { maxOutputTokens = 1024 }
             };
             if (systemInstruction != null)
@@ -67,7 +69,8 @@ internal static class TextModelClient
             {
                 model,
                 system = systemInstruction ?? "",
-                messages = turns.Select(turn => new { role = turn.User ? "user" : "assistant", content = turn.Text }),
+                messages = turns.Select((turn, index) => new { role = turn.User ? "user" : "assistant",
+                    content = ChatMediaRequest.Content(provider, turn.Text, media?.GetValueOrDefault(index)) }),
                 max_tokens = 1024
             });
         }
