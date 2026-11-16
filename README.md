@@ -6,13 +6,13 @@ Windows Dock styles Explorer's taskbar in place on Windows 11 x64 25H2 (build 26
 
 Keep the contents of the native publish directory together and run NativeTaskbar.exe. Click or pull up on the silver-and-amber Windows Dock icon to open Dashboard. Click the icon again to close Dashboard. Use the Windows Dock notification-area menu, the dashboard's Settings page, or `--restore <controller PID>` to restore the normal appearance.
 
-Swipe sideways with two fingers over Dashboard to switch one tab at a time. Scroll up with two fingers to open Widgets. If the content under the pointer can scroll up, finish scrolling to the top and start a fresh upward gesture. Choose **Dashboard** in Widgets to return to your selected tab.
+Swipe sideways with two fingers over Dashboard to switch one tab at a time. Click the **Widgets** tab or scroll up with two fingers at the top of a Dashboard page to open Widgets in the same window. The pinned widget and favorites appear above the catalog.
 
-At the bottom of Widgets, Coding chats, and Assistants, click a section or drag the handle sideways to switch. A horizontal scroll over that handle also switches sections. Drag down to close the panel. On a tool or conversation with a Back button, drag the handle right to go back.
+At the bottom of Coding chats and Assistants, click a section or drag the handle sideways to switch. A horizontal scroll over that handle also switches sections. Drag down to close the panel. On a tool or conversation with a Back button, drag the handle right to go back.
 
-Use one taskbar appearance module at a time. Windows Dock falls back to its tray icon and shortcuts if Explorer has a different appearance owner or its layout cannot be styled. Click the tray icon to show Dashboard. Panels open just above the taskbar. Windows Dock holds auto-hide off while a panel is open and restores the previous setting when the panel closes. If Explorer restarts, run the controller again.
+Use one taskbar appearance module at a time. Standard startup waits for the modified taskbar and retries the connection if Explorer is still starting or another module owns the appearance. After an Explorer restart, Windows Dock starts a fresh controller. Panels open above the taskbar. Windows Dock holds auto-hide off while a panel is open and restores the previous setting when the panel closes.
 
-The dashboard opens on demand and exits about 20 seconds after hiding once its jobs have finished. A smaller background process keeps coding chat status and active focus timers current. Dashboard tabs and popups keep their size while content changes and scrolls. Use **Settings → Start at sign-in** to start the controller automatically in the current mode.
+The dashboard opens on demand and exits about 20 seconds after hiding once its jobs have finished. A smaller background process keeps coding chat status and active focus timers current. Dashboard tabs and popups keep their size while content changes and scrolls. Use **Start at sign-in** in Dashboard to start the native controller automatically.
 
 The dashboard includes media sessions and volume, a calendar, local reminders, a focus timer, system statistics, a file shelf, a wallpaper picker, and weather. **Controls** toggles Wi-Fi and Bluetooth when Windows grants radio access. Use the network and Bluetooth device links to choose a network or pair a device. Weather remembers your chosen city or rounded Windows location and has a °F/°C switch. Forecasts use Open-Meteo. In the Audio tab, the lyrics button sends track metadata to LRCLIB to look up line-synced lyrics.
 
@@ -63,7 +63,7 @@ Any of the four dock assistants can look up dock state, change volume or output,
 
 Ask Orbit to hand off substantial work. Lark handles research, Scribe drafts and edits, Fern plans, and Bolt codes. Confirm the brief to start it, then open **Jobs** to check its progress after closing the chat. Bolt asks for a local Git workspace and uses the signed-in Codex CLI. A standalone CLI can run workspace commands. When the Windows command runner cannot start, Bolt can still read and edit project text files through the dock's workspace editor. The job result identifies shell checks that remain. Up to two jobs can run at once. A job that loses its dock process is marked interrupted the next time you open Jobs.
 
-External coding agents can connect over stdio. Replace the executable path with your installed path and add `--tray` after `--dock-mcp` when you use tray mode.
+External coding agents can connect over stdio. Replace the executable path with your installed path.
 
 ```powershell
 codex mcp add windows-dock -- "C:\Path\To\WindowsDock.exe" --dock-mcp

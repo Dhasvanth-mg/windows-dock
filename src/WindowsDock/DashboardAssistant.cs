@@ -625,7 +625,7 @@ public partial class DashboardWindow
             status.Text = $"Waiting for {source.Label}…";
             try
             {
-                var response = await DockAssistantTurn.RunAsync(persona.Id, persona.Instructions, requestTurns, trayMode,
+                var response = await DockAssistantTurn.RunAsync(persona.Id, persona.Instructions, requestTurns,
                     SendToProvider, progress => status.Text = progress, request.Token, allowHandoff: persona.Id == "casual");
                 if (cancellation.IsCancellationRequested)
                     return;

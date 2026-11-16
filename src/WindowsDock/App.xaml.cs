@@ -101,13 +101,13 @@ internal static class DockEntryPoint
         if (args is ["--open"])
             return DockTaskbar.Open();
         if (args is ["--start-at-logon"] or ["--start-at-logon", "--tray"])
-            return DockStartup.Launch(args.Length == 2);
+            return DockStartup.Launch();
         if (args is ["--monitor", var controller] && int.TryParse(controller, out var pid) && pid > 0)
             return DockMonitor.Run(pid);
         if (args is ["--planner-mcp"])
             return PlannerMcp.Run();
         if (args is ["--dock-mcp"] or ["--dock-mcp", "--tray"])
-            return DockMcp.Run(args.Length == 2);
+            return DockMcp.Run();
         if (args is ["--agent-status", _] or ["--agent-status", _, "--approval"])
         {
             try { AgentSessions.Receive(args[1], Console.In, Console.Out, args.Length == 3); }

@@ -37,13 +37,13 @@ namespace
     class Watcher : public winrt::implements<Watcher, IVisualTreeServiceCallback2>
     {
     public:
-        Watcher(winrt::com_ptr<IXamlDiagnostics> diagnostics, DWORD controllerPid) : diagnostics(std::move(diagnostics)),
+        Watcher(winrt::com_ptr<IXamlDiagnostics> diagnostics, DWORD controllerPid, unsigned attempt) : diagnostics(std::move(diagnostics)),
             controllerPid(controllerPid),
             controller(OpenProcess(SYNCHRONIZE, FALSE, controllerPid)),
-            ready(OpenEventW(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Ready").c_str())),
-            restored(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Restored").c_str())),
-            blocked(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"AppearanceBlocked").c_str())),
-            stop(OpenEventW(SYNCHRONIZE, FALSE, SessionName(controllerPid, L"AppearanceStop").c_str())),
+            ready(OpenEventW(EVENT_MODIFY_STATE, FALSE, AppearanceName(controllerPid, attempt, L"Ready").c_str())),
+            restored(OpenEventW(EVENT_MODIFY_STATE, FALSE, AppearanceName(controllerPid, attempt, L"Restored").c_str())),
+            blocked(OpenEventW(EVENT_MODIFY_STATE, FALSE, AppearanceName(controllerPid, attempt, L"Blocked").c_str())),
+            stop(OpenEventW(SYNCHRONIZE, FALSE, AppearanceName(controllerPid, attempt, L"Stop").c_str())),
             dashboard(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Dashboard").c_str()))
         {
             if (!controller || !ready || !restored || !blocked || !stop || !dashboard)
@@ -56,43 +56,45 @@ namespace
             // A partial subscription can still deliver the primary taskbar callbacks. Let the controller
             // time out the connection, and keep the stop path alive for any work it has already queued.
             const auto result = service->AdviseVisualTreeChange(this);
+            countInitialElements = false;
             if (FAILED(result))
-                DockLog(L"explorer", L"The visual tree subscription was incomplete.", static_cast<unsigned long>(result));
+            {
+                const auto message = L"The visual tree subscription was incomplete after " +
+                    std::to_wstring(initialElements.load()) + L" element callbacks.";
+                DockLog(L"explorer", message.c_str(), static_cast<unsigned long>(result));
+            }
 
             const HANDLE signals[] = {stop.get(), controller.get()};
             WaitForMultipleObjects(ARRAYSIZE(signals), signals, FALSE, INFINITE);
             stopping = true;
+            const auto unadvised = service->UnadviseVisualTreeChange(this);
+            if (FAILED(unadvised))
+                DockLog(L"explorer", L"The visual tree subscription did not detach.", static_cast<unsigned long>(unadvised));
 
             DispatcherQueue queue{nullptr};
             {
                 std::scoped_lock guard(taskbarLock);
                 queue = taskbarQueue;
             }
-            if (queue)
-            {
-                queue.TryEnqueue([self = get_strong()]
+            if (!queue || !queue.TryEnqueue([self = get_strong()]
                 {
-                    if (!self->style)
-                        return;
                     self->style.reset();
                     SetEvent(self->restored.get());
-                });
-            }
-            service->UnadviseVisualTreeChange(this);
+                }))
+                SetEvent(restored.get());
         }
 
         HRESULT __stdcall OnVisualTreeChange(ParentChildRelation, VisualElement element,
             VisualMutationType change) noexcept override
         {
-            if (change != Add)
-                return S_OK;
-
             const DiagnosticString type{element.Type};
             const DiagnosticString name{element.Name};
             const DiagnosticString file{element.SrcInfo.FileName};
             const DiagnosticString hash{element.SrcInfo.Hash};
-            if (stopping)
+            if (change != Add || stopping)
                 return S_OK;
+            if (countInitialElements)
+                ++initialElements;
             try
             {
                 if (type.View() == L"Windows.UI.Xaml.Hosting.DesktopWindowXamlSource")
@@ -139,14 +141,18 @@ namespace
             const auto source = CurrentTaskbarSource(root);
             if (!source)
                 return;
+            QueueStyle(frame, root, queue);
+        }
 
+        void QueueStyle(xaml::FrameworkElement const& frame, controls::Grid const& root, DispatcherQueue const& queue)
+        {
             queue.TryEnqueue([self = get_strong(), frame = winrt::make_weak(frame), root = winrt::make_weak(root)]
             {
-                if (self->IsStopping() || self->style || WaitForSingleObject(self->ready.get(), 0) == WAIT_OBJECT_0)
+                if (self->IsStopping())
                     return;
                 const auto grid = root.get();
                 const auto apps = frame.get();
-                if (!grid || !apps)
+                if (!grid || !apps || !self->CurrentTaskbarSource(grid) || self->styledRoot.get() == grid)
                     return;
 
                 try
@@ -179,11 +185,13 @@ namespace
                             return;
                         self->taskbarQueue = DispatcherQueue::GetForCurrentThread();
                     }
+                    self->style.reset();
                     auto next = std::make_unique<TaskbarStyle>(grid, self->dashboard, self->controllerPid);
                     next->Apply(apps, tray);
                     if (self->IsStopping())
                         return;
                     self->style = std::move(next);
+                    self->styledRoot = winrt::make_weak(grid);
                     SetEvent(self->ready.get());
                     DockLog(L"explorer", L"Taskbar styled.");
                 }
@@ -206,8 +214,24 @@ namespace
                 return;
             if (GetAncestor(window, GA_ROOT) != FindWindowW(L"Shell_TrayWnd", nullptr))
                 return;
-            std::scoped_lock guard(taskbarLock);
-            primarySources[GetCurrentThreadId()] = winrt::make_weak(source);
+            {
+                std::scoped_lock guard(taskbarLock);
+                primarySources[GetCurrentThreadId()] = winrt::make_weak(source);
+            }
+            auto root = source.Content().try_as<controls::Grid>();
+            auto queue = DispatcherQueue::GetForCurrentThread();
+            if (!root || !queue)
+                return;
+            for (auto const& child : root.Children())
+            {
+                if (winrt::get_class_name(child) == L"Taskbar.TaskbarFrame")
+                {
+                    auto frame = child.try_as<xaml::FrameworkElement>();
+                    if (frame)
+                        QueueStyle(frame, root, queue);
+                    return;
+                }
+            }
         }
 
         DesktopWindowXamlSource CurrentTaskbarSource(controls::Grid const& grid)
@@ -248,9 +272,12 @@ namespace
         DWORD controllerPid;
         winrt::handle controller, ready, restored, blocked, stop, dashboard;
         std::atomic<bool> stopping{};
+        std::atomic<bool> countInitialElements{true};
+        std::atomic<unsigned> initialElements{};
         std::mutex taskbarLock;
         DispatcherQueue taskbarQueue{nullptr};
         std::map<DWORD, winrt::weak_ref<DesktopWindowXamlSource>> primarySources;
+        winrt::weak_ref<controls::Grid> styledRoot;
         std::unique_ptr<TaskbarStyle> style;
     };
 
@@ -271,13 +298,28 @@ namespace
                 const std::wstring input(config.View());
                 wchar_t* end = nullptr;
                 const auto pid = std::wcstoul(input.c_str(), &end, 10);
-                if (!pid || *end != L'\0')
+                if (!pid || *end != L':')
+                    return E_INVALIDARG;
+                const auto attempt = std::wcstoul(end + 1, &end, 10);
+                if (!attempt || *end != L'\0')
                     return E_INVALIDARG;
 
-                auto watcher = winrt::make_self<Watcher>(diagnostics, pid);
-                std::thread([watcher]
+                auto watcher = winrt::make_self<Watcher>(diagnostics, pid, attempt);
+                std::thread([watcher]() mutable
                 {
-                    try { watcher->Run(); } catch (...) {}
+                    const auto apartment = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+                    if (FAILED(apartment))
+                    {
+                        DockLog(L"explorer", L"Could not initialize the taskbar watcher thread.", static_cast<unsigned long>(apartment));
+                        return;
+                    }
+                    try { watcher->Run(); }
+                    catch (...)
+                    {
+                        DockLog(L"explorer", L"Taskbar watcher stopped.", static_cast<unsigned long>(winrt::to_hresult().value));
+                    }
+                    watcher = nullptr;
+                    CoUninitialize();
                 }).detach();
                 return S_OK;
             }

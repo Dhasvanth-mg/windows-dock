@@ -10,7 +10,7 @@ namespace WindowsDock;
 
 internal static class DockMcp
 {
-    internal static int Run(bool trayMode)
+    internal static int Run()
     {
         var options = new McpServerOptions
         {
@@ -49,7 +49,7 @@ internal static class DockMcp
             token.ThrowIfCancellationRequested();
             try
             {
-                var planned = DockActions.Plan(action, arguments, trayMode);
+                var planned = DockActions.Plan(action, arguments);
                 if (!Confirm(planned.Preview + "\n\nAllow this change?"))
                     return "The user did not approve the change.";
                 token.ThrowIfCancellationRequested();

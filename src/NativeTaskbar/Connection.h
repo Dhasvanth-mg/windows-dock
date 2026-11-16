@@ -11,4 +11,9 @@ inline std::wstring SessionName(DWORD controllerPid, const wchar_t* name)
     return L"Local\\WindowsDock.NativeTaskbar." + std::to_wstring(controllerPid) + L"." + name;
 }
 
+inline std::wstring AppearanceName(DWORD controllerPid, unsigned attempt, const wchar_t* name)
+{
+    return SessionName(controllerPid, L"Appearance") + L"." + std::to_wstring(attempt) + L"." + name;
+}
+
 inline constexpr unsigned TestedWindowsBuild = 26200;

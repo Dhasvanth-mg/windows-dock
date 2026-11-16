@@ -279,7 +279,7 @@ public partial class DashboardWindow
         var startup = Switch("Start at sign-in", DockStartup.Enabled());
         startup.Click += (_, _) =>
         {
-            try { DockStartup.Set(startup.IsChecked == true, trayMode); }
+            try { DockStartup.Set(startup.IsChecked == true); }
             catch (Exception error) when (DockActions.IsActionError(error))
             {
                 startup.IsChecked = DockStartup.Enabled();

@@ -32,7 +32,7 @@ internal static class DockActions
         Widget IDs: audio, audio-presets, meetings, clipboard, github, workspaces, downloads, focus, notifications, assistant, activity, jobs.
         """;
 
-    internal static DockAction Plan(string name, JsonElement args, bool trayMode)
+    internal static DockAction Plan(string name, JsonElement args)
     {
         if (args.ValueKind != JsonValueKind.Object)
             throw new ArgumentException("Dock action arguments must be an object.");
@@ -110,7 +110,7 @@ internal static class DockActions
                 var startup = Boolean(args, "enabled");
                 return Local(name, startup ? "Start Windows Dock at Windows sign-in" : "Remove Windows Dock from sign-in startup", () =>
                 {
-                    DockStartup.Set(startup, trayMode);
+                    DockStartup.Set(startup);
                     return startup ? "Windows Dock is registered to start at sign-in." : "Windows Dock was removed from sign-in startup.";
                 });
             case "pin_widget":

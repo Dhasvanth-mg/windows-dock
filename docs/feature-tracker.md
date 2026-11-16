@@ -2,10 +2,21 @@
 
 ## Require the modified taskbar and integrate Widgets into Dashboard
 
-- Status: In progress.
+- Status: Widgets is integrated and verified. The installed controller is retrying native attachment in the current Explorer session.
 - Scope: Run Windows Dock on the modified native taskbar and put Widgets in the main Dashboard window.
-- Acceptance criteria: Normal launch attaches the modified taskbar and retains it across dock restarts. Attachment problems are surfaced and retried without switching to tray mode. The Widgets button, tab, gestures, and return actions navigate within Dashboard. Existing pinned widgets and favorites carry over.
-- Remaining work: Diagnose attachment in the current Explorer session, implement native startup and inline Widgets, then build and verify the installed result.
+- Acceptance criteria: Normal launch attaches the modified taskbar and retains it across dock restarts. Attachment problems are surfaced and retried without switching to tray mode. The Widgets tab, gestures, and return actions navigate within Dashboard. Existing pinned widgets and favorites carry over.
+- Implementation: Widgets now renders in Dashboard with the pin, favorites, and full catalog. Standard launch and sign-in use the native controller. Native startup retries taskbar attachment, backs off between attempts, and keeps separate readiness and shutdown signals for each connection. The controller relaunches after Explorer exits. The watcher detaches before acknowledging restoration.
+- Verification: All 80 tests passed in the working tree and staged snapshot, and the x64 controller and managed Release publish built. The desktop check opened Widgets in the same Dashboard window and confirmed the saved pin and four favorites. The installed native-only controller stopped cleanly and relaunched into retries without creating a tray companion.
+- Limitations: Explorer 4200 returned `0x8000FFFF` with zero visual-tree callbacks on all three available connections. Native launcher rendering, the taskbar status row, and recovery after an Explorer exit require testing in a fresh shell session.
+- Remaining work: Confirm native attachment after Windows sign-in refreshes Explorer.
+
+### Continue the interrupted dock work
+
+- Status: Reviewed, implemented, and deployed. Native attachment remains blocked in the current shell.
+- Scope: Review the recent commits and unfinished changes, then continue the modified taskbar and inline Widgets work from the current checkout.
+- Acceptance criteria: Preserve the recent redesign and weather changes. Build and verify Widgets in Dashboard. Verify normal startup keeps trying for the modified taskbar and records any shell attachment failure.
+- Outcome: Continued from the committed redesign and weather changes, verified inline Widgets, and installed the native-only startup change. The separate drafts for assistant history and Markdown remain local.
+- Remaining work: Verify the native launcher in a fresh Explorer session.
 
 ## Restart the installed dock
 

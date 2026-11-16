@@ -14,17 +14,17 @@ internal static class DockTaskbar
     private const string ControllerClass = "WindowsDockNativeController";
     private const string ControllerMutex = @"Local\WindowsDock.NativeTaskbar.Controller";
 
-    internal static bool ShellReady() => FindWindowW("Shell_TrayWnd", null) != 0;
-
     internal static int Open()
     {
-        var result = StartController(trayMode: !DockStartup.UseNativeMode(), openDashboard: true);
+        var result = StartController(openDashboard: true);
         if (result != 0)
-            MessageBox.Show("Windows Dock could not start. Check that both executables are in the same folder.", "Windows Dock");
+            MessageBox.Show(ControllerPending()
+                ? "Windows Dock is waiting for Explorer’s taskbar and will retry automatically."
+                : "Windows Dock could not start the modified taskbar. See native.log for details.", "Windows Dock");
         return result;
     }
 
-    internal static int StartController(bool trayMode, bool openDashboard)
+    internal static int StartController(bool openDashboard)
     {
         if (Ready())
             return 0;
@@ -44,7 +44,7 @@ internal static class DockTaskbar
                     if (attempted)
                         break;
                     attempted = true;
-                    process = Process.Start(new ProcessStartInfo(controller, trayMode ? "--tray" : "")
+                    process = Process.Start(new ProcessStartInfo(controller, openDashboard ? "--open" : "")
                     {
                         WorkingDirectory = AppContext.BaseDirectory,
                         UseShellExecute = false,
@@ -67,7 +67,7 @@ internal static class DockTaskbar
         }
         finally { process?.Dispose(); }
 
-        bool Ready() => openDashboard ? SignalLauncher() : ReadyController() != 0;
+        bool Ready() => openDashboard ? SignalLauncher() : ControllerPending();
     }
 
     private static bool ControllerPending()

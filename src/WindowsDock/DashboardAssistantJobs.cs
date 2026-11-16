@@ -158,7 +158,7 @@ public partial class DashboardWindow
             {
                 var result = handoff.Role == "coding"
                     ? new DockAssistantReply(await Task.Run(() => DockCodingJob.RunAsync(workspace!, handoff.Task, request.Token), request.Token), [])
-                    : await DockAssistantTurn.RunAsync(handoff.Role, handoff.Instructions, [(true, handoff.Task)], trayMode,
+                    : await DockAssistantTurn.RunAsync(handoff.Role, handoff.Instructions, [(true, handoff.Task)],
                         send!, _ => { }, request.Token);
                 request.Token.ThrowIfCancellationRequested();
                 if (string.IsNullOrWhiteSpace(result.Text))
@@ -269,7 +269,7 @@ public partial class DashboardWindow
             try
             {
                 using var json = JsonDocument.Parse(job.Proposal);
-                var planned = DockAssistantTurn.PlanActions(json.RootElement, trayMode);
+                var planned = DockAssistantTurn.PlanActions(json.RootElement);
                 foreach (var action in planned)
                     content.Children.Add(Text(action.Preview, 12, AssistantInk));
                 var apply = ActionButton("Apply changes");

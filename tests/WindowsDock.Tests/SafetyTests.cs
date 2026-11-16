@@ -77,14 +77,14 @@ public sealed class SafetyTests
     public void InvalidDockActionsAreRejectedBeforeAnythingRuns(string name, string json)
     {
         using var document = JsonDocument.Parse(json);
-        Assert.Throws<ArgumentException>(() => DockActions.Plan(name, document.RootElement, false));
+        Assert.Throws<ArgumentException>(() => DockActions.Plan(name, document.RootElement));
     }
 
     [Fact]
     public void ValidDockActionIsPlannedWithoutRunning()
     {
         using var document = JsonDocument.Parse("{\"percent\":40}");
-        var plan = DockActions.Plan("set_volume", document.RootElement, false);
+        var plan = DockActions.Plan("set_volume", document.RootElement);
         Assert.Equal("Set output volume to 40%", plan.Preview);
     }
 }

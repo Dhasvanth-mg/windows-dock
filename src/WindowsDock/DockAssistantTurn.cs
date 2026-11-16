@@ -29,7 +29,6 @@ internal static class DockAssistantTurn
         string personaId,
         string personaInstructions,
         IReadOnlyList<(bool User, string Text)> turns,
-        bool trayMode,
         Func<string, IReadOnlyList<(bool User, string Text)>, CancellationToken, Task<string>> send,
         Action<string> progress,
         CancellationToken token,
@@ -74,7 +73,7 @@ internal static class DockAssistantTurn
             switch (DockActions.String(root, "dock", 8))
             {
                 case "apply":
-                    return new("Review these changes before applying them.", PlanActions(root, trayMode), Proposal: root.GetRawText());
+                    return new("Review these changes before applying them.", PlanActions(root), Proposal: root.GetRawText());
                 case "handoff" when allowHandoff:
                     var role = DockActions.String(root, "role", 20);
                     if (role is not ("research" or "writing" or "housekeeping" or "coding"))
@@ -120,14 +119,14 @@ internal static class DockAssistantTurn
         return new("", []);
     }
 
-    internal static DockAction[] PlanActions(JsonElement root, bool trayMode)
+    internal static DockAction[] PlanActions(JsonElement root)
     {
         if (!root.TryGetProperty("actions", out var actions) || actions.ValueKind != JsonValueKind.Array ||
             actions.GetArrayLength() is < 1 or > 4)
             throw new ArgumentException("A dock proposal must contain one to four changes.");
         return actions.EnumerateArray().Select(item => item.ValueKind == JsonValueKind.Object &&
             item.TryGetProperty("args", out var args)
-                ? DockActions.Plan(DockActions.String(item, "name", 40), args, trayMode)
+                ? DockActions.Plan(DockActions.String(item, "name", 40), args)
                 : throw new ArgumentException("A dock proposal is missing action arguments.")).ToArray();
     }
 
