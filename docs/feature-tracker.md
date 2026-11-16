@@ -139,6 +139,15 @@
 - Verification: The native Release build compiled in a scratch directory. The module was not loaded into Explorer by this session.
 - Remaining work: Confirm the tooltip on the real taskbar once native attachment works again.
 
+### More weather detail, and a Reddit reference
+
+- Status: Weather detail built, rendered, and committed (`f5e0c11`). The Reddit post could not be read.
+- Scope: Messages received during the redesign. Fill the space under the forecast on Today with humidity, chance of rain, chance of snow, and other useful readings. Use a linked Reddit post about a 1.5 MB Windows taskbar replacement as a reference if needed.
+- Implementation: The Open-Meteo request now also asks for feels-like temperature, humidity, wind, chance of precipitation, snowfall, UV index, sunrise and sunset. Today shows them in two short rows under the five-day strip, converted with the same °F and °C switch. The one precipitation chance is labelled Snow, with the expected snowfall, when snow is what is forecast, and Rain otherwise.
+- Verification: Rendered on Today with a live forecast. 80 of 80 tests pass.
+- Limitations: Open-Meteo gives a single chance of precipitation, not separate rain and snow chances. Reddit answered the headless browser with a network-security block, which was not worked around, so nothing from that post was used.
+- Remaining work: Read the post if the owner pastes its text or the project's repository link.
+
 ### Assistant chats like ChatGPT or Claude, files, history, memory, fewer popups
 
 - Status: Not started.
