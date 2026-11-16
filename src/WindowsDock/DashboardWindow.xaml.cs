@@ -54,7 +54,7 @@ public partial class DashboardWindow : Window
         idleExit.Tick += (_, _) =>
         {
             idleExit.Stop();
-            if (!IsVisible && runningJobs.Count == 0)
+            if (!IsVisible && !HasActiveWork)
                 Application.Current.Shutdown();
         };
         if (releaseWhenIdle && deferPage)
@@ -75,6 +75,9 @@ public partial class DashboardWindow : Window
         AddTab(DashboardPage.Settings, "Settings");
         HeaderMark.Content = DockTaskbar.IconBadge(30);
         HeaderActions.Children.Add(WidgetLauncherButton());
+        dashboardPanelSwitcher = MakePanelSwitcher();
+        HeaderActions.Children.Add(dashboardPanelSwitcher);
+        HeaderActions.Children.Add(LockPanelButton("Dashboard", () => dashboardLocked, value => dashboardLocked = value));
         HeaderActions.Children.Add(IconButton(0xE711, "Close dashboard", Dismiss));
 
         Shell.RenderTransform = revealOffset;
@@ -97,10 +100,12 @@ public partial class DashboardWindow : Window
                 ReportDockVisibility(false);
                 ticker.Stop();
                 agentTicker.Stop();
-                if (releaseWhenIdle && runningJobs.Count == 0)
+                if (releaseWhenIdle && !HasActiveWork)
                     idleExit.Start();
                 return;
             }
+            if (IsHitTestVisible && !compactAgents)
+                dashboardOpen = true;
             idleExit.Stop();
             lastReveal = Environment.TickCount64;
             Dispatcher.InvokeAsync(() =>
@@ -158,6 +163,19 @@ public partial class DashboardWindow : Window
                 Environment.TickCount64 - lastReveal > 200)
                 Dismiss();
         });
+        Closing += (_, args) =>
+        {
+            if (closingHost)
+                return;
+            if (dashboardLocked || codingPanelLocked || openPanels.Any(panel => panel.Locked) || HasActiveWork)
+            {
+                args.Cancel = true;
+                // The window manager is already closing this HWND. Resolve the logical close after it returns.
+                Dispatcher.BeginInvoke(CloseDockSurface);
+            }
+            else
+                closingHost = true;
+        };
         Closed += (_, _) =>
         {
             closed = true;
@@ -185,16 +203,7 @@ public partial class DashboardWindow : Window
             ShowPage(page);
     }
 
-    private void Dismiss()
-    {
-        agentPanel?.Close();
-        if (controllerPid > 0)
-            Hide();
-        else if (runningJobs.Count > 0)
-            WindowState = WindowState.Minimized;
-        else
-            Close();
-    }
+    private void Dismiss() => CloseDockSurface();
 
     internal void ShowDockPanelHost()
     {
@@ -252,7 +261,7 @@ public partial class DashboardWindow : Window
             PageScroll.ScrollToTop();
         pageInitialized = true;
         currentPage = page;
-        if (page != DashboardPage.Agents)
+        if (page != DashboardPage.Agents && !codingPanelLocked)
         {
             codingWorkspace?.Dispose();
             codingWorkspace = null;
@@ -356,8 +365,10 @@ public partial class DashboardWindow : Window
 
     internal void OpenMainDashboard()
     {
-        agentPanel?.Close();
+        ParkToolPanel();
+        dashboardOpen = true;
         SetDashboardSurface(true);
+        UpdatePanelSwitchers();
         if (!compactAgents && pageInitialized)
         {
             if (currentPage == DashboardPage.Home)

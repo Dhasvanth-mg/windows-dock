@@ -16,7 +16,6 @@ public partial class DashboardWindow
 
     private void OpenAssistantQuickAction(int slot)
     {
-        agentPanel?.Close();
         assistantRole = slot;
         var persona = AssistantPersonas.All[slot];
         var chat = assistantConversations[slot];

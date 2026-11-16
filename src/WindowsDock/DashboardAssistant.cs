@@ -41,11 +41,35 @@ public partial class DashboardWindow
     private readonly System.Security.SecureString?[] assistantKeys = new System.Security.SecureString?[AssistantSources.Length];
     private readonly string?[] assistantModels = new string?[AssistantSources.Length];
     private readonly Dictionary<string, DateTimeOffset> assistantPlanCooldowns = new();
+    private readonly PlanSignIn planSignIn = new();
     private int assistantRole = 3;
+
+    private bool HasActiveWork => runningJobs.Count != 0 || planSignIn.Active != null;
+
+    private Task<PlanAccount> StartPlanSignIn(PlanAccount? account)
+    {
+        if (planSignIn.Active is { } active)
+            return active;
+        var attempt = planSignIn.Start(account, lifetime.Token, ChatGptPlan.ConnectAsync);
+        _ = ResumeIdleAfterAsync(attempt);
+        return attempt;
+
+        async Task ResumeIdleAfterAsync(Task<PlanAccount> signIn)
+        {
+            try { await signIn; }
+            catch (Exception error) when (error is PlanException or OperationCanceledException or HttpRequestException or
+                IOException or JsonException or FormatException or UnauthorizedAccessException or
+                System.Security.Cryptography.CryptographicException or System.ComponentModel.Win32Exception or System.Net.Sockets.SocketException) { }
+            finally
+            {
+                if (releaseWhenIdle && !closed && !IsVisible && !HasActiveWork)
+                    idleExit.Start();
+            }
+        }
+    }
 
     private void OpenAssistantConversation(int slot)
     {
-        agentPanel?.Close();
         assistantRole = slot;
         ShowAssistantWidget();
     }
@@ -152,6 +176,7 @@ public partial class DashboardWindow
         cancel.Margin = new Thickness(0, 0, 5, 0);
         cancel.Visibility = Visibility.Collapsed;
         CancellationTokenSource? pending = null;
+        var watchingSignIn = false;
         var updating = false;
         var busy = false;
         var catalog = new Dictionary<string, PlanModel[]>();
@@ -194,6 +219,7 @@ public partial class DashboardWindow
             {
                 chat.SourceIndex = providers.SelectedIndex;
                 SetProvider();
+                WatchActiveSignIn();
             }
         };
         accounts.SelectionChanged += (_, _) =>
@@ -205,10 +231,16 @@ public partial class DashboardWindow
                 _ = LoadModelsAsync();
             }
         };
-        connect.Click += async (_, _) => await ConnectAsync(accounts.SelectedItem as PlanAccount);
-        addAccount.Click += async (_, _) => await ConnectAsync(null);
+        connect.Click += async (_, _) => await WatchSignInAsync(StartPlanSignIn(accounts.SelectedItem as PlanAccount));
+        addAccount.Click += async (_, _) => await WatchSignInAsync(StartPlanSignIn(null));
         disconnect.Click += async (_, _) => await DisconnectAsync();
-        cancel.Click += (_, _) => pending?.Cancel();
+        cancel.Click += (_, _) =>
+        {
+            if (watchingSignIn)
+                planSignIn.Cancel();
+            else
+                pending?.Cancel();
+        };
         send.Click += async (_, _) => await SendAsync();
         prompt.PreviewKeyDown += async (_, args) =>
         {
@@ -236,6 +268,7 @@ public partial class DashboardWindow
         SetBusy(false);
         window.Show();
         cooldownTimer.Start();
+        WatchActiveSignIn();
 
         StackPanel Labeled(string label, Control control)
         {
@@ -336,14 +369,22 @@ public partial class DashboardWindow
                 SetBusy(busy);
         }
 
-        async Task ConnectAsync(PlanAccount? account)
+        void WatchActiveSignIn()
         {
-            using var request = BeginRequest();
+            if (!busy && AssistantSources[chat.SourceIndex].Provider == AssistantProvider.ChatGptPlan &&
+                planSignIn.Active is { } attempt)
+                _ = WatchSignInAsync(attempt);
+        }
+
+        async Task WatchSignInAsync(Task<PlanAccount> attempt)
+        {
+            watchingSignIn = busy = true;
+            SetBusy(true);
             var firstConnection = ChatGptPlan.Load().Length == 0;
             status.Text = "Complete sign-in and approve plan usage in your browser.";
             try
             {
-                var connected = await ChatGptPlan.ConnectAsync(account, request.Token);
+                var connected = await attempt.WaitAsync(cancellation);
                 if (cancellation.IsCancellationRequested)
                     return;
                 preferred = connected.ClientId;
@@ -356,11 +397,17 @@ public partial class DashboardWindow
                     status.Text = "You’re using your ChatGPT plan. Eligible messages use your allowance or credits, as configured under Manage usage.";
             }
             catch (PlanException error) { status.Text = error.Message; }
-            catch (OperationCanceledException) { status.Text = "Sign-in canceled or timed out."; }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+            catch (OperationCanceledException) { status.Text = "Sign-in canceled."; }
             catch (Exception error) when (error is HttpRequestException or IOException or JsonException or FormatException or
-                UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or System.ComponentModel.Win32Exception)
+                UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or System.ComponentModel.Win32Exception
+                or System.Net.Sockets.SocketException)
             { status.Text = "Could not connect your ChatGPT account."; }
-            finally { FinishRequest(); }
+            finally
+            {
+                watchingSignIn = false;
+                FinishRequest();
+            }
         }
 
         async Task DisconnectAsync()

@@ -252,13 +252,7 @@ public partial class DashboardWindow
 
     private void OpenWidgetPage(DashboardPage page)
     {
-        agentPanel?.Close();
-        SetDashboardSurface(true);
-        if (compactAgents)
-        {
-            compactAgents = false;
-            ConfigureWidth();
-        }
+        OpenMainDashboard();
         ShowPage(page);
     }
 

@@ -26,6 +26,29 @@ internal sealed class PlanException(string message, bool canFallback = false) : 
     internal bool CanFallback { get; } = canFallback;
 }
 
+internal sealed class PlanSignIn
+{
+    private Task<PlanAccount>? attempt;
+    private CancellationTokenSource? cancellation;
+
+    internal Task<PlanAccount>? Active => attempt is { IsCompleted: false } ? attempt : null;
+
+    internal Task<PlanAccount> Start(PlanAccount? account, CancellationToken dockLifetime,
+        Func<PlanAccount?, CancellationToken, Task<PlanAccount>> connect) =>
+        Active ?? (attempt = RunAsync(account, dockLifetime, connect));
+
+    internal void Cancel() => cancellation?.Cancel();
+
+    private async Task<PlanAccount> RunAsync(PlanAccount? account, CancellationToken dockLifetime,
+        Func<PlanAccount?, CancellationToken, Task<PlanAccount>> connect)
+    {
+        using var request = CancellationTokenSource.CreateLinkedTokenSource(dockLifetime);
+        cancellation = request;
+        try { return await connect(account, request.Token); }
+        finally { cancellation = null; }
+    }
+}
+
 internal static class ChatGptPlan
 {
     private const string Auth = "https://auth.openai.com";
@@ -70,8 +93,29 @@ internal static class ChatGptPlan
             host = "urn:uuid:" + Guid.NewGuid();
             DockData.Save("chatgpt-host.json", host);
         }
+        var (client, code, redirect, nonce, verifier) = await AuthorizeAsync(existing, host, ShellIntegration.Launch, cancellation);
+        using var token = await ExchangeAsync(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code", ["client_id"] = client, ["code"] = code,
+            ["code_verifier"] = verifier, ["redirect_uri"] = redirect, ["resource"] = Resource
+        }, cancellation);
+        var root = token.RootElement;
+        var identity = await ValidateIdentityAsync(String(root, "id_token") ?? "", client, nonce, cancellation);
+        var subject = String(identity, "sub");
+        if (string.IsNullOrEmpty(subject) || existing != null && existing.Subject != subject)
+            throw new PlanException("The browser returned a different ChatGPT account.");
+        var account = ReadTokens(root, new(client, subject, String(identity, "email") ?? "", "", "", default), requireScope: true);
+        await TokenGate.WaitAsync(cancellation);
+        try { Store(account); }
+        finally { TokenGate.Release(); }
+        return account;
+    }
+
+    internal static async Task<(string Client, string Code, string Redirect, string Nonce, string Verifier)> AuthorizeAsync(
+        PlanAccount? existing, string host, Action<string> openBrowser, CancellationToken cancellation)
+    {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        timeout.CancelAfter(TimeSpan.FromMinutes(3));
+        timeout.CancelAfter(TimeSpan.FromMinutes(5));
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var redirect = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}{CallbackPath}";
@@ -90,28 +134,19 @@ internal static class ChatGptPlan
             query["agent_name_hint"] = "Windows Dock";
         else if (!string.IsNullOrEmpty(existing.IdentityToken))
             query["id_token_hint"] = existing.IdentityToken;
-        ShellIntegration.Launch(Auth + "/api/accounts/authorize?" + string.Join("&",
+        openBrowser(Auth + "/api/accounts/authorize?" + string.Join("&",
             query.Select(item => item.Key + "=" + Uri.EscapeDataString(item.Value))));
-        var callback = await WaitForCallbackAsync(listener, state, timeout.Token);
+        (string Code, string? Client) callback;
+        try { callback = await WaitForCallbackAsync(listener, state, timeout.Token); }
+        catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
+        {
+            throw new PlanException("Sign-in timed out. Start a new sign-in from Windows Dock.");
+        }
         var client = existing?.ClientId ?? callback.Client;
         if (client == null || !client.StartsWith("oaiapp_", StringComparison.Ordinal) || client.Length > 256 ||
             callback.Client != null && callback.Client != client)
             throw new PlanException("ChatGPT did not return a valid app registration.");
-        using var token = await ExchangeAsync(new Dictionary<string, string>
-        {
-            ["grant_type"] = "authorization_code", ["client_id"] = client, ["code"] = callback.Code,
-            ["code_verifier"] = verifier, ["redirect_uri"] = redirect, ["resource"] = Resource
-        }, timeout.Token);
-        var root = token.RootElement;
-        var identity = await ValidateIdentityAsync(String(root, "id_token") ?? "", client, nonce, timeout.Token);
-        var subject = String(identity, "sub");
-        if (string.IsNullOrEmpty(subject) || existing != null && existing.Subject != subject)
-            throw new PlanException("The browser returned a different ChatGPT account.");
-        var account = ReadTokens(root, new(client, subject, String(identity, "email") ?? "", "", "", default), requireScope: true);
-        await TokenGate.WaitAsync(cancellation);
-        try { Store(account); }
-        finally { TokenGate.Release(); }
-        return account;
+        return (client, callback.Code, redirect, nonce, verifier);
     }
 
     internal static async Task<bool> DisconnectAsync(PlanAccount account, CancellationToken cancellation)

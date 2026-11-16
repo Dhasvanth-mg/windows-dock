@@ -21,15 +21,16 @@ public partial class DashboardWindow
 
     private CodingWorkspace ShowCodingWorkspace(bool compact = false)
     {
-        agentPanel?.Close();
+        ParkToolPanel();
         SetDashboardSurface(true);
         if (compact && !compactAgents)
         {
             compactAgents = true;
             ConfigureWidth();
         }
-        if (codingWorkspace == null)
+        if (codingWorkspace == null || currentPage != DashboardPage.Agents || !pageInitialized)
             ShowPage(DashboardPage.Agents);
+        UpdatePanelSwitchers();
         return codingWorkspace!;
     }
 
@@ -49,6 +50,8 @@ public partial class DashboardWindow
         private readonly TextBlock metadata;
         private readonly TextBlock notice;
         private readonly Button close;
+        private Button? panelSwitcher;
+        private Button? lockButton;
         private readonly ContentControl portrait = new();
         private readonly Button openChat;
         private readonly Button back;
@@ -204,6 +207,12 @@ public partial class DashboardWindow
             var bar = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
             DockPanel.SetDock(close, Dock.Right);
             bar.Children.Add(close);
+            lockButton = dock.LockPanelButton("Coding chats", () => dock.codingPanelLocked, value => dock.codingPanelLocked = value);
+            DockPanel.SetDock(lockButton, Dock.Right);
+            bar.Children.Add(lockButton);
+            panelSwitcher = dock.MakePanelSwitcher();
+            DockPanel.SetDock(panelSwitcher, Dock.Right);
+            bar.Children.Add(panelSwitcher);
             foreach (var (label, target) in new[] { ("Setup", Pane.Setup), ("Activity", Pane.Activity), ("Jobs", Pane.Jobs) })
             {
                 var button = dock.ActionButton(label, () => Navigate(target));
@@ -216,6 +225,12 @@ public partial class DashboardWindow
             heading.VerticalAlignment = VerticalAlignment.Center;
             bar.Children.Add(heading);
             return bar;
+        }
+
+        internal void ShowLockedPanelSwitcher(bool show)
+        {
+            if (panelSwitcher != null)
+                panelSwitcher.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         }
 
         internal void Refresh()
@@ -306,6 +321,8 @@ public partial class DashboardWindow
         private void UpdateHeader()
         {
             close.Visibility = dock.compactAgents ? Visibility.Visible : Visibility.Collapsed;
+            if (lockButton != null)
+                lockButton.Visibility = close.Visibility;
             title.Text = pane switch
             {
                 Pane.Setup => "Provider setup", Pane.Activity => "Activity", Pane.Jobs => jobTitle ?? "Assistant jobs",

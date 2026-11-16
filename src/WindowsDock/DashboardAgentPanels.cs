@@ -684,13 +684,13 @@ public partial class DashboardWindow
         Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null,
         DockSection? section = null)
     {
-        agentPanel?.Close();
-        if (controllerPid > 0)
-            SetDashboardSurface(false);
+        ParkToolPanel();
+        ShowDockPanelHost();
         var returnFocus = FocusManager.GetFocusedElement(this) as FrameworkElement;
         var panel = new StackPanel();
         var header = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
-        var close = IconButton(0xE711, "Close " + title.ToLowerInvariant(), () => agentPanel?.Close());
+        Window window = null!;
+        var close = IconButton(0xE711, "Close " + title.ToLowerInvariant(), () => window.Close());
         DockPanel.SetDock(close, Dock.Right);
         header.Children.Add(close);
         if (widget || backAction != null)
@@ -729,7 +729,7 @@ public partial class DashboardWindow
             "Focus timer" => 218,
             _ => 436
         };
-        var window = new Window
+        window = new Window
         {
             Owner = this, Title = title, Width = Math.Min(width, screen.WorkingArea.Width / dpi.DpiScaleX - 24),
             MaxHeight = room, Height = Math.Min(room, panelHeight), SizeToContent = SizeToContent.Manual,
@@ -765,8 +765,14 @@ public partial class DashboardWindow
 
         var lifetime = new CancellationTokenSource();
         var cancellation = lifetime.Token;
-        modalOpen = true;
-        agentPanel = window;
+        var entry = TrackPanel(window);
+        var lockButton = LockPanelButton(title, () => entry.Locked, value => entry.Locked = value);
+        DockPanel.SetDock(lockButton, Dock.Right);
+        header.Children.Insert(1, lockButton);
+        entry.Switcher = MakePanelSwitcher();
+        DockPanel.SetDock(entry.Switcher, Dock.Right);
+        header.Children.Insert(2, entry.Switcher);
+        UpdatePanelSwitchers();
         window.Loaded += (_, _) => Position();
         window.SizeChanged += (_, _) => Position();
         window.DpiChanged += (_, _) => window.Dispatcher.BeginInvoke(() => Position());
@@ -804,20 +810,7 @@ public partial class DashboardWindow
         {
             lifetime.Cancel();
             lifetime.Dispose();
-            agentPanel = null;
-            modalOpen = false;
-            if ((controllerPid > 0 || Owner is MainWindow) && !closed)
-                Dispatcher.BeginInvoke(() =>
-                {
-                    if (agentPanel == null && IsVisible && Opacity == 0)
-                        Hide();
-                }, System.Windows.Threading.DispatcherPriority.Background);
-            if (returnFocus != null && !closed)
-                Dispatcher.BeginInvoke(() =>
-                {
-                    if (agentPanel == null && IsActive && returnFocus.IsVisible)
-                        returnFocus.Focus();
-                }, System.Windows.Threading.DispatcherPriority.Input);
+            OnToolPanelClosed(entry, returnFocus);
         };
         var direction = nextDockSlide;
         var offset = new TranslateTransform();
