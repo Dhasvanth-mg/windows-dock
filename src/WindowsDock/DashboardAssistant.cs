@@ -24,7 +24,8 @@ public partial class DashboardWindow
         new("Grok · xAI", AssistantProvider.Grok, "grok-4.7", "XAI_API_KEY"),
         new("Groq", AssistantProvider.Groq, TextModelClient.GroqSummaryModel, "GROQ_API_KEY"),
         new("Codex CLI", AssistantProvider.CodexCli, "", null),
-        new("Claude Code CLI", AssistantProvider.ClaudeCode, "", null)
+        new("Claude Code CLI", AssistantProvider.ClaudeCode, "", null),
+        new("Ollama", AssistantProvider.Ollama, "", null)
     ];
     private sealed class AssistantConversation
     {
@@ -118,9 +119,17 @@ public partial class DashboardWindow
         Put(settings, Labeled("Provider", providers), 0);
         var manualModel = Labeled("Model ID", model);
         var planModel = Labeled("Model", planModels);
+        var localModels = new ComboBox();
+        AutomationProperties.SetName(localModels, "Ollama model");
+        var localModel = Labeled("Installed model", localModels);
+        var refreshLocalModels = ActionButton("Refresh models");
+        refreshLocalModels.HorizontalAlignment = HorizontalAlignment.Left;
+        refreshLocalModels.Margin = new Thickness(0, 5, 0, 0);
+        localModel.Children.Add(refreshLocalModels);
         var modelGroup = new StackPanel();
         modelGroup.Children.Add(manualModel);
         modelGroup.Children.Add(planModel);
+        modelGroup.Children.Add(localModel);
         Put(settings, modelGroup, 1);
         content.Children.Add(settings);
         var accountUI = new StackPanel { Margin = new Thickness(0, 7, 0, 0) };
@@ -177,6 +186,8 @@ public partial class DashboardWindow
         cancel.Visibility = Visibility.Collapsed;
         CancellationTokenSource? pending = null;
         var watchingSignIn = false;
+        var localModelLoad = 0;
+        var localModelStatus = "";
         var updating = false;
         var busy = false;
         var catalog = new Dictionary<string, PlanModel[]>();
@@ -233,6 +244,8 @@ public partial class DashboardWindow
         };
         connect.Click += async (_, _) => await WatchSignInAsync(StartPlanSignIn(accounts.SelectedItem as PlanAccount));
         addAccount.Click += async (_, _) => await WatchSignInAsync(StartPlanSignIn(null));
+        refreshLocalModels.Click += async (_, _) => await LoadLocalModelsAsync();
+        localModels.SelectionChanged += (_, _) => SetBusy(busy);
         disconnect.Click += async (_, _) => await DisconnectAsync();
         cancel.Click += (_, _) =>
         {
@@ -285,13 +298,16 @@ public partial class DashboardWindow
             var source = AssistantSources[index];
             var plan = source.Provider == AssistantProvider.ChatGptPlan;
             var cli = source.Provider is AssistantProvider.CodexCli or AssistantProvider.ClaudeCode;
+            var local = source.Provider == AssistantProvider.Ollama;
+            localModelLoad++;
             model.Text = assistantModels[index] ?? source.Model;
             model.Tag = cli ? "CLI default" : "";
             key.Clear();
             accountUI.Visibility = plan ? Visibility.Visible : Visibility.Collapsed;
             planModel.Visibility = plan ? Visibility.Visible : Visibility.Collapsed;
-            manualModel.Visibility = plan ? Visibility.Collapsed : Visibility.Visible;
-            credentials.Visibility = plan || cli ? Visibility.Collapsed : Visibility.Visible;
+            localModel.Visibility = local ? Visibility.Visible : Visibility.Collapsed;
+            manualModel.Visibility = plan || local ? Visibility.Collapsed : Visibility.Visible;
+            credentials.Visibility = source.Variable != null ? Visibility.Visible : Visibility.Collapsed;
             fallback.Visibility = Visibility.Collapsed;
             if (plan)
             {
@@ -300,6 +316,8 @@ public partial class DashboardWindow
             }
             SetDisclosure();
             SetBusy(busy);
+            if (local)
+                _ = LoadLocalModelsAsync();
         }
 
         void SetDisclosure()
@@ -309,6 +327,7 @@ public partial class DashboardWindow
                 ? (accounts.SelectedItem as PlanAccount)?.Refresh.Length > 0
                     ? "Using ChatGPT plan. Send shares the current role’s conversation with ChatGPT."
                     : "Connect an eligible ChatGPT account to use its plan allowance."
+                : source.Provider == AssistantProvider.Ollama ? localModelStatus
                 : source.Provider == AssistantProvider.ClaudeApi
                     ? "Send shares this conversation with Claude API. Claude Console bills API usage separately."
                     : source.Variable == null
@@ -318,11 +337,14 @@ public partial class DashboardWindow
 
         void SetBusy(bool busy)
         {
-            var isPlan = AssistantSources[chat.SourceIndex].Provider == AssistantProvider.ChatGptPlan;
+            var provider = AssistantSources[chat.SourceIndex].Provider;
+            var isPlan = provider == AssistantProvider.ChatGptPlan;
             var account = accounts.SelectedItem as PlanAccount;
             send.IsEnabled = !busy && (!isPlan || planModels.SelectedItem != null && account != null &&
-                assistantPlanCooldowns.GetValueOrDefault(account.ClientId) <= DateTimeOffset.UtcNow);
+                assistantPlanCooldowns.GetValueOrDefault(account.ClientId) <= DateTimeOffset.UtcNow) &&
+                (provider != AssistantProvider.Ollama || localModels.SelectedItem is string);
             providers.IsEnabled = model.IsEnabled = key.IsEnabled = accounts.IsEnabled = planModels.IsEnabled = !busy;
+            localModels.IsEnabled = refreshLocalModels.IsEnabled = !busy;
             addAccount.IsEnabled = connect.IsEnabled = !busy;
             disconnect.IsEnabled = !busy && (accounts.SelectedItem as PlanAccount)?.Refresh.Length > 0;
             foreach (Button button in starters.Children)
@@ -341,6 +363,34 @@ public partial class DashboardWindow
             accounts.SelectedItem = list.FirstOrDefault(item => item.ClientId == preferred) ?? list.FirstOrDefault();
             accountField.Visibility = addAccount.Visibility = disconnect.Visibility = list.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
             updating = false;
+        }
+
+        async Task LoadLocalModelsAsync()
+        {
+            var index = chat.SourceIndex;
+            var generation = ++localModelLoad;
+            var previousModel = localModels.SelectedItem as string ?? assistantModels[index];
+            localModels.ItemsSource = null;
+            localModelStatus = "Finding models on this PC…";
+            SetDisclosure();
+            try
+            {
+                var models = await OllamaTextModel.Local.ModelsAsync(cancellation);
+                if (cancellation.IsCancellationRequested || generation != localModelLoad)
+                    return;
+                localModels.ItemsSource = models;
+                localModels.SelectedItem = models.FirstOrDefault(name => name == previousModel) ?? models.FirstOrDefault();
+                localModelStatus = models.Length > 0 ? "Uses Ollama on this PC."
+                    : "Add a local model in Ollama, then refresh the list.";
+            }
+            catch (Exception error) when (error is HttpRequestException or JsonException or IOException or OperationCanceledException)
+            {
+                if (cancellation.IsCancellationRequested || generation != localModelLoad)
+                    return;
+                localModelStatus = "Start Ollama on this PC and refresh the model list.";
+            }
+            SetDisclosure();
+            SetBusy(busy);
         }
 
         async Task LoadModelsAsync()
@@ -513,14 +563,18 @@ public partial class DashboardWindow
             var source = AssistantSources[index];
             var isPlan = source.Provider == AssistantProvider.ChatGptPlan;
             var isCli = source.Provider is AssistantProvider.CodexCli or AssistantProvider.ClaudeCode;
+            var isLocal = source.Provider == AssistantProvider.Ollama;
             var message = prompt.Text.Trim();
-            var modelId = isPlan ? (planModels.SelectedItem as PlanModel)?.Id ?? "" : model.Text.Trim();
+            var modelId = isPlan ? (planModels.SelectedItem as PlanModel)?.Id ?? "" :
+                isLocal ? localModels.SelectedItem as string ?? "" : model.Text.Trim();
             var account = accounts.SelectedItem as PlanAccount;
             var typed = key.Password.Trim();
-            var apiKey = typed.Length == 0 ? AssistantKey(index) : typed;
-            if (message.Length == 0 || !isCli && (modelId.Length == 0 || (isPlan ? account == null : string.IsNullOrWhiteSpace(apiKey))))
+            var apiKey = source.Variable == null ? null : typed.Length == 0 ? AssistantKey(index) : typed;
+            if (message.Length == 0 || !isCli && modelId.Length == 0 || isPlan && account == null ||
+                source.Variable != null && string.IsNullOrWhiteSpace(apiKey))
             {
                 status.Text = isPlan ? "Choose a connected account and model, then enter a message."
+                    : isLocal ? "Choose an installed Ollama model and enter a message."
                     : isCli ? "Enter a message." : "Enter a message, model ID, and API key.";
                 return;
             }
@@ -584,14 +638,15 @@ public partial class DashboardWindow
             }
             catch (HttpRequestException error)
             {
-                status.Text = error.StatusCode switch
+                status.Text = isLocal ? "Could not get a reply from Ollama. Check that it is running and refresh the model list."
+                    : error.StatusCode switch
                 {
                     HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => "Check that your API key can access this model.",
                     HttpStatusCode.BadRequest or HttpStatusCode.NotFound => "Check the model ID and provider settings.",
                     HttpStatusCode.TooManyRequests => "The provider is rate limiting requests. Try again later.",
                     _ => "Could not reach the provider. Try again."
                 };
-                if (error.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.PaymentRequired)
+                if (!isLocal && error.StatusCode is (HttpStatusCode.TooManyRequests or HttpStatusCode.PaymentRequired))
                     OfferFallback();
             }
             catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
@@ -619,6 +674,7 @@ public partial class DashboardWindow
 
             Task<string> SendToProvider(string instructions, IReadOnlyList<(bool User, string Text)> messages, CancellationToken token) =>
                 isPlan ? ChatGptPlan.SendAsync(account!, modelId, instructions, messages.ToArray(), token) :
+                    isLocal ? OllamaTextModel.Local.ChatAsync(modelId, instructions, messages, token) :
                     isCli ? CodingSummaryClient.ChatAsync(source.Provider, modelId, instructions, messages, token) :
                     TextModelClient.SendChat(source.Provider, modelId, apiKey!, messages.ToArray(), token, instructions);
         }

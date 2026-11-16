@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace WindowsDock;
 
-internal enum AssistantProvider { Gemini, Groq, Grok, ClaudeApi, ChatGptPlan, CodexCli, ClaudeCode }
+internal enum AssistantProvider { Gemini, Groq, Grok, ClaudeApi, ChatGptPlan, CodexCli, ClaudeCode, Ollama }
 
 internal static class TextModelClient
 {
