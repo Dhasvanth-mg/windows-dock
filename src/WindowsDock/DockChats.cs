@@ -3,6 +3,8 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -107,7 +109,7 @@ internal static class DockChats
     {
         if (!IsLeaf(name))
             throw new ArgumentException("Choose a file name without a folder path.");
-        var directory = EnsureDirectory(Path.Combine(ChatDirectory(Root, chat), "files"));
+        var directory = FilesFolder(chat);
         var stem = Path.GetFileNameWithoutExtension(name);
         var extension = Path.GetExtension(name);
         for (var index = 1; index <= 500; index++)
@@ -121,6 +123,12 @@ internal static class DockChats
             catch (IOException) when (File.Exists(path) || Directory.Exists(path)) { }
         }
         throw new IOException("Choose another file name.");
+    }
+
+    internal static string FilesFolder(Guid chat)
+    {
+        lock (LibraryLock)
+            return EnsureDirectory(Path.Combine(ChatDirectory(Root, chat), "files"));
     }
 
     internal static void ChooseFolder(string selected)
@@ -272,6 +280,29 @@ internal static class ChatAttachments
         if (string.IsNullOrWhiteSpace(text))
             throw new IOException("Choose a text file, Word document, PDF, PNG, or JPEG.");
         return new(new(Guid.NewGuid(), name, null, text[..Math.Min(TextLimit, text.Length)]), bytes);
+    }
+
+    internal static PickedChatFile Screenshot(BitmapSource source)
+    {
+        const int maxDimension = 2048;
+        if (Math.Max(source.PixelWidth, source.PixelHeight) > maxDimension)
+        {
+            var scale = maxDimension / (double)Math.Max(source.PixelWidth, source.PixelHeight);
+            source = new TransformedBitmap(source, new ScaleTransform(scale, scale));
+        }
+        using var stream = new MemoryStream();
+        var png = new PngBitmapEncoder();
+        png.Frames.Add(BitmapFrame.Create(source));
+        png.Save(stream);
+        if (stream.Length <= SizeLimit)
+            return new(new(Guid.NewGuid(), "Screenshot.png", "image/png", null), stream.ToArray());
+        stream.SetLength(0);
+        var jpeg = new JpegBitmapEncoder { QualityLevel = 90 };
+        jpeg.Frames.Add(BitmapFrame.Create(source));
+        jpeg.Save(stream);
+        if (stream.Length > SizeLimit)
+            throw new IOException("This screenshot is too large. Attach a smaller image.");
+        return new(new(Guid.NewGuid(), "Screenshot.jpg", "image/jpeg", null), stream.ToArray());
     }
 
     internal static byte[] ReadBounded(string path)

@@ -19,6 +19,15 @@
 - Verification: The isolated Windows fixture changed the provider and model inside the same popup and confirmed that the composer showed both selected values.
 - Remaining work: None for the verified selection flow.
 
+### Continue refining the conversation workflow
+
+- Status: Built and installed. Retry and attachment handling verified with an isolated Windows fixture.
+- Scope: Paste screenshots into the composer, open the current conversation's files directly, and retry unanswered messages with their original attachments.
+- Acceptance criteria: Image paste adds a reviewable attachment while text paste works normally. The files shortcut opens the chosen library's folder for the current chat. Retrying a saved unanswered message does not duplicate its transcript entry.
+- Implementation: The composer turns pasted images into previewable attachments and preserves regular text paste. A folder button opens the current conversation's output directory. Retry uses the saved message and attachment copies with the current provider selection and keeps any new draft in the composer.
+- Verification: All 86 tests and the Windows x64 Release publish passed. The Windows fixture verified screenshot encoding, image preview, the shared menu and its provider list, retry with the original attachment and a single saved user message, preservation of the draft, and the exported file's contents. The installed executable, assembly, and symbols matched the release package.
+- Limitations and remaining work: The fixture covered screenshot encoding and the chat output path. Hands-on clipboard paste and opening the folder from the taskbar remain to be verified when Explorer attaches.
+
 ## Require the modified taskbar and integrate Widgets into Dashboard
 
 - Status: Widgets is integrated and verified. The installed controller is retrying native attachment in the current Explorer session.

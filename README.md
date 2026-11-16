@@ -42,9 +42,9 @@ CLI summaries run in a temporary directory with model tools disabled and session
 
 ## Assistant conversations
 
-Open an assistant to search previous Windows Dock conversations or start a new one. The provider and model are selected from one menu inside the message box. Use the attachment button or drop in a file to preview it before sending. Text and Word documents can be used with any assistant provider. PDF, PNG, and JPEG uploads require an eligible ChatGPT plan, Claude API, or Gemini model.
+Open an assistant to search previous Windows Dock conversations or start a new one. The provider and model are selected from one menu inside the message box. Use the attachment button, drop in a file, or paste a screenshot to preview it before sending. Text and Word documents can be used with any assistant provider. PDF, PNG, and JPEG uploads require an eligible ChatGPT plan, Claude API, or Gemini model. If the last message is unanswered, **Retry reply** resends it with its original attachments.
 
-Choose **Chat storage folder** in the sidebar to put the chat library under a folder you select. Windows Dock copies past chats, attachment copies, and exports into the new library. Each conversation has its own transcript, attachments, and files. Named text and code files are saved automatically when **Auto-save named files** is enabled. The controls beside replies let you save a Markdown copy or individual code blocks.
+Choose **Chat storage folder** in the sidebar to put the chat library under a folder you select. Windows Dock copies past chats, attachment copies, and exports into the new library. Each conversation has its own transcript, attachments, and files. The folder icon in the conversation header opens its output files. Named text and code files are saved automatically when **Auto-save named files** is enabled. The controls beside replies let you save a Markdown copy or individual code blocks.
 
 ## Widgets
 

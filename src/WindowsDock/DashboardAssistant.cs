@@ -117,6 +117,14 @@ public partial class DashboardWindow
         });
         historyToggle.Margin = new Thickness(0, 0, 6, 0);
         toolbar.Children.Add(historyToggle);
+        var chatFiles = IconButton(0xE8B7, "Open this chat’s files", () =>
+        {
+            try { OpenTarget(DockChats.FilesFolder(chat.Id)); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { ShowOwnedMessage("Could not open this conversation’s files folder."); }
+        });
+        DockPanel.SetDock(chatFiles, Dock.Right);
+        toolbar.Children.Add(chatFiles);
         title.VerticalAlignment = VerticalAlignment.Center;
         toolbar.Children.Add(title);
         DockPanel.SetDock(toolbar, Dock.Top);
@@ -269,6 +277,9 @@ public partial class DashboardWindow
         rail.Children.Add(new ScrollViewer { Content = history, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         var attachFiles = IconButton(0xE723, "Attach files or images");
         attachFiles.Margin = new Thickness(4, 0, 0, 0);
+        var retryReply = ActionButton("Retry reply");
+        retryReply.Margin = new Thickness(6, 0, 0, 0);
+        retryReply.Visibility = Visibility.Collapsed;
         var cancel = ActionButton("Cancel");
         cancel.Margin = new Thickness(0, 0, 5, 0);
         cancel.Visibility = Visibility.Collapsed;
@@ -290,6 +301,7 @@ public partial class DashboardWindow
             SwitchChat(new AssistantConversation { SourceIndex = chat.SourceIndex });
         };
         actions.Children.Add(attachFiles);
+        actions.Children.Add(retryReply);
         foreach (var control in new UIElement[] { send, cancel, setupToggle })
         {
             DockPanel.SetDock(control, Dock.Right);
@@ -353,6 +365,7 @@ public partial class DashboardWindow
                 pending?.Cancel();
         };
         send.Click += async (_, _) => await SendAsync();
+        retryReply.Click += async (_, _) => await SendAsync(retry: true);
         attachFiles.Click += async (_, _) =>
         {
             var dialog = new OpenFileDialog
@@ -399,7 +412,9 @@ public partial class DashboardWindow
         };
         prompt.PreviewKeyDown += async (_, args) =>
         {
-            if (args.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control && send.IsEnabled)
+            if (args.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control && !busy && !changingFiles && PasteScreenshot())
+                args.Handled = true;
+            else if (args.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control && send.IsEnabled)
             {
                 args.Handled = true;
                 await SendAsync();
@@ -584,17 +599,10 @@ public partial class DashboardWindow
                     return;
                 if (paths.Length > remaining)
                     errors.Add("Attach up to six files per message.");
-                var mediaBytes = current.Files.Where(item => item.File.MediaType != null).Sum(item => item.Bytes.Length);
                 foreach (var item in picked)
                 {
-                    if (item.File.MediaType != null && mediaBytes + item.Bytes.Length > ChatAttachments.MediaLimit)
-                    {
-                        errors.Add($"{item.File.Name}: images and PDFs can total up to 10 MB.");
-                        continue;
-                    }
-                    current.Files.Add(item);
-                    if (item.File.MediaType != null)
-                        mediaBytes += item.Bytes.Length;
+                    if (QueueFile(current, item) is { } error)
+                        errors.Add($"{item.File.Name}: {error}");
                 }
                 RenderAttachment();
                 status.Text = errors.Count > 0 ? string.Join("\n", errors.Take(2)) :
@@ -606,6 +614,36 @@ public partial class DashboardWindow
                 if (!cancellation.IsCancellationRequested)
                     SetBusy(busy);
             }
+        }
+
+        bool PasteScreenshot()
+        {
+            try
+            {
+                if (Clipboard.ContainsText() || !Clipboard.ContainsImage() || Clipboard.GetImage() is not { } image)
+                    return false;
+                if (QueueFile(chat, ChatAttachments.Screenshot(image)) is { } error)
+                    status.Text = error;
+                else
+                {
+                    RenderAttachment();
+                    status.Text = "Screenshot attached.";
+                }
+            }
+            catch (Exception error) when (error is ExternalException or IOException or NotSupportedException or ArgumentException)
+            { status.Text = "Could not paste this screenshot."; }
+            return true;
+        }
+
+        static string? QueueFile(AssistantConversation chat, PickedChatFile item)
+        {
+            if (chat.Files.Count >= ChatAttachments.FileLimit)
+                return "Attach up to six files per message.";
+            if (item.File.MediaType != null && item.Bytes.Length +
+                chat.Files.Where(file => file.File.MediaType != null).Sum(file => file.Bytes.Length) > ChatAttachments.MediaLimit)
+                return "Images and PDFs can total up to 10 MB.";
+            chat.Files.Add(item);
+            return null;
         }
 
         void ReviewFile(ChatFile file, byte[]? bytes = null)
@@ -768,10 +806,18 @@ public partial class DashboardWindow
             toolRow.IsEnabled = attachment.IsEnabled = proposal.IsEnabled = !busy;
             rail.IsEnabled = attachFiles.IsEnabled = !busy && !changingFiles;
             setupToggle.IsEnabled = !busy && !changingFiles;
+            RefreshRetry();
             if (busy)
                 modelMenu.IsOpen = false;
             prompt.IsReadOnly = busy || changingFiles;
             cancel.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        void RefreshRetry()
+        {
+            chatFiles.IsEnabled = chat.Turns.Count > 0;
+            retryReply.Visibility = !busy && !changingFiles && chat.Turns.LastOrDefault()?.User == true
+                ? Visibility.Visible : Visibility.Collapsed;
         }
 
         void RefreshAccounts()
@@ -902,6 +948,7 @@ public partial class DashboardWindow
         void RenderConversation(bool toEnd = true)
         {
             var history = chat.Turns;
+            RefreshRetry();
             title.Text = DockChats.Title(history);
             intro.Visibility = starters.Visibility = history.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             messages.Children.Clear();
@@ -1023,7 +1070,7 @@ public partial class DashboardWindow
             attachment.Children.Add(removeContext);
         }
 
-        async Task SendAsync()
+        async Task SendAsync(bool retry = false)
         {
             if (busy || changingFiles)
                 return;
@@ -1032,7 +1079,10 @@ public partial class DashboardWindow
             var isPlan = source.Provider == AssistantProvider.ChatGptPlan;
             var isCli = source.Provider is AssistantProvider.CodexCli or AssistantProvider.ClaudeCode;
             var isLocal = source.Provider == AssistantProvider.Ollama;
-            var message = prompt.Text.Trim();
+            var last = chat.Turns.LastOrDefault();
+            if (retry && last?.User != true)
+                return;
+            var message = retry ? last!.Text : prompt.Text.Trim();
             var modelId = isPlan ? (planModels.SelectedItem as PlanModel)?.Id ?? "" :
                 isLocal ? localModels.SelectedItem as string ?? "" : model.Text.Trim();
             var account = accounts.SelectedItem as PlanAccount;
@@ -1053,14 +1103,15 @@ public partial class DashboardWindow
                 status.Text = "Check the model ID and API key.";
                 return;
             }
-            var picked = chat.Files.ToArray();
-            if (picked.Any(item => item.File.MediaType != null) && !ChatMediaRequest.Supports(source.Provider))
+            var picked = retry ? [] : chat.Files.ToArray();
+            var outgoing = retry ? last! : new SavedTurn(true, message, picked.Select(item => item.File).ToArray(), chat.Context);
+            if ((outgoing.Files ?? []).Any(item => item.MediaType != null) && !ChatMediaRequest.Supports(source.Provider))
             {
                 status.Text = "Choose ChatGPT plan, Claude API, or Gemini to send images and PDFs.";
+                modelMenu.IsOpen = true;
                 return;
             }
-            var outgoing = new SavedTurn(true, message, picked.Select(item => item.File).ToArray(), chat.Context);
-            var recent = chat.Turns.TakeLast(8).Append(outgoing).ToArray();
+            var recent = retry ? chat.Turns.TakeLast(9).ToArray() : chat.Turns.TakeLast(8).Append(outgoing).ToArray();
             var requestTurns = recent.Select(turn => (turn.User, AttachmentMessage(turn))).ToArray();
             var media = new Dictionary<int, ChatMedia[]>();
             assistantModels[index] = modelId;
@@ -1076,7 +1127,7 @@ public partial class DashboardWindow
                         media[recent.Length - 1] = latest;
                     else
                     {
-                        for (var turnIndex = recent.Length - 2; turnIndex >= 0; turnIndex--)
+                        for (var turnIndex = recent.Length - (retry ? 1 : 2); turnIndex >= 0; turnIndex--)
                         {
                             var documents = recent[turnIndex].Files?.Where(file => file.MediaType != null).ToArray();
                             if (documents is not { Length: > 0 })
@@ -1087,21 +1138,24 @@ public partial class DashboardWindow
                         }
                     }
                 }
-                chat.Turns.Add(outgoing);
-                try { await SaveTranscriptAsync(source.Provider, modelId, picked); }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                if (!retry)
                 {
-                    chat.Turns.Remove(outgoing);
-                    status.Text = "Could not save the message. Check the chat storage folder and try again.";
-                    return;
+                    chat.Turns.Add(outgoing);
+                    try { await SaveTranscriptAsync(source.Provider, modelId, picked); }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                    {
+                        chat.Turns.Remove(outgoing);
+                        status.Text = "Could not save the message. Check the chat storage folder and try again.";
+                        return;
+                    }
+                    chat.Files.Clear();
+                    chat.Context = null;
+                    prompt.Clear();
+                    preview.Visibility = Visibility.Collapsed;
+                    preview.Content = null;
+                    RenderConversation();
+                    RenderAttachment();
                 }
-                chat.Files.Clear();
-                chat.Context = null;
-                prompt.Clear();
-                preview.Visibility = Visibility.Collapsed;
-                preview.Content = null;
-                RenderConversation();
-                RenderAttachment();
                 status.Text = $"Waiting for {source.Label}…";
                 var response = await DockAssistantTurn.RunAsync(persona.Id, persona.Instructions, requestTurns,
                     (instructions, messages, token) => SendToProvider(instructions, messages, token, media),
