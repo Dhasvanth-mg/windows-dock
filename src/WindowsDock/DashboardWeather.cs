@@ -99,6 +99,8 @@ public partial class DashboardWindow
             days.Children.Add(column);
         }
         panel.Children.Add(days);
+        if (forecast.Now is { } details && WeatherFacts(details) is { } facts)
+            panel.Children.Add(facts);
         return panel;
     }
 
@@ -228,6 +230,65 @@ public partial class DashboardWindow
 
     private string DisplayDegrees(double fahrenheit) => weatherCelsius ? $"{(fahrenheit - 32) * 5 / 9:0}°" : $"{fahrenheit:0}°";
 
+    // The small print under the forecast: how it feels, how wet, how windy, and when the light goes.
+    // The forecast is fetched in imperial units and converted here, the same way temperatures are.
+    private FrameworkElement? WeatherFacts(WeatherNow now)
+    {
+        var facts = new List<(string Label, string Value)>();
+        if (now.FeelsLike is { } feels)
+            facts.Add(("Feels", DisplayDegrees(feels)));
+        if (now.Humidity is { } humidity)
+            facts.Add(("Humidity", $"{humidity:0}%"));
+        if (now.WindMph is { } wind)
+            facts.Add(("Wind", weatherCelsius ? $"{wind * 1.609:0} km/h" : $"{wind:0} mph"));
+        // The service gives one chance of precipitation. Call it snow when snow is what is forecast to fall.
+        var snowing = now.SnowInches is > 0;
+        if (now.RainChance is { } chance)
+            facts.Add((snowing ? "Snow" : "Rain", $"{chance:0}%"));
+        if (now.SnowInches is { } snow && snowing)
+            facts.Add(("Snowfall", weatherCelsius ? $"{snow * 2.54:0.#} cm" : $"{snow:0.#} in"));
+        else if (now.Uv is { } uv)
+            facts.Add(("UV", uv < 3 ? $"{uv:0} low" : uv < 6 ? $"{uv:0} medium" : uv < 8 ? $"{uv:0} high" : $"{uv:0} very high"));
+        var clock = DateTime.Now;
+        if (now.Sunrise is { } rise && clock < rise)
+            facts.Add(("Sunrise", rise.ToString("t")));
+        else if (now.Sunset is { } set)
+            facts.Add(("Sunset", set.ToString("t")));
+        if (facts.Count == 0)
+            return null;
+
+        var grid = new System.Windows.Controls.Primitives.UniformGrid { Columns = 3, Margin = new Thickness(0, 8, 0, 0) };
+        foreach (var (label, value) in facts)
+        {
+            var cell = Text("", 11, AssistantFaint);
+            cell.Inlines.Add(new Run(label + " "));
+            cell.Inlines.Add(new Run(value) { Foreground = AssistantInk });
+            cell.Margin = new Thickness(0, 0, 4, 3);
+            cell.ToolTip = $"{label}: {value}";
+            grid.Children.Add(cell);
+        }
+        return grid;
+    }
+
+    private static WeatherNow WeatherDetails(JsonElement current, JsonElement daily)
+    {
+        return new WeatherNow(Number(current, "apparent_temperature"), Number(current, "relative_humidity_2m"),
+            Number(current, "wind_speed_10m"), First(daily, "precipitation_probability_max"), First(daily, "snowfall_sum"),
+            First(daily, "uv_index_max"), Time(daily, "sunrise"), Time(daily, "sunset"));
+
+        static double? Number(JsonElement item, string name) =>
+            item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetDouble() : null;
+
+        static double? First(JsonElement item, string name) =>
+            item.TryGetProperty(name, out var list) && list.ValueKind == JsonValueKind.Array && list.GetArrayLength() > 0 &&
+            list[0].ValueKind == JsonValueKind.Number ? list[0].GetDouble() : null;
+
+        // Times come back as local wall-clock strings for the forecast's own time zone.
+        static DateTime? Time(JsonElement item, string name) =>
+            item.TryGetProperty(name, out var list) && list.ValueKind == JsonValueKind.Array && list.GetArrayLength() > 0 &&
+            DateTime.TryParse(list[0].GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var time) ? time : null;
+    }
+
     private (int Icon, SolidColorBrush Tint) WeatherStyle(int code) => code switch
     {
         0 or 1 => (0xE706, amber),
@@ -249,7 +310,7 @@ public partial class DashboardWindow
                 WriteJson("weather-city.json", selected);
             }
             var url = FormattableString.Invariant(
-                $"https://api.open-meteo.com/v1/forecast?latitude={selected.Latitude}&longitude={selected.Longitude}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&temperature_unit=fahrenheit&forecast_days=5");
+                $"https://api.open-meteo.com/v1/forecast?latitude={selected.Latitude}&longitude={selected.Longitude}&current=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,snowfall_sum,uv_index_max,sunrise,sunset&timezone=auto&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&forecast_days=5");
             using var data = await WeatherClient.GetFromJsonAsync<JsonDocument>(url, lifetime.Token);
             var current = data!.RootElement.GetProperty("current");
             var daily = data.RootElement.GetProperty("daily");
@@ -263,7 +324,7 @@ public partial class DashboardWindow
                     daily.GetProperty("weather_code")[i].GetInt32());
             }
             weather = new Forecast(selected.Name, current.GetProperty("temperature_2m").GetDouble(),
-                current.GetProperty("weather_code").GetInt32(), days);
+                current.GetProperty("weather_code").GetInt32(), days, WeatherDetails(current, daily));
             weatherUpdated = DateTimeOffset.UtcNow;
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
@@ -368,5 +429,9 @@ public partial class DashboardWindow
     }
 
     private sealed record WeatherDay(DateTime Date, double High, double Low, int Code);
-    private sealed record Forecast(string City, double Temperature, int Code, WeatherDay[] Days);
+    private sealed record Forecast(string City, double Temperature, int Code, WeatherDay[] Days, WeatherNow? Now = null);
+
+    // Today in more detail. Every figure is optional because the service leaves out what it does not have.
+    private sealed record WeatherNow(double? FeelsLike, double? Humidity, double? WindMph, double? RainChance,
+        double? SnowInches, double? Uv, DateTime? Sunrise, DateTime? Sunset);
 }
