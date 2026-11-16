@@ -28,7 +28,7 @@ public:
     static xaml::FrameworkElement Find(xaml::DependencyObject const& root, std::wstring_view name);
 
 private:
-    static constexpr double AgentSlotWidth = 22;
+    static constexpr double AgentSlotWidth = 26;
 
     struct Property
     {
@@ -58,7 +58,7 @@ private:
 
     controls::Grid root;
     HANDLE dashboard;
-    winrt::handle launcherEvent;
+    winrt::handle launcherEvent, warmEvent;
     winrt::handle agentEvent, completionEvent, agentMapping;
     std::unique_ptr<AgentGridState, UnmapAgentGrid> agentState;
     AgentGridTile visibleTiles[4]{};
@@ -72,7 +72,7 @@ private:
     controls::Border chrome{nullptr};
     xaml::Media::SolidColorBrush chromeRim{nullptr};
     xaml::Media::Animation::Storyboard completionPulse{nullptr};
-    controls::Border divider{nullptr};
+    controls::Border divider{nullptr}, trayDivider{nullptr}, clockDivider{nullptr};
     controls::Button dashboardButton{nullptr};
     controls::Grid dockControls{nullptr};
     controls::Border agentTray{nullptr};

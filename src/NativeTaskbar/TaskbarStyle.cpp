@@ -31,6 +31,7 @@ namespace
 TaskbarStyle::TaskbarStyle(Grid const& root, winrt::handle const& dashboard, DWORD controllerPid)
     : root(root), dashboard(dashboard.get()),
       launcherEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"OpenLauncher").c_str())),
+      warmEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"WarmDashboard").c_str())),
       agentEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Agent").c_str())),
       completionEvent(OpenEventW(SYNCHRONIZE, FALSE, SessionName(controllerPid, L"AgentCompletion").c_str())),
       agentMapping(OpenFileMappingW(FILE_MAP_WRITE, FALSE, SessionName(controllerPid, L"AgentGrid").c_str())),
@@ -83,12 +84,12 @@ void TaskbarStyle::Apply(FrameworkElement const& apps, FrameworkElement const& t
     Set(apps, Grid::ColumnSpanProperty(), 1);
     Set(apps, FrameworkElement::WidthProperty(), std::numeric_limits<double>::quiet_NaN());
     Set(apps, FrameworkElement::HorizontalAlignmentProperty(), xaml::HorizontalAlignment::Left);
-    Set(apps, FrameworkElement::MarginProperty(), xaml::Thickness{8, 0, 4, 0});
+    Set(apps, FrameworkElement::MarginProperty(), xaml::Thickness{10, 0, 5, 0});
     Set(apps, FrameworkElement::RequestedThemeProperty(), xaml::ElementTheme::Dark);
     Set(tray, Grid::ColumnProperty(), 3);
     Set(tray, Grid::ColumnSpanProperty(), 1);
     Set(tray, FrameworkElement::HorizontalAlignmentProperty(), xaml::HorizontalAlignment::Left);
-    Set(tray, FrameworkElement::MarginProperty(), xaml::Thickness{0, 0, 8, 0});
+    Set(tray, FrameworkElement::MarginProperty(), xaml::Thickness{4, 0, 10, 0});
     Set(tray, FrameworkElement::RequestedThemeProperty(), xaml::ElementTheme::Dark);
 
     Set(background, xaml::UIElement::OpacityProperty(), 0.0);
@@ -120,21 +121,22 @@ void TaskbarStyle::AddChrome()
     chrome = controls::Border();
     chrome.Name(L"WindowsDockGlass");
     chrome.IsHitTestVisible(false);
-    chrome.CornerRadius({18, 18, 18, 18});
+    chrome.CornerRadius({15, 15, 15, 15});
+    chrome.Margin({0, 1, 0, 2});
     chrome.BorderThickness({1, 1, 1, 1});
-    chromeRim = Solid(46, 235, 235, 235);
+    chromeRim = Solid(78, 240, 237, 231);
     chrome.BorderBrush(chromeRim);
     media::AcrylicBrush glass;
     glass.BackgroundSource(media::AcrylicBackgroundSource::Backdrop);
-    glass.TintColor(Color{255, 24, 24, 24});
-    glass.TintOpacity(0.72);
-    glass.TintLuminosityOpacity(0.65);
-    glass.FallbackColor(Color{255, 26, 26, 26});
+    glass.TintColor(Color{255, 31, 30, 29});
+    glass.TintOpacity(0.38);
+    glass.TintLuminosityOpacity(0.54);
+    glass.FallbackColor(Color{255, 28, 27, 26});
     chrome.Background(glass);
     // Bound the backdrop brightness behind the light tray icons and clock.
     controls::Border shade;
-    shade.Background(Solid(175, 12, 12, 12));
-    shade.CornerRadius({17, 17, 17, 17});
+    shade.Background(Solid(132, 15, 14, 13));
+    shade.CornerRadius({14, 14, 14, 14});
     chrome.Child(shade);
 
     Grid::SetColumn(chrome, 1);
@@ -148,10 +150,20 @@ void TaskbarStyle::AddChrome()
     divider.HorizontalAlignment(xaml::HorizontalAlignment::Left);
     divider.VerticalAlignment(xaml::VerticalAlignment::Center);
     divider.Margin({1, 0, 0, 0});
-    divider.Background(Solid(42, 235, 235, 235));
+    divider.Background(Solid(61, 228, 225, 219));
     divider.IsHitTestVisible(false);
     Grid::SetColumn(divider, 2);
     root.Children().Append(divider);
+
+    trayDivider = controls::Border();
+    trayDivider.Width(1);
+    trayDivider.Height(20);
+    trayDivider.HorizontalAlignment(xaml::HorizontalAlignment::Right);
+    trayDivider.VerticalAlignment(xaml::VerticalAlignment::Center);
+    trayDivider.Background(divider.Background());
+    trayDivider.IsHitTestVisible(false);
+    Grid::SetColumn(trayDivider, 2);
+    root.Children().Append(trayDivider);
 }
 
 void TaskbarStyle::PulseCompletion()
@@ -178,8 +190,8 @@ void TaskbarStyle::AddDashboardButton()
 {
     dashboardButton = controls::Button();
     dashboardButton.Name(L"WindowsDockDashboard");
-    dashboardButton.Width(40);
-    dashboardButton.Height(36);
+    dashboardButton.Width(38);
+    dashboardButton.Height(38);
     dashboardButton.Margin({7, 0, 4, 1});
     dashboardButton.Padding({0, 0, 0, 0});
     dashboardButton.Background(Solid(0, 0, 0, 0));
@@ -200,10 +212,11 @@ void TaskbarStyle::AddDashboardButton()
         struct PullState
         {
             winrt::handle signal;
+            winrt::handle warm;
             uint32_t pointer{};
             winrt::Windows::Foundation::Point start{};
         };
-        const auto pullState = std::make_shared<PullState>(PullState{std::move(launcherEvent)});
+        const auto pullState = std::make_shared<PullState>(PullState{std::move(launcherEvent), std::move(warmEvent)});
         dashboardButton.AddHandler(xaml::UIElement::PointerPressedEvent(), winrt::box_value(PointerEventHandler(
             [pullState](auto const& sender, PointerRoutedEventArgs const& args)
             {
@@ -213,6 +226,8 @@ void TaskbarStyle::AddDashboardButton()
                     return;
                 pullState->pointer = point.PointerId();
                 pullState->start = point.Position();
+                if (pullState->warm)
+                    SetEvent(pullState->warm.get());
             })), true);
         dashboardButton.AddHandler(xaml::UIElement::PointerMovedEvent(), winrt::box_value(PointerEventHandler(
             [pullState](auto const& sender, PointerRoutedEventArgs const& args)
@@ -226,7 +241,7 @@ void TaskbarStyle::AddDashboardButton()
                     return;
                 const auto position = point.Position();
                 const auto pull = pullState->start.Y - position.Y;
-                if (pull < 24 || pull < std::abs(position.X - pullState->start.X) * 1.35)
+                if (pull < 16 || pull < std::abs(position.X - pullState->start.X) * 1.35)
                     return;
                 pullState->pointer = 0;
                 args.Handled(true);
@@ -262,19 +277,33 @@ void TaskbarStyle::StyleTray(FrameworkElement const& tray)
     if (time)
     {
         Set(time, controls::TextBlock::FontWeightProperty(), winrt::Windows::UI::Text::FontWeight{600});
-        Set(time, controls::TextBlock::FontSizeProperty(), 12.0);
-        Set(time, controls::TextBlock::ForegroundProperty(), Solid(255, 246, 248, 252));
+        Set(time, controls::TextBlock::FontSizeProperty(), 13.0);
+        Set(time, controls::TextBlock::ForegroundProperty(), Solid(255, 249, 247, 243));
     }
     if (date)
     {
         Set(date, controls::TextBlock::FontSizeProperty(), 10.0);
-        Set(date, controls::TextBlock::ForegroundProperty(), Solid(255, 218, 218, 218));
+        Set(date, controls::TextBlock::ForegroundProperty(), Solid(255, 224, 221, 216));
     }
     for (const auto name : {L"ControlCenterButton", L"NotificationCenterButton", L"ChevronIconView"})
     {
         if (const auto button = Find(tray, name).try_as<controls::Control>())
             Set(button, controls::Control::CornerRadiusProperty(), xaml::CornerRadius{8, 8, 8, 8});
     }
+    if (const auto clock = Find(tray, L"NotificationCenterButton"))
+        if (const auto parent = media::VisualTreeHelper::GetParent(clock).try_as<Grid>())
+        {
+            clockDivider = controls::Border();
+            clockDivider.Width(1);
+            clockDivider.Height(17);
+            clockDivider.HorizontalAlignment(xaml::HorizontalAlignment::Left);
+            clockDivider.VerticalAlignment(xaml::VerticalAlignment::Center);
+            clockDivider.Background(divider.Background());
+            clockDivider.IsHitTestVisible(false);
+            Grid::SetRow(clockDivider, Grid::GetRow(clock));
+            Grid::SetColumn(clockDivider, Grid::GetColumn(clock));
+            parent.Children().Append(clockDivider);
+        }
     const auto controlCenter = Find(tray, L"ControlCenterButton");
     if (!controlCenter)
         return;
@@ -416,22 +445,16 @@ void TaskbarStyle::Restore() noexcept
                 tray.SizeChanged(traySize);
         rootSize = {};
         traySize = {};
-        const auto children = root.Children();
         for (const auto& item : {chrome.as<xaml::UIElement>(), divider.as<xaml::UIElement>(),
-            dockControls.as<xaml::UIElement>()})
+            trayDivider.as<xaml::UIElement>(), clockDivider.as<xaml::UIElement>(), dockControls.as<xaml::UIElement>(),
+            batteryBadge.as<xaml::UIElement>()})
         {
+            if (!item)
+                continue;
+            const auto parent = media::VisualTreeHelper::GetParent(item).try_as<Grid>();
             uint32_t position = 0;
-            if (item && children.IndexOf(item, position))
-                children.RemoveAt(position);
-        }
-        if (batteryBadge)
-        {
-            if (const auto parent = media::VisualTreeHelper::GetParent(batteryBadge).try_as<Grid>())
-            {
-                uint32_t position = 0;
-                if (parent.Children().IndexOf(batteryBadge, position))
-                    parent.Children().RemoveAt(position);
-            }
+            if (parent && parent.Children().IndexOf(item, position))
+                parent.Children().RemoveAt(position);
         }
     }
     catch (...) {}

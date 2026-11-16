@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <memory>
 #include <iterator>
-#include <shellapi.h>
 #include <thread>
 #include <winrt/base.h>
 #include <xamlom.h>
@@ -27,20 +26,15 @@ namespace
         std::fputws(message, stderr);
     }
 
-    void ReportFailure(const wchar_t* message)
-    {
-        DockLog(L"controller", message);
-        std::fwprintf(stderr, L"%ls\n", message);
-        if (GetConsoleWindow() && IsWindowVisible(GetConsoleWindow()))
-            MessageBoxW(nullptr, message, L"Windows Dock", MB_OK | MB_ICONINFORMATION);
-    }
-
     struct Session
     {
         explicit Session(DWORD pid)
             : ready(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"Ready").c_str())),
               restored(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"Restored").c_str())),
+              appearanceStop(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"AppearanceStop").c_str())),
+              appearanceBlocked(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"AppearanceBlocked").c_str())),
               stop(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"Stop").c_str())),
+              warmDashboard(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"WarmDashboard").c_str())),
               dashboard(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"Dashboard").c_str())),
               showDashboard(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowDashboard").c_str())),
               agent(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"Agent").c_str())),
@@ -55,14 +49,76 @@ namespace
               agentGrid(CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(AgentGridState),
                   SessionName(pid, L"AgentGrid").c_str()))
         {
-            if (!ready || !restored || !stop || !dashboard || !showDashboard || !agent || !showAgent ||
+            if (!ready || !restored || !appearanceStop || !appearanceBlocked || !stop || !warmDashboard ||
+                !dashboard || !showDashboard || !agent || !showAgent ||
                 !assistant || !showAssistant || !openLauncher || !showLauncher || !panelVisible || !visibilityChanged || !completion || !agentGrid)
                 winrt::throw_last_error();
         }
 
-        winrt::handle ready, restored, stop, dashboard, showDashboard, agent, showAgent, assistant, showAssistant, agentGrid;
-        winrt::handle openLauncher, showLauncher, panelVisible, visibilityChanged, completion;
+        ~Session() { SetEvent(appearanceStop.get()); }
+
+        winrt::handle ready, restored, appearanceStop, appearanceBlocked, stop, warmDashboard;
+        winrt::handle dashboard, showDashboard, agent, showAgent, assistant, showAssistant;
+        winrt::handle openLauncher, showLauncher, panelVisible, visibilityChanged, completion, agentGrid;
     };
+
+    bool AttachAppearance(Session const& session, DWORD explorerPid, HANDLE explorer,
+        std::filesystem::path const& module, std::wstring const& initialization)
+    {
+        OSVERSIONINFOW version{sizeof(version)};
+        const auto ntdll = GetModuleHandleW(L"ntdll.dll");
+        const auto getVersion = reinterpret_cast<LONG (WINAPI*)(OSVERSIONINFOW*)>(GetProcAddress(ntdll, "RtlGetVersion"));
+        if (!getVersion || getVersion(&version) != 0 || version.dwBuildNumber != TestedWindowsBuild)
+        {
+            DockLog(L"controller", L"Native styling requires Windows 11 25H2, build 26200. Using tray mode.");
+            return false;
+        }
+        if (!std::filesystem::is_regular_file(module))
+        {
+            DockLog(L"controller", L"The native styling module is missing. Using tray mode.");
+            return false;
+        }
+
+        const auto library = LoadLibraryExW(L"Windows.UI.Xaml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        const auto attach = library ? reinterpret_cast<decltype(&InitializeXamlDiagnosticsEx)>(
+            GetProcAddress(library, "InitializeXamlDiagnosticsEx")) : nullptr;
+        HRESULT result = E_NOTIMPL;
+        const auto deadline = GetTickCount64() + 3500;
+        const HANDLE initializing[] = {session.stop.get(), explorer};
+        do
+        {
+            for (int index = 1; attach && index <= 16 && FAILED(result); ++index)
+            {
+                const auto endpoint = L"VisualDiagConnection" + std::to_wstring(index);
+                std::thread attempt([&]
+                {
+                    result = attach(endpoint.c_str(), explorerPid, nullptr, module.c_str(),
+                        TaskbarSiteId, initialization.c_str());
+                });
+                attempt.join();
+            }
+        } while (result == HRESULT_FROM_WIN32(ERROR_NOT_FOUND) && GetTickCount64() < deadline &&
+            WaitForMultipleObjects(ARRAYSIZE(initializing), initializing, FALSE, 180) == WAIT_TIMEOUT);
+        if (library)
+            FreeLibrary(library);
+        if (FAILED(result))
+        {
+            SetEvent(session.appearanceStop.get());
+            DockLog(L"controller", L"Explorer did not accept the styling connection. Using tray mode.",
+                static_cast<unsigned long>(result));
+            return false;
+        }
+
+        const HANDLE signals[] = {session.ready.get(), session.appearanceBlocked.get(), session.stop.get(), explorer};
+        const auto ready = WaitForMultipleObjects(ARRAYSIZE(signals), signals, FALSE, 4000);
+        if (ready == WAIT_OBJECT_0)
+            return true;
+        SetEvent(session.appearanceStop.get());
+        DockLog(L"controller", ready == WAIT_OBJECT_0 + 1 ?
+            L"The taskbar already has an appearance owner. Using tray mode." :
+            L"The taskbar appearance did not become ready. Using tray mode.");
+        return false;
+    }
 
     class TaskbarVisibility
     {
@@ -114,22 +170,14 @@ namespace
             return 0;
         }
 
-        const bool openOnStart = argc == 3 && std::wstring_view(argv[2]) == L"--open";
-        const bool trayMode = (argc == 2 || openOnStart) && std::wstring_view(argv[1]) == L"--tray";
-        if (!trayMode && argc != 1)
+        bool openOnStart = false;
+        bool trayOnly = false;
+        for (int index = 1; index < argc; ++index)
         {
-            std::fputws(L"Usage: NativeTaskbar.exe [--tray [--open] | --restore <controller PID>]\n", stderr);
-            return 1;
-        }
-
-        OSVERSIONINFOW version{};
-        version.dwOSVersionInfoSize = sizeof(version);
-        const auto ntdll = GetModuleHandleW(L"ntdll.dll");
-        const auto getVersion = reinterpret_cast<LONG (WINAPI*)(OSVERSIONINFOW*)>(
-            GetProcAddress(ntdll, "RtlGetVersion"));
-        if (!trayMode && (!getVersion || getVersion(&version) != 0 || version.dwBuildNumber != TestedWindowsBuild))
-        {
-            ReportFailure(L"This native dock build supports Windows 11 x64 25H2 (build 26200).");
+            const std::wstring_view argument(argv[index]);
+            if (argument == L"--open" && !openOnStart) { openOnStart = true; continue; }
+            if (argument == L"--tray" && !trayOnly) { trayOnly = true; continue; }
+            std::fputws(L"Usage: NativeTaskbar.exe [--tray] [--open] | --restore <controller PID>\n", stderr);
             return 1;
         }
 
@@ -155,11 +203,6 @@ namespace
             return 1;
         const auto directory = std::filesystem::path(path).parent_path();
         const auto module = directory / NATIVE_TASKBAR_DLL;
-        if (!trayMode && !std::filesystem::is_regular_file(module))
-        {
-            PrintFailure((std::wstring(NATIVE_TASKBAR_DLL) + L" must be beside this executable.\n").c_str());
-            return 1;
-        }
         const auto panel = directory / L"WindowsDock.exe";
         if (!std::filesystem::is_regular_file(panel))
         {
@@ -180,67 +223,40 @@ namespace
             return FALSE;
         }, TRUE);
 
+        const auto initialization = std::to_wstring(controllerPid);
+        const bool trayMode = trayOnly || !AttachAppearance(session, explorerPid, explorer.get(), module, initialization);
+        if (WaitForSingleObject(session.stop.get(), 0) == WAIT_OBJECT_0 ||
+            WaitForSingleObject(explorer.get(), 0) == WAIT_OBJECT_0)
+            return 0;
+
         std::unique_ptr<AgentGridState, UnmapAgentGrid> grid(trayMode
             ? static_cast<AgentGridState*>(MapViewOfFile(session.agentGrid.get(), FILE_MAP_WRITE, 0, 0, sizeof(AgentGridState)))
             : nullptr);
         if (trayMode && !grid)
             winrt::throw_last_error();
-        DockTray tray(trayMode, session.stop.get(), session.dashboard.get(), session.agent.get(), session.assistant.get());
-        if (!tray.HasEntryPoint())
+        DockTray tray(trayMode, session.stop.get(), session.openLauncher.get(), session.agent.get(), session.assistant.get());
+        if (trayMode && !tray.HasEntryPoint())
             return 1;
         tray.Watch(grid.get());
-        const auto initialization = std::to_wstring(controllerPid);
-
         if (trayMode)
             std::wprintf(L"Windows Dock tray mode active. Controller PID: %lu.\n", controllerPid);
         else
-        {
-            const auto xaml = LoadLibraryExW(L"Windows.UI.Xaml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-            if (!xaml)
-                return 1;
-            const auto attach = reinterpret_cast<decltype(&InitializeXamlDiagnosticsEx)>(
-                GetProcAddress(xaml, "InitializeXamlDiagnosticsEx"));
-            if (!attach)
-                return 1;
-
-            bool attached = false;
-            HRESULT lastError = E_FAIL;
-            for (int index = 1; index <= 16 && !attached; ++index)
-            {
-                const auto endpoint = L"VisualDiagConnection" + std::to_wstring(index);
-                std::thread attempt([&]
-                {
-                    lastError = attach(endpoint.c_str(), explorerPid, nullptr, module.c_str(),
-                        TaskbarSiteId, initialization.c_str());
-                });
-                attempt.join();
-                attached = SUCCEEDED(lastError);
-            }
-
-            const HANDLE readySignals[] = {session.ready.get(), session.restored.get(), explorer.get()};
-            if (!attached || WaitForMultipleObjects(ARRAYSIZE(readySignals), readySignals, FALSE, 4000) != WAIT_OBJECT_0)
-            {
-                SetEvent(session.stop.get());
-                wchar_t message[200];
-                swprintf_s(message, L"Native dock could not style the current taskbar (0x%08lX). "
-                    L"Turn off other taskbar appearance tools and try again.", static_cast<unsigned long>(lastError));
-                ReportFailure(message);
-                return 1;
-            }
-
             std::wprintf(L"Native dock active in Explorer %lu. Controller PID: %lu.\n", explorerPid, controllerPid);
-        }
         tray.Explain();
         std::fflush(stdout);
         const auto launchPanel = [&](std::wstring const& args)
         {
-            SHELLEXECUTEINFOW launch{};
-            launch.cbSize = sizeof(launch);
-            launch.fMask = SEE_MASK_NOCLOSEPROCESS;
-            launch.lpFile = panel.c_str();
-            launch.lpParameters = args.c_str();
-            launch.nShow = SW_SHOWNORMAL;
-            return winrt::handle(ShellExecuteExW(&launch) ? launch.hProcess : nullptr);
+            auto command = L"\"" + panel.wstring() + L"\" " + args;
+            STARTUPINFOW launch{sizeof(launch)};
+            PROCESS_INFORMATION process{};
+            if (!CreateProcessW(panel.c_str(), command.data(), nullptr, nullptr, FALSE,
+                CREATE_NO_WINDOW, nullptr, directory.c_str(), &launch, &process))
+            {
+                DockLog(L"controller", L"Could not start the dashboard process.", GetLastError());
+                return winrt::handle{};
+            }
+            CloseHandle(process.hThread);
+            return winrt::handle(process.hProcess);
         };
         auto monitor = launchPanel(L"--monitor " + initialization);
         auto monitorRetry = GetTickCount64() + 6000;
@@ -257,7 +273,7 @@ namespace
             SetEvent(session.openLauncher.get());
         TaskbarVisibility visibility;
         const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get(), session.agent.get(),
-            session.assistant.get(), session.openLauncher.get(), session.visibilityChanged.get()};
+            session.assistant.get(), session.openLauncher.get(), session.visibilityChanged.get(), session.warmDashboard.get()};
         const HANDLE panels[] = {session.showDashboard.get(), session.showAgent.get(), session.showAssistant.get(),
             session.showLauncher.get()};
         for (;;)
@@ -291,7 +307,12 @@ namespace
                 visibility.Hold(false);
                 continue;
             }
-            if (result == ARRAYSIZE(signals) - 1)
+            if (result == WAIT_OBJECT_0 + 7)
+            {
+                ensureDashboard();
+                continue;
+            }
+            if (result == WAIT_OBJECT_0 + 6)
             {
                 visibility.Hold(dashboardProcess && WaitForSingleObject(session.panelVisible.get(), 0) == WAIT_OBJECT_0);
                 continue;
@@ -315,6 +336,7 @@ namespace
         }
 
         SetEvent(session.stop.get());
+        SetEvent(session.appearanceStop.get());
         if (trayMode)
             return 0;
         const HANDLE shutdownSignals[] = {session.restored.get(), explorer.get()};

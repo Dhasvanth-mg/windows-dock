@@ -10,7 +10,7 @@ Swipe sideways with two fingers over Dashboard to switch one tab at a time. Scro
 
 At the bottom of Widgets, Coding chats, and Assistants, click a section or drag the handle sideways to switch. A horizontal scroll over that handle also switches sections. Drag down to close the panel. On a tool or conversation with a Back button, drag the handle right to go back.
 
-Use one taskbar appearance module at a time. The native controller exits if it cannot find the expected taskbar layout. Panels open just above the taskbar. Windows Dock holds auto-hide off while a panel is open and restores the previous setting when the panel closes. If Explorer restarts, run the controller again.
+Use one taskbar appearance module at a time. Windows Dock falls back to its tray icon and shortcuts if Explorer has a different appearance owner or its layout cannot be styled. Click the tray icon to show Dashboard. Panels open just above the taskbar. Windows Dock holds auto-hide off while a panel is open and restores the previous setting when the panel closes. If Explorer restarts, run the controller again.
 
 The dashboard opens on demand and exits about 20 seconds after hiding once its jobs have finished. A smaller background process keeps coding chat status and active focus timers current. Dashboard tabs and popups keep their size while content changes and scrolls. Use **Settings → Start at sign-in** to start the controller automatically in the current mode.
 
@@ -92,7 +92,7 @@ Use MSVC, the Windows SDK, CMake, and the .NET 10 SDK on Windows:
 ```powershell
 cmake -S src/NativeTaskbar -B artifacts/native-build -G "Visual Studio 18 2026" -A x64
 cmake --build artifacts/native-build --config Release
-dotnet publish src/WindowsDock -c Release -r win-x64 --self-contained -o artifacts/native-dock
+dotnet publish src/WindowsDock -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/native-dock
 Copy-Item artifacts/native-build/Release/NativeTaskbar.exe,artifacts/native-build/Release/NativeTaskbar.Xaml.dll artifacts/native-dock
 .\artifacts\native-dock\NativeTaskbar.exe
 ```

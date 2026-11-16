@@ -40,23 +40,24 @@ namespace
         Watcher(winrt::com_ptr<IXamlDiagnostics> diagnostics, DWORD controllerPid) : diagnostics(std::move(diagnostics)),
             controllerPid(controllerPid),
             controller(OpenProcess(SYNCHRONIZE, FALSE, controllerPid)),
-            ready(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Ready").c_str())),
+            ready(OpenEventW(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Ready").c_str())),
             restored(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Restored").c_str())),
-            stop(OpenEventW(SYNCHRONIZE, FALSE, SessionName(controllerPid, L"Stop").c_str())),
+            blocked(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"AppearanceBlocked").c_str())),
+            stop(OpenEventW(SYNCHRONIZE, FALSE, SessionName(controllerPid, L"AppearanceStop").c_str())),
             dashboard(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Dashboard").c_str()))
         {
-            if (!controller || !ready || !restored || !stop || !dashboard)
+            if (!controller || !ready || !restored || !blocked || !stop || !dashboard)
                 winrt::throw_hresult(E_ACCESSDENIED);
         }
 
         void Run()
         {
             auto service = diagnostics.as<IVisualTreeService3>();
-            if (FAILED(service->AdviseVisualTreeChange(this)))
-            {
-                SetEvent(restored.get());
-                return;
-            }
+            // A partial subscription can still deliver the primary taskbar callbacks. Let the controller
+            // time out the connection, and keep the stop path alive for any work it has already queued.
+            const auto result = service->AdviseVisualTreeChange(this);
+            if (FAILED(result))
+                DockLog(L"explorer", L"The visual tree subscription was incomplete.", static_cast<unsigned long>(result));
 
             const HANDLE signals[] = {stop.get(), controller.get()};
             WaitForMultipleObjects(ARRAYSIZE(signals), signals, FALSE, INFINITE);
@@ -71,13 +72,11 @@ namespace
             {
                 queue.TryEnqueue([self = get_strong()]
                 {
+                    if (!self->style)
+                        return;
                     self->style.reset();
                     SetEvent(self->restored.get());
                 });
-            }
-            else
-            {
-                SetEvent(restored.get());
             }
             service->UnadviseVisualTreeChange(this);
         }
@@ -113,6 +112,12 @@ namespace
         }
 
     private:
+        bool IsStopping() const
+        {
+            return stopping || WaitForSingleObject(stop.get(), 0) == WAIT_OBJECT_0 ||
+                WaitForSingleObject(controller.get(), 0) == WAIT_OBJECT_0;
+        }
+
         template <typename T>
         T Get(InstanceHandle handle)
         {
@@ -137,7 +142,7 @@ namespace
 
             queue.TryEnqueue([self = get_strong(), frame = winrt::make_weak(frame), root = winrt::make_weak(root)]
             {
-                if (self->stopping || self->style)
+                if (self->IsStopping() || self->style || WaitForSingleObject(self->ready.get(), 0) == WAIT_OBJECT_0)
                     return;
                 const auto grid = root.get();
                 const auto apps = frame.get();
@@ -155,19 +160,30 @@ namespace
                         DockLog(L"explorer", L"Taskbar not styled: the system tray frame was not found.");
                         return;
                     }
-                    if (TaskbarStyle::Find(apps, L"HitodamaLook") || TaskbarStyle::Find(grid, L"WindowsDockGlass"))
+                    if (TaskbarStyle::Find(apps, L"HitodamaLook"))
                     {
-                        DockLog(L"explorer", L"Taskbar not styled: another appearance module already owns it.");
+                        DockLog(L"explorer", L"Hitodama owns the primary taskbar appearance.");
+                        SetEvent(self->blocked.get());
+                        return;
+                    }
+                    if (TaskbarStyle::Find(grid, L"WindowsDockGlass"))
+                    {
+                        DockLog(L"explorer", L"The primary taskbar still has Windows Dock styling from another session.");
+                        SetEvent(self->blocked.get());
                         return;
                     }
 
-                    auto next = std::make_unique<TaskbarStyle>(grid, self->dashboard, self->controllerPid);
-                    next->Apply(apps, tray);
                     {
                         std::scoped_lock guard(self->taskbarLock);
+                        if (self->IsStopping())
+                            return;
                         self->taskbarQueue = DispatcherQueue::GetForCurrentThread();
-                        self->style = std::move(next);
                     }
+                    auto next = std::make_unique<TaskbarStyle>(grid, self->dashboard, self->controllerPid);
+                    next->Apply(apps, tray);
+                    if (self->IsStopping())
+                        return;
+                    self->style = std::move(next);
                     SetEvent(self->ready.get());
                     DockLog(L"explorer", L"Taskbar styled.");
                 }
@@ -230,7 +246,7 @@ namespace
 
         winrt::com_ptr<IXamlDiagnostics> diagnostics;
         DWORD controllerPid;
-        winrt::handle controller, ready, restored, stop, dashboard;
+        winrt::handle controller, ready, restored, blocked, stop, dashboard;
         std::atomic<bool> stopping{};
         std::mutex taskbarLock;
         DispatcherQueue taskbarQueue{nullptr};

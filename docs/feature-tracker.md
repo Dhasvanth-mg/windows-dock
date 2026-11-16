@@ -1,5 +1,24 @@
 # Feature tracker
 
+## Dock startup and panel reliability
+
+- Status: Implemented, verified, and installed in native taskbar mode.
+- Scope: Address the native startup failures exposed by the redesign rollout and make Dashboard and Coding chats open reliably from the existing launchers, shortcuts, and sign-in entry.
+- Acceptance criteria: The controller publishes a usable entry point only after it is ready. The requested view opens on a cold launch and when the dashboard is already running. Native startup uses a single shell attachment and restores its styling on failure or exit. A styling conflict keeps the dock usable through a working tray session. Preserve the existing redesign and Hitodama coexistence.
+- Implementation: Decoupled appearance ownership and cleanup from controller lifetime, prevented a partial visual tree subscription from aborting another ready callback, and added a bounded retry for Explorer's startup window. Native styling denial falls back to the tray. The sign-in and shortcut launchers share a ready-controller check, and a click on the tray icon opens Dashboard.
+- Verification: The native Release build and self-contained managed publish passed. All 43 working-tree tests and all 31 tests in the staged source passed. The rollout reproduced an abandoned native appearance and verified automatic tray fallback. Refreshing Explorer cleared the earlier session's styling. The installed build then stopped, restored, and reattached in the same Explorer process. The sign-in command started one controller, two launcher requests showed the same dashboard, and a native slot opened inline Coding chats.
+- Limitations: The initial shell refresh cleared styling left by a previous build. Hitodama's appearance is paused for native mode while its assistant is still running. Sign-in registration and the launch command were verified in the current session.
+- Remaining work: None for the installed controller and panel routes.
+
+### Faster reveal and original dock direction
+
+- Status: Implemented and verified on the installed native dock.
+- Scope: Shorten the delay between requesting the dock and seeing it. Refine the taskbar and first-open experience against the owner's original centered, macOS-inspired frosted dock direction.
+- Acceptance criteria: Record repeatable launch or reveal timings, preserve low background resource usage, and give the primary dock launcher, four-slot status row, and Windows tray and clock clear placement on a centered surface. Preserve fixed-size, same-window chat interactions and the current feature access.
+- Implementation: Refined the shared acrylic, grouped the launcher, four wider animated slots, system tray, and clock, and shortened the upward pull threshold. A launcher press can start the hidden dashboard ahead of the release gesture. The managed panel renders before its live refresh, pauses its scan while hidden, and uses a compact 896 DIP main width with the same 454 DIP height.
+- Verification: Reviewed the original brief and reference video. Windows UI Automation found the visible launcher and four same-row slots, opened a selected chat inline, and measured 896-by-454 and 764-by-454 panels at 96 DPI. Captured the real taskbar. On this machine, the earlier tray run recorded 2,692 ms cold and a 446 ms warm median. The final native run recorded 687 ms cold and a 15 ms warm median across five warm samples, with one 381 ms warm sample.
+- Remaining work: None for this visual and reveal pass.
+
 ## Fix top repository-analysis findings
 
 - Status: Built and verified by builds, tests, and standalone dashboard measurements. Not yet run on the installed native taskbar.

@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using Microsoft.Win32;
@@ -22,7 +20,7 @@ internal static class DockStartup
     internal static bool UseNativeMode()
     {
         using var key = Registry.CurrentUser.OpenSubKey(RunKey);
-        return (key?.GetValue(Entry) as string)?.EndsWith(" --start-at-logon", StringComparison.OrdinalIgnoreCase) == true;
+        return (key?.GetValue(Entry) as string)?.EndsWith(" --start-at-logon --tray", StringComparison.OrdinalIgnoreCase) != true;
     }
 
     internal static void Set(bool enabled, bool trayMode)
@@ -47,26 +45,6 @@ internal static class DockStartup
             DockLog.Write("startup", "The Windows taskbar was not ready after 20 seconds; the dock was not started.");
             return 1;
         }
-        if (DockTaskbar.ControllerRunning())
-            return 0;
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo(Controller, trayMode ? "--tray" : "")
-            {
-                WorkingDirectory = AppContext.BaseDirectory,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            });
-            var failed = process == null || process.WaitForExit(1500) && process.ExitCode != 0;
-            if (failed)
-                DockLog.Write("startup", "The native controller exited early" +
-                    (process is { HasExited: true } ? " with code " + process.ExitCode : "") + ". See native.log.");
-            return failed ? 1 : 0;
-        }
-        catch (Win32Exception error)
-        {
-            DockLog.Write("startup", "The native controller could not be started.", error, detail: true);
-            return 1;
-        }
+        return DockTaskbar.StartController(trayMode, openDashboard: false);
     }
 }

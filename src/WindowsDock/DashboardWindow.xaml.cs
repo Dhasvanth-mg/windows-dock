@@ -96,24 +96,30 @@ public partial class DashboardWindow : Window
                 codingWorkspace?.Suspend();
                 ReportDockVisibility(false);
                 ticker.Stop();
+                agentTicker.Stop();
                 if (releaseWhenIdle && runningJobs.Count == 0)
                     idleExit.Start();
                 return;
             }
             idleExit.Stop();
-            ReportDockVisibility(true);
             lastReveal = Environment.TickCount64;
-            UpdateDashboard();
-            if (currentPage is DashboardPage.Weather or DashboardPage.Home)
-                _ = RefreshSavedWeatherAsync();
+            Dispatcher.InvokeAsync(() =>
+            {
+                if (closed || !IsVisible)
+                    return;
+                ReportDockVisibility(true);
+                UpdateDashboard();
+                if (agentGrid != null)
+                    _ = RefreshAgentsAsync();
+                if (currentPage is DashboardPage.Weather or DashboardPage.Home)
+                    _ = RefreshSavedWeatherAsync();
+            }, DispatcherPriority.ApplicationIdle);
             ticker.Start();
+            if (agentGrid != null)
+                agentTicker.Start();
             PositionAtTaskbar();
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
-            {
-                var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-                revealOffset.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(17, 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
-                Shell.BeginAnimation(OpacityProperty, new DoubleAnimation(0.4, 1, TimeSpan.FromMilliseconds(160)) { EasingFunction = ease });
-            }
+                Shell.BeginAnimation(OpacityProperty, new DoubleAnimation(0.88, 1, TimeSpan.FromMilliseconds(80)));
         };
         SizeChanged += (_, _) => PositionAtTaskbar();
         DpiChanged += (_, _) => Dispatcher.BeginInvoke(() =>
@@ -170,11 +176,7 @@ public partial class DashboardWindow : Window
         };
         ticker.Tick += (_, _) => UpdateDashboard();
         if (agentGrid != null)
-        {
             agentTicker.Tick += (_, _) => _ = RefreshAgentsAsync();
-            agentTicker.Start();
-            _ = RefreshAgentsAsync();
-        }
         InitializeFocus();
         var page = Enum.TryParse<DashboardPage>(initialPage, true, out var initial) && Enum.IsDefined(initial)
             ? initial : DashboardPage.Home;
@@ -284,9 +286,12 @@ public partial class DashboardWindow : Window
             _ => SettingsPage()
         };
 
-        UpdateDashboard();
-        if (IsVisible && (currentPage is DashboardPage.Weather or DashboardPage.Home))
-            _ = RefreshSavedWeatherAsync();
+        if (IsVisible)
+        {
+            UpdateDashboard();
+            if (currentPage is DashboardPage.Weather or DashboardPage.Home)
+                _ = RefreshSavedWeatherAsync();
+        }
     }
     private void UpdateDashboard()
     {
@@ -319,7 +324,7 @@ public partial class DashboardWindow : Window
     {
         var screen = TaskbarScreen();
         var dpi = VisualTreeHelper.GetDpi(this);
-        Width = Math.Min(compactAgents ? 764 : 960, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
+        Width = Math.Min(compactAgents ? 764 : 896, screen.WorkingArea.Width / dpi.DpiScaleX - 24);
         MaxHeight = Math.Max(200, (DockTaskbar.AnchorTop(screen.Bounds, dpi.DpiScaleY) - screen.Bounds.Top) /
             dpi.DpiScaleY - 12);
         Height = Math.Min(PanelHeight, MaxHeight);

@@ -11,50 +11,88 @@ namespace WindowsDock;
 
 internal static class DockTaskbar
 {
-    internal static bool ControllerRunning() => FindWindowW("WindowsDockNativeController", null) != 0;
+    private const string ControllerClass = "WindowsDockNativeController";
+    private const string ControllerMutex = @"Local\WindowsDock.NativeTaskbar.Controller";
 
     internal static bool ShellReady() => FindWindowW("Shell_TrayWnd", null) != 0;
 
     internal static int Open()
     {
-        if (SignalLauncher())
+        var result = StartController(trayMode: !DockStartup.UseNativeMode(), openDashboard: true);
+        if (result != 0)
+            MessageBox.Show("Windows Dock could not start. Check that both executables are in the same folder.", "Windows Dock");
+        return result;
+    }
+
+    internal static int StartController(bool trayMode, bool openDashboard)
+    {
+        if (Ready())
             return 0;
 
         var controller = Path.Combine(AppContext.BaseDirectory, "NativeTaskbar.exe");
-        var native = DockStartup.UseNativeMode();
+        Process? process = null;
         try
         {
-            using var process = Process.Start(new ProcessStartInfo(controller, native ? "" : "--tray --open")
+            var attempted = false;
+            var deadline = Environment.TickCount64 + 12_000;
+            while (Environment.TickCount64 < deadline)
             {
-                WorkingDirectory = AppContext.BaseDirectory,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            });
-            if (process == null)
-                return 1;
-            if (!native)
-                return 0;
-            for (var attempt = 0; attempt < 45 && !process.HasExited; attempt++)
-            {
-                if (SignalLauncher())
+                if (Ready())
                     return 0;
-                Thread.Sleep(200);
+                if ((process == null || process.HasExited) && !ControllerPending())
+                {
+                    if (attempted)
+                        break;
+                    attempted = true;
+                    process = Process.Start(new ProcessStartInfo(controller, trayMode ? "--tray" : "")
+                    {
+                        WorkingDirectory = AppContext.BaseDirectory,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    });
+                }
+                Thread.Sleep(35);
             }
-            return SignalLauncher() ? 0 : 1;
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            if (SignalLauncher())
+            if (Ready())
                 return 0;
-            MessageBox.Show("Keep NativeTaskbar.exe and WindowsDock.exe in the same folder.", "Windows Dock");
+            DockLog.Write("startup", "The controller did not publish a ready entry point. See native.log.");
             return 1;
         }
+        catch (System.ComponentModel.Win32Exception error)
+        {
+            if (Ready())
+                return 0;
+            DockLog.Write("startup", "The dock controller could not be started.", error, detail: true);
+            return 1;
+        }
+        finally { process?.Dispose(); }
+
+        bool Ready() => openDashboard ? SignalLauncher() : ReadyController() != 0;
+    }
+
+    private static bool ControllerPending()
+    {
+        if (!Mutex.TryOpenExisting(ControllerMutex, out var controller))
+            return false;
+        controller.Dispose();
+        return true;
+    }
+
+    private static int ReadyController()
+    {
+        var window = FindWindowW(ControllerClass, null);
+        if (window == 0 || GetWindowThreadProcessId(window, out var pid) == 0)
+            return 0;
+        if (!EventWaitHandle.TryOpenExisting(AgentGrid.SessionObject(pid, "Stop"), out var stop))
+            return 0;
+        using (stop)
+            return stop.WaitOne(0) ? 0 : pid;
     }
 
     private static bool SignalLauncher()
     {
-        var window = FindWindowW("WindowsDockNativeController", null);
-        if (window == 0 || GetWindowThreadProcessId(window, out var pid) == 0)
+        var pid = ReadyController();
+        if (pid == 0)
             return false;
         if (!EventWaitHandle.TryOpenExisting(AgentGrid.SessionObject(pid, "OpenLauncher"), out var launch) &&
             !EventWaitHandle.TryOpenExisting(AgentGrid.SessionObject(pid, "Dashboard"), out launch))

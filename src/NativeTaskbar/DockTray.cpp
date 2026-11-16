@@ -63,8 +63,8 @@ namespace
     }
 }
 
-DockTray::DockTray(bool trayMode, HANDLE stop, HANDLE dashboard, HANDLE chats, HANDLE assistant)
-    : trayMode(trayMode), stop(stop), dashboard(dashboard), chats(chats), assistant(assistant)
+DockTray::DockTray(bool trayMode, HANDLE stop, HANDLE openDashboard, HANDLE chats, HANDLE assistant)
+    : trayMode(trayMode), stop(stop), openDashboard(openDashboard), chats(chats), assistant(assistant)
 {
     const auto instance = GetModuleHandleW(nullptr);
     taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
@@ -204,7 +204,7 @@ void DockTray::ShowMenu()
     switch (choice)
     {
     case ChatsCommand: SetEvent(chats); break;
-    case DashboardCommand: SetEvent(dashboard); break;
+    case DashboardCommand: SetEvent(openDashboard); break;
     case AssistantCommand: SetEvent(assistant); break;
     case ExitCommand: SetEvent(stop); break;
     default: Shell_NotifyIconW(NIM_SETFOCUS, &notification); break;
@@ -241,7 +241,7 @@ LRESULT DockTray::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
     {
         const auto event = version4 ? LOWORD(lParam) : lParam;
         if (event == NIN_SELECT || event == NIN_KEYSELECT || (!version4 && event == WM_LBUTTONUP))
-            SetEvent(trayMode ? chats : dashboard);
+            SetEvent(openDashboard);
         else if (event == WM_CONTEXTMENU || (!version4 && event == WM_RBUTTONUP))
             ShowMenu();
     }

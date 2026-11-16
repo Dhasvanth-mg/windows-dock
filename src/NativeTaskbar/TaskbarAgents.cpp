@@ -167,13 +167,13 @@ void TaskbarStyle::AddAgentGrid()
         return;
 
     controls::Grid grid;
-    grid.Margin({3, 1, 3, 1});
+    grid.Margin({3, 0, 3, 0});
     grid.VerticalAlignment(xaml::VerticalAlignment::Center);
     grid.HorizontalAlignment(xaml::HorizontalAlignment::Center);
     grid.Name(L"WindowsDockCodingAgents");
     xaml::Automation::AutomationProperties::SetName(grid, L"Coding chat status grid");
     controls::RowDefinition row;
-    row.Height({40, xaml::GridUnitType::Pixel});
+    row.Height({34, xaml::GridUnitType::Pixel});
     grid.RowDefinitions().Append(row);
     for (int index = 0; index < 4; ++index)
     {
@@ -187,12 +187,12 @@ void TaskbarStyle::AddAgentGrid()
         controls::Button button;
         button.Name(L"WindowsDockAgentSlot" + std::to_wstring(index + 1));
         button.Width(AgentSlotWidth - 2);
-        button.Height(36);
+        button.Height(32);
         button.MinWidth(0);
         button.MinHeight(0);
         button.Padding({0, 0, 0, 0});
         button.BorderThickness({0, 0, 0, 0});
-        button.CornerRadius({5, 5, 5, 5});
+        button.CornerRadius({6, 6, 6, 6});
         button.HorizontalAlignment(xaml::HorizontalAlignment::Center);
         button.VerticalAlignment(xaml::VerticalAlignment::Center);
         button.HorizontalContentAlignment(xaml::HorizontalAlignment::Center);
@@ -202,8 +202,8 @@ void TaskbarStyle::AddAgentGrid()
         character.IsHitTestVisible(false);
         character.RenderTransform(xaml::Media::TranslateTransform());
         controls::Image face;
-        face.Width(18);
-        face.Height(13.5);
+        face.Width(20);
+        face.Height(15);
         face.Stretch(xaml::Media::Stretch::Fill);
         character.Children().Append(face);
         controls::TextBlock symbol;
@@ -233,7 +233,7 @@ void TaskbarStyle::AddAgentGrid()
     agentTray = controls::Border();
     agentTray.BorderThickness({1, 1, 1, 1});
     agentTray.CornerRadius({8, 8, 8, 8});
-    agentTray.Margin({0, 0, 6, 1});
+    agentTray.Margin({1, 0, 7, 1});
     agentTray.Child(grid);
     controls::Grid::SetColumn(agentTray, 1);
     dockControls.Children().Append(agentTray);
@@ -282,7 +282,10 @@ void TaskbarStyle::RefreshAgentGrid()
     if (revision != InterlockedCompareExchange(&agentState->revision, 0, 0))
         return;
     if (agentAppearanceDirty)
-        agentTray.BorderBrush(agentHighContrast ? nullptr : AgentBrush(30, 235, 235, 235));
+    {
+        agentTray.BorderBrush(agentHighContrast ? nullptr : AgentBrush(31, 235, 232, 226));
+        agentTray.Background(agentHighContrast ? nullptr : AgentBrush(65, 8, 8, 8));
+    }
     const auto normalText = GetSysColor(COLOR_WINDOWTEXT);
     for (int index = 0; index < 4; ++index)
     {
@@ -325,7 +328,7 @@ void TaskbarStyle::RefreshAgentGrid()
         {
             const bool prominent = state == Working || state == Approval || state == Finished ||
                 state == Failed || state == QuotaReached;
-            button.Background(AgentBrush(prominent ? 32 : 0, r, g, b));
+            button.Background(AgentBrush(prominent ? 26 : 0, r, g, b));
             face.Source(agentSprites[state]);
         }
         symbol.Text(mood.symbol);

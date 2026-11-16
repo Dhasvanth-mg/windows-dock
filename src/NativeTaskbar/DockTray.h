@@ -9,7 +9,7 @@
 class DockTray
 {
 public:
-    DockTray(bool trayMode, HANDLE stop, HANDLE dashboard, HANDLE chats, HANDLE assistant);
+    DockTray(bool trayMode, HANDLE stop, HANDLE openDashboard, HANDLE chats, HANDLE assistant);
     ~DockTray();
     DockTray(DockTray const&) = delete;
     DockTray& operator=(DockTray const&) = delete;
@@ -27,7 +27,7 @@ private:
     void ShowMenu();
 
     const bool trayMode;
-    HANDLE stop, dashboard, chats, assistant;
+    HANDLE stop, openDashboard, chats, assistant;
     HWND window{};
     UINT taskbarCreated{};
     NOTIFYICONDATAW notification{};
