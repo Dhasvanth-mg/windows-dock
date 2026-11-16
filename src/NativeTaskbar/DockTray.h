@@ -9,12 +9,12 @@
 class DockTray
 {
 public:
-    DockTray(bool trayMode, HANDLE stop, HANDLE openDashboard, HANDLE chats, HANDLE assistant);
+    DockTray(bool trayMode, HANDLE stop, HANDLE openDashboard, HANDLE chats, HANDLE assistant, HANDLE command);
     ~DockTray();
     DockTray(DockTray const&) = delete;
     DockTray& operator=(DockTray const&) = delete;
 
-    bool HasEntryPoint() const { return hasIcon || hasHotkey; }
+    bool HasEntryPoint() const { return hasIcon || hasHotkey || hasAssistantHotkey || hasCommandHotkey; }
     void Watch(AgentGridState* grid);
     void Explain() const;
 
@@ -27,12 +27,12 @@ private:
     void ShowMenu();
 
     const bool trayMode;
-    HANDLE stop, openDashboard, chats, assistant;
+    HANDLE stop, openDashboard, chats, assistant, command;
     HWND window{};
     UINT taskbarCreated{};
     NOTIFYICONDATAW notification{};
     HICON customIcon{};
-    bool hasIcon{}, hasHotkey{}, hasAssistantHotkey{}, version4{};
+    bool hasIcon{}, hasHotkey{}, hasAssistantHotkey{}, hasCommandHotkey{}, version4{};
     AgentGridState* grid{};
     LONG revision{-1};
     std::array<int32_t, 4> states{-2, -2, -2, -2};

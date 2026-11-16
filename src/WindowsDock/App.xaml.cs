@@ -24,6 +24,7 @@ public partial class App : Application
                     () => Dispatcher.BeginInvoke(() => ShowDashboard(true)),
                     () => Dispatcher.BeginInvoke(() => ShowAssistant()),
                     () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.ShowDockDashboard()),
+                    () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.ShowCommandPalette()),
                     () => Dispatcher.InvokeAsync(() => Shutdown()));
                 if (dashboardSession == null)
                 {

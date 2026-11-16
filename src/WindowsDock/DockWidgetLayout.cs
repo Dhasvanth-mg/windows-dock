@@ -5,7 +5,7 @@ internal sealed record DockWidgetLayout(string Pinned, string[] Favorites)
     internal const string FileName = "widget-layout.json";
     internal const int FavoriteLimit = 4;
     private static readonly string[] Ids =
-        ["audio", "audio-presets", "meetings", "clipboard", "github", "workspaces", "downloads", "focus", "notifications", "assistant", "activity", "jobs"];
+        ["audio", "audio-presets", "meetings", "clipboard", "github", "workspaces", "downloads", "focus", "notifications", "assistant", "activity", "jobs", "calculator", "wifi", "bluetooth", "favorites"];
 
     internal static string WidgetId(string id) => Array.Find(Ids, item => item.Equals(id, StringComparison.OrdinalIgnoreCase))
         ?? throw new ArgumentException("Choose a widget from the Widgets tab.");

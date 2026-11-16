@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -176,6 +177,10 @@ public partial class DashboardWindow
             case "notifications": BuildPinnedNotifications(content, cancellation); break;
             case "activity": BuildPinnedActivity(window, content, cancellation); break;
             case "jobs": BuildPinnedJobs(content, cancellation); break;
+            case "calculator": BuildCalculator(content); break;
+            case "wifi": BuildWireless(content, Windows.Devices.Radios.RadioKind.WiFi, cancellation); break;
+            case "bluetooth": BuildWireless(content, Windows.Devices.Radios.RadioKind.Bluetooth, cancellation); break;
+            case "favorites": BuildPinnedFavorites(content); break;
             case "assistant":
                 var grid = Columns(1, 1);
                 for (var index = 0; index < AssistantPersonas.All.Length; index++)
@@ -223,7 +228,11 @@ public partial class DashboardWindow
         new("Notifications", "Review and summarize alerts", "alerts summary digest", 0xEA8F, pink, ShowNotificationWidget, "notifications"),
         new("Assistant", "Choose a character", "AI model provider message research planning coding casual", 0xEAB7, purple, ShowAssistantPicker, "assistant"),
         new("Activity inbox", "Replies, approvals, and limits", "unread status finished quota", 0xEA8F, pink, ShowActivityInbox, "activity"),
-        new("Assistant jobs", "Running tasks and saved results", "background delegate coding writing Scribe research", 0xE823, amber, ShowAssistantJobs, "jobs")
+        new("Assistant jobs", "Running tasks and saved results", "background delegate coding writing Scribe research", 0xE823, amber, ShowAssistantJobs, "jobs"),
+        new("Calculator", "Calculate, convert, and save results", "calc math percentages units history favorites", 0xE8EF, accent, ShowCalculator, "calculator"),
+        new("Wi-Fi networks", "Signal, saved networks, and connection", "wifi wireless connections", 0xE701, accent, ShowWifiWidget, "wifi"),
+        new("Bluetooth devices", "Paired devices and radio controls", "bluetooth pairing headphones", 0xE702, accent, ShowBluetoothWidget, "bluetooth"),
+        new("Favorites", "Files, links, workspaces, and shortcuts", "favorites bookmarks pin", 0xE734, accent, ShowFavoritesWidget, "favorites")
     ];
 
     private Button WidgetTile(WidgetAction widget, bool showArrow = true)
@@ -256,10 +265,16 @@ public partial class DashboardWindow
         ShowPage(page);
     }
 
-    private void ShowCommandPalette()
+    internal void ShowCommandPalette() => ShowCommandPalette(null);
+
+    private void ShowCommandPalette(string? initialQuery)
     {
         if (commandInput is { } current)
         {
+            if (openPanels.FirstOrDefault(panel => panel.Window == Window.GetWindow(current)) is { } panel)
+                ShowTrackedPanel(panel);
+            if (initialQuery != null)
+                current.Text = initialQuery;
             current.Focus();
             current.SelectAll();
             return;
@@ -306,13 +321,15 @@ public partial class DashboardWindow
         })
             options.Add(new(label, "Windows settings", "windows", 0xE713, accent, () => { window.Close(); OpenTarget(target); }));
         foreach (var workspace in Workspaces())
-            options.Add(new(workspace.Name, "Workspace", "workspace", 0xE8B7, amber, () =>
+            options.Add(new(workspace.Name, "Workspace", "workspace open restore", 0xE8B7, amber, async () =>
             {
-                window.Close();
-                var failed = LaunchWorkspace(workspace);
-                if (failed > 0)
-                    ShowOwnedMessage($"{failed} workspace item(s) could not open.");
+                hint.Text = "Restoring " + workspace.Name + "…";
+                var failed = await LaunchWorkspaceAsync(workspace);
+                hint.Text = failed == 0 ? "Workspace opened." : $"{failed} item(s) could not be restored.";
             }));
+        foreach (var favorite in DockFavorites.Read())
+            options.Add(new(favorite.Name, favorite.Folder.Length > 0 ? "Favorite · " + favorite.Folder : "Favorite",
+                "favorite " + favorite.Target, 0xE734, accent, () => ActivateFavorite(favorite, hint)));
         var apps = new Lazy<WidgetAction[]>(() => InstalledAppShortcuts().Select(app =>
             new WidgetAction(app.Label, "App", "app", 0xECAA, green, () => { window.Close(); OpenTarget(app.Path); })).ToArray());
         var openWindows = new Lazy<WidgetAction[]>(() => ShellIntegration.Windows().Select(target =>
@@ -359,6 +376,7 @@ public partial class DashboardWindow
             }
         };
         Render();
+        search.Text = initialQuery ?? "";
         window.Loaded += (_, _) => Keyboard.Focus(search);
         window.Show();
 
@@ -370,7 +388,23 @@ public partial class DashboardWindow
                 query = query[7..].Trim();
             hint.Text = "↑ ↓ Select   ·   Enter Open   ·   Esc Close";
             hint.Foreground = subdued;
-            matches = query.Length == 0
+            DockCalculation? calculation = null;
+            string? calculationError = null;
+            var calculated = !windowsOnly && DockCalculator.TryEvaluate(query, out calculation, out calculationError);
+            if (calculated && calculation != null)
+            {
+                var result = calculation;
+                matches =
+                [
+                    new(result.Result, result.Detail + " · Enter to copy", "", 0xE8EF, accent, () => CopyCalculation(result, hint)),
+                    new("Save calculation", "Add this result to calculator favorites", "", 0xE734, accent, () => SaveCalculation(result, true, hint)),
+                    new("Calculator", "History and favorites", "", 0xE8EF, accent, ShowCalculator)
+                ];
+            }
+            else if (calculationError != null)
+                matches = [new("Calculator", calculationError, "", 0xE8EF, accent, ShowCalculator)];
+            else
+                matches = query.Length == 0
                 ? windowsOnly ? openWindows.Value.Take(10).ToArray() : emptyResults
                 : (windowsOnly ? openWindows.Value : openWindows.Value.Concat(options).Concat(apps.Value))
                 .Select(item => (Item: item, Score: SearchScore(item, query)))
@@ -486,10 +520,11 @@ public partial class DashboardWindow
                 var edit = IconButton(0xE70F, "Edit " + item.Name, () => Edit(item));
                 DockPanel.SetDock(edit, Dock.Right);
                 row.Children.Add(edit);
-                var launch = MakeButton(IconLabel(item.Name, 0xE8B7, amber), item.Name, () =>
+                var launch = MakeButton(IconLabel(item.Name, 0xE8B7, amber), item.Name, async () =>
                 {
-                    var failures = LaunchWorkspace(item);
-                    message.Text = failures == 0 ? "Workspace opened." : $"{failures} workspace item(s) could not open.";
+                    message.Text = "Restoring " + item.Name + "…";
+                    var failures = await LaunchWorkspaceAsync(item);
+                    message.Text = failures == 0 ? "Workspace opened." : $"{failures} item(s) could not be restored.";
                 });
                 launch.HorizontalContentAlignment = HorizontalAlignment.Left;
                 launch.ToolTip = item.Folder;
@@ -522,6 +557,19 @@ public partial class DashboardWindow
             targets.AcceptsReturn = true;
             targets.Height = 69;
             targets.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            var windows = existing?.Windows ?? [];
+            var captureStatus = Text("", 11, subdued);
+            captureStatus.TextWrapping = TextWrapping.Wrap;
+            var capture = ActionButton("Capture open windows", () =>
+            {
+                windows = DockWorkspaces.Capture();
+                ShowCapture();
+            });
+            capture.HorizontalAlignment = HorizontalAlignment.Left;
+            editor.Children.Add(capture);
+            editor.Children.Add(captureStatus);
+            editor.Children.Add(ActionButton("Clear captured windows", () => { windows = []; ShowCapture(); }));
+            ShowCapture();
             var actions = new WrapPanel { Margin = new Thickness(0, 7, 0, 0) };
             var save = ActionButton("Save workspace", () =>
             {
@@ -529,9 +577,9 @@ public partial class DashboardWindow
                 var directory = folder.Text.Trim();
                 var links = targets.Text.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Distinct().ToArray();
                 if (title.Length == 0 || directory.Length != 0 && !Directory.Exists(directory) ||
-                    links.Length > 12 || links.Any(link => !WorkspaceTarget(link)) || directory.Length == 0 && links.Length == 0)
+                    links.Length > 12 || links.Any(link => !WorkspaceTarget(link)) || directory.Length == 0 && links.Length == 0 && windows.Length == 0)
                 {
-                    message.Text = "Enter a name and a valid folder, HTTPS link, or app path.";
+                    message.Text = "Name the workspace and add a folder, link, app, or captured window.";
                     return;
                 }
                 if (existing == null && Workspaces().Count >= 30)
@@ -539,7 +587,7 @@ public partial class DashboardWindow
                     message.Text = "Remove a workspace before adding another.";
                     return;
                 }
-                var item = new WorkspaceShortcut(title, directory, links);
+                var item = new WorkspaceShortcut(title, directory, links, windows);
                 if (existing == null)
                     Workspaces().Add(item);
                 else
@@ -552,6 +600,13 @@ public partial class DashboardWindow
                 actions.Children.Add(ActionButton("Remove", () => { Workspaces().Remove(existing); Persist(); }));
             editor.Children.Add(actions);
             name.Focus();
+
+            void ShowCapture()
+            {
+                captureStatus.Text = windows.Length == 0 ? "No windows captured." :
+                    $"{windows.Length} captured · " + string.Join(", ", windows.Select(item => Path.GetFileNameWithoutExtension(item.Path))
+                        .Distinct(StringComparer.OrdinalIgnoreCase).Take(5));
+            }
         }
 
         TextBox AddField(string label, string? value, int limit)
@@ -567,9 +622,17 @@ public partial class DashboardWindow
 
         void Persist()
         {
-            WriteJson("workspaces.json", Workspaces());
-            editor.Visibility = Visibility.Collapsed;
-            message.Text = "";
+            try
+            {
+                WriteJson("workspaces.json", Workspaces());
+                editor.Visibility = Visibility.Collapsed;
+                message.Text = "";
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                workspaceShortcuts = null;
+                message.Text = "Windows Dock could not save the workspace.";
+            }
             Render();
         }
     }
@@ -578,21 +641,34 @@ public partial class DashboardWindow
         Path.IsPathFullyQualified(target) && (File.Exists(target) || Directory.Exists(target)) ||
         Uri.TryCreate(target, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && uri.UserInfo.Length == 0;
 
-    private int LaunchWorkspace(WorkspaceShortcut shortcut)
+    private bool restoringWorkspace;
+
+    private async Task<int> LaunchWorkspaceAsync(WorkspaceShortcut shortcut)
     {
+        if (restoringWorkspace)
+            return 1;
+        restoringWorkspace = true;
         var failures = 0;
-        foreach (var target in new[] { shortcut.Folder }.Concat(shortcut.Targets).Where(target => target.Length > 0))
+        var windows = shortcut.Windows ?? [];
+        try
         {
-            if (!WorkspaceTarget(target))
+            foreach (var target in new[] { shortcut.Folder }.Concat(shortcut.Targets).Where(target => target.Length > 0))
             {
-                failures++;
-                continue;
+                if (windows.Any(window => window.Path.Equals(target, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                if (!WorkspaceTarget(target))
+                {
+                    failures++;
+                    continue;
+                }
+                try { ShellIntegration.Launch(target); }
+                catch (Exception error) when (error is Win32Exception or InvalidOperationException) { failures++; }
             }
-            try { ShellIntegration.Launch(target); }
-            catch (Exception error) when (error is Win32Exception or InvalidOperationException) { failures++; }
+            return failures + await DockWorkspaces.RestoreAsync(windows, lifetime.Token);
         }
-        return failures;
+        catch (OperationCanceledException) { return failures; }
+        finally { restoringWorkspace = false; }
     }
 
-    private sealed record WorkspaceShortcut(string Name, string Folder, string[] Targets);
+    private sealed record WorkspaceShortcut(string Name, string Folder, string[] Targets, WorkspaceWindow[]? Windows = null);
 }

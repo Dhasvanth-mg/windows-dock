@@ -341,7 +341,12 @@ public partial class DashboardWindow
             var links = new WrapPanel();
             foreach (var (name, path) in settings)
             {
-                var button = ActionButton(name, () => OpenTarget("ms-settings:" + path));
+                var button = ActionButton(name, path switch
+                {
+                    "network-wifi" => ShowWifiWidget,
+                    "bluetooth" => ShowBluetoothWidget,
+                    _ => () => OpenTarget("ms-settings:" + path)
+                });
                 button.Margin = new Thickness(0, 0, 4, 4);
                 links.Children.Add(button);
             }

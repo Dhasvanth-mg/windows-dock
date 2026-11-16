@@ -43,6 +43,8 @@ namespace
               showAssistant(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowAssistant").c_str())),
               openLauncher(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"OpenLauncher").c_str())),
               showLauncher(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowLauncher").c_str())),
+              command(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"Command").c_str())),
+              showCommand(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowCommand").c_str())),
               panelVisible(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"PanelVisible").c_str())),
               visibilityChanged(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"PanelVisibilityChanged").c_str())),
               completion(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"AgentCompletion").c_str())),
@@ -51,7 +53,8 @@ namespace
         {
             if (!ready || !restored || !appearanceStop || !appearanceBlocked || !stop || !warmDashboard ||
                 !dashboard || !showDashboard || !agent || !showAgent ||
-                !assistant || !showAssistant || !openLauncher || !showLauncher || !panelVisible || !visibilityChanged || !completion || !agentGrid)
+                !assistant || !showAssistant || !openLauncher || !showLauncher || !command || !showCommand ||
+                !panelVisible || !visibilityChanged || !completion || !agentGrid)
                 winrt::throw_last_error();
         }
 
@@ -59,7 +62,7 @@ namespace
 
         winrt::handle ready, restored, appearanceStop, appearanceBlocked, stop, warmDashboard;
         winrt::handle dashboard, showDashboard, agent, showAgent, assistant, showAssistant;
-        winrt::handle openLauncher, showLauncher, panelVisible, visibilityChanged, completion, agentGrid;
+        winrt::handle openLauncher, showLauncher, command, showCommand, panelVisible, visibilityChanged, completion, agentGrid;
     };
 
     bool AttachAppearance(Session const& session, DWORD explorerPid, HANDLE explorer,
@@ -234,7 +237,7 @@ namespace
             : nullptr);
         if (trayMode && !grid)
             winrt::throw_last_error();
-        DockTray tray(trayMode, session.stop.get(), session.openLauncher.get(), session.agent.get(), session.assistant.get());
+        DockTray tray(trayMode, session.stop.get(), session.openLauncher.get(), session.agent.get(), session.assistant.get(), session.command.get());
         if (trayMode && !tray.HasEntryPoint())
             return 1;
         tray.Watch(grid.get());
@@ -273,9 +276,9 @@ namespace
             SetEvent(session.openLauncher.get());
         TaskbarVisibility visibility;
         const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get(), session.agent.get(),
-            session.assistant.get(), session.openLauncher.get(), session.visibilityChanged.get(), session.warmDashboard.get()};
+            session.assistant.get(), session.openLauncher.get(), session.command.get(), session.visibilityChanged.get(), session.warmDashboard.get()};
         const HANDLE panels[] = {session.showDashboard.get(), session.showAgent.get(), session.showAssistant.get(),
-            session.showLauncher.get()};
+            session.showLauncher.get(), session.showCommand.get()};
         for (;;)
         {
             HANDLE waitFor[ARRAYSIZE(signals) + 2];
@@ -307,12 +310,12 @@ namespace
                 visibility.Hold(false);
                 continue;
             }
-            if (result == WAIT_OBJECT_0 + 7)
+            if (result == WAIT_OBJECT_0 + ARRAYSIZE(signals) - 1)
             {
                 ensureDashboard();
                 continue;
             }
-            if (result == WAIT_OBJECT_0 + 6)
+            if (result == WAIT_OBJECT_0 + ARRAYSIZE(signals) - 2)
             {
                 visibility.Hold(dashboardProcess && WaitForSingleObject(session.panelVisible.get(), 0) == WAIT_OBJECT_0);
                 continue;

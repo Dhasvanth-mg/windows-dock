@@ -9,9 +9,10 @@ namespace
     constexpr UINT TrayMessage = WM_APP + 1;
     constexpr UINT DockHotkey = 1;
     constexpr UINT AssistantHotkey = 2;
+    constexpr UINT CommandHotkey = 3;
     constexpr UINT_PTR StatusTimer = 1;
     constexpr UINT_PTR BatteryTimer = 2;
-    constexpr UINT DashboardCommand = 1, ChatsCommand = 2, ExitCommand = 3, AssistantCommand = 4;
+    constexpr UINT DashboardCommand = 1, ChatsCommand = 2, ExitCommand = 3, AssistantCommand = 4, SearchCommand = 5;
 
     HICON MakeIcon(std::array<int32_t, 4> const& states)
     {
@@ -63,8 +64,8 @@ namespace
     }
 }
 
-DockTray::DockTray(bool trayMode, HANDLE stop, HANDLE openDashboard, HANDLE chats, HANDLE assistant)
-    : trayMode(trayMode), stop(stop), openDashboard(openDashboard), chats(chats), assistant(assistant)
+DockTray::DockTray(bool trayMode, HANDLE stop, HANDLE openDashboard, HANDLE chats, HANDLE assistant, HANDLE command)
+    : trayMode(trayMode), stop(stop), openDashboard(openDashboard), chats(chats), assistant(assistant), command(command)
 {
     const auto instance = GetModuleHandleW(nullptr);
     taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
@@ -77,6 +78,7 @@ DockTray::DockTray(bool trayMode, HANDLE stop, HANDLE openDashboard, HANDLE chat
         winrt::throw_last_error();
     hasHotkey = RegisterHotKey(window, DockHotkey, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'D') != FALSE;
     hasAssistantHotkey = RegisterHotKey(window, AssistantHotkey, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'A') != FALSE;
+    hasCommandHotkey = RegisterHotKey(window, CommandHotkey, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'K') != FALSE;
     notification.cbSize = sizeof(notification);
     notification.hWnd = window;
     notification.uID = 1;
@@ -98,6 +100,8 @@ DockTray::~DockTray()
         UnregisterHotKey(window, DockHotkey);
     if (hasAssistantHotkey)
         UnregisterHotKey(window, AssistantHotkey);
+    if (hasCommandHotkey)
+        UnregisterHotKey(window, CommandHotkey);
     DestroyWindow(window);
     if (customIcon)
         DestroyIcon(customIcon);
@@ -111,6 +115,8 @@ void DockTray::Explain() const
         std::fputws(L"Click the Windows Dock button on the taskbar to open Dashboard.\n", stdout);
     if (hasAssistantHotkey)
         std::fputws(L"Press Ctrl+Alt+A to open the assistant.\n", stdout);
+    if (hasCommandHotkey)
+        std::fputws(L"Press Ctrl+Alt+K to search the dock.\n", stdout);
 }
 
 void DockTray::AddIcon()
@@ -185,6 +191,7 @@ void DockTray::ShowMenu()
     AppendMenuW(menu, MF_STRING, ChatsCommand, L"Coding chats");
     AppendMenuW(menu, MF_STRING, AssistantCommand, L"Open assistant");
     AppendMenuW(menu, MF_STRING, DashboardCommand, L"Dashboard");
+    AppendMenuW(menu, MF_STRING, SearchCommand, L"Search dock");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, ExitCommand, trayMode ? L"Exit Windows Dock" : L"Restore Windows taskbar");
     POINT anchor{};
@@ -206,6 +213,7 @@ void DockTray::ShowMenu()
     case ChatsCommand: SetEvent(chats); break;
     case DashboardCommand: SetEvent(openDashboard); break;
     case AssistantCommand: SetEvent(assistant); break;
+    case SearchCommand: SetEvent(command); break;
     case ExitCommand: SetEvent(stop); break;
     default: Shell_NotifyIconW(NIM_SETFOCUS, &notification); break;
     }
@@ -231,6 +239,8 @@ LRESULT DockTray::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         SetEvent(chats);
     else if (message == WM_HOTKEY && wParam == AssistantHotkey)
         SetEvent(assistant);
+    else if (message == WM_HOTKEY && wParam == CommandHotkey)
+        SetEvent(command);
     else if (message == WM_TIMER && wParam == StatusTimer && grid)
         UpdateStatus();
     else if ((message == WM_TIMER && wParam == BatteryTimer) || message == WM_POWERBROADCAST)
