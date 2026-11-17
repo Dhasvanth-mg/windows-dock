@@ -2,12 +2,14 @@
 
 ## Continue with workspace restore and installation
 
-- Status: In progress.
+- Status: Workspace update installed. Release ZIP built and installer verified in isolated directories.
 - Scope: Improve manual workspace capture, restore, and window tiling. Add a packaged per-user install, update, rollback, and uninstall path. Check the current native attachment state.
 - Acceptance criteria: Workspace actions operate on selected windows only, retain saved documents and links, and continue to read existing workspace records. Verify the release lifecycle in isolation and preserve user data when removing the app. Record any native Explorer work that still requires a fresh session.
 - Workspace implementation: Pick which open windows to capture, tile selected windows side by side, stacked, or in a grid on their current displays, and undo the last tiling change. Add explicit files through a file picker. Restore uses saved titles for existing windows and limits title fallback to windows opened during restore.
 - Workspace verification: All 98 tests passed. The Windows fixture tiled two selected windows, left a third window in place, captured both tiles, undid the move, and reapplied the saved layout. Window geometry and placement were checked against synthetic windows.
-- Remaining work: Verify the release install and rollback paths, then stage the new managed build. Native Explorer attachment still needs a fresh session.
+- Release implementation: The build script packages the managed app and native controller in a self-contained x64 ZIP with dependency notices, per-file hashes, and an archive checksum. The installer manages per-user startup, the Start menu shortcut, the current and previous builds, and uninstall. Uninstall preserves app data.
+- Release verification: The ZIP checksum matched. Isolated PowerShell 7 and Windows PowerShell runs exercised install, rejection of a modified payload, update, rollback, and uninstall with preservation of an unrelated test file. The final package repeated the lifecycle test with dependency notices included. The installed managed app matched the tested workspace build.
+- Limitations and remaining work: The packaged installer still needs a live Start menu and sign-in registration check on a fresh installation. The current Explorer still returns `0x8000FFFF` during native attachment. Browser URLs and documents must be added to the workspace explicitly.
 
 ## Complete the remaining Windows Dock features
 
@@ -19,7 +21,7 @@
 - Productivity milestone: Added editable local calendar events, overlap detection, ICS export, and local planner context. Voice memos can record, import, play, and export WAV files and save searchable transcripts. Optional Groq transcription asks before sending audio. File search adds a bounded SQLite full-text index for selected directories with incremental updates and removal. Widget favorites can be reordered and the pinned widget and favorites can be imported or exported. Job retry starts a new run or moves the previous brief to Orbit for review.
 - Productivity verification: All 96 tests passed. An isolated Windows fixture verified saving an event, finding an excerpt from an indexed file, editing and searching a saved memo transcript, reordering a favorite, and opening an interrupted writing brief in Orbit's composer. The self-contained x64 publish succeeded and the nine installed managed files matched the release package.
 - Limitations: Local calendar editing covers same-day timed events. Indexing covers supported text and Word content, with filename search for PDF, spreadsheet, and media files. Indexing runs only on request. Voice microphone capture, audible playback, and live transcription need real device and account checks. Job retry starts over. The Explorer log still shows `0x8000FFFF` with zero callbacks, so the refreshed dashboard could not be opened from the native button in this session.
-- Remaining work: Verify native attachment and recovery after a fresh sign-in, live audio routing across devices, account sign-in and uploads, and supported coding approvals. Build live desktop chat controls, shared custom MCP setup and resumable workflows, the remaining wireless and native customization controls, deeper workspace restoration, connected calendar and document editing, voice command and text-to-speech controls, more file extractors and retrieval, linked contacts and mind maps, the vault, and installer/update/rollback packaging.
+- Remaining work: Verify native attachment and recovery after a fresh sign-in, live audio routing across devices, account sign-in and uploads, supported coding approvals, and the packaged installer's shell registration. Build live desktop chat controls, shared custom MCP setup and resumable workflows, the remaining wireless and native customization controls, deeper workspace restoration, connected calendar and document editing, voice command and text-to-speech controls, more file extractors and retrieval, and linked contacts, mind maps, and the vault.
 
 ## Remaining features inventory
 

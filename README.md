@@ -60,7 +60,7 @@ Right-click a favorite and select **Move earlier** or **Move later** to change i
 - **Meetings** reads a local `.ics` export and offers Join and Copy link for supported meeting providers. Create, edit, delete, and export events in the local calendar. Local events appear on Today and in Fern’s planner lookup.
 - **Clipboard and files** shows Windows clipboard history when it is enabled. Pin text, images, or files and drag them into other apps.
 - **GitHub checks** reads your PRs, review requests, and recent Actions runs through the signed-in GitHub CLI. Enter a repository as `owner/repo`.
-- **Workspace shortcuts** group a folder, websites, and local app shortcuts into a single action.
+- **Workspaces** reopen a folder, explicit website URLs and local files, and the windows you chose to capture. Use **Choose open windows** in a workspace to capture specific windows, tile them side by side, stacked, or in a grid, and undo a tiling change. Existing windows with different titles are left in place during restore. Add browser URLs and documents you want reopened to the workspace.
 - **Downloads** shows recent files and partial browser downloads from the Downloads folder, alongside Windows background transfers. Browser progress is limited to what the partial files expose.
 - **Focus timer** runs locally. **Windows Focus** opens the system controls for a focus session with Do Not Disturb.
 - **Notifications** reads recent Windows alerts when access is allowed. Select alerts and review the draft before sending it to any of the four summary providers.
@@ -100,6 +100,24 @@ Open **MCP connections** inside a character's chat. **Fetch context** runs the s
 In **Weather**, choose **Use my location** for automatic forecasts, or search for a city. The automatic option requests Windows location access and sends rounded coordinates to Open-Meteo when refreshing the forecast.
 
 ## Build the native dock
+
+To build a distributable Windows x64 ZIP and its SHA-256 checksum, run:
+
+~~~powershell
+.\scripts\Build-WindowsDockRelease.ps1 -Output .\artifacts\release -Version 0.1.0
+~~~
+
+Extract the ZIP and run .\Install-WindowsDock.ps1 from the extracted folder. The default per-user install adds a Start menu shortcut and starts at sign-in. Use -NoStartAtSignIn to omit startup on first install.
+
+Run the installer from a newer extracted ZIP with -Action Update to select that build. -Action Rollback selects the previous build. The selected build takes effect on the next sign-in or after the running controller exits and the app launches again. -Action Uninstall removes the owned startup and Start menu entries. Saved chats, settings, and app data stay on disk. If Explorer is holding an installed native file, run uninstall again after a fresh sign-in to finish removing its files.
+
+Install lifecycle verification can run against any built package in an isolated workspace folder:
+
+~~~powershell
+.\tests\Test-ReleaseLifecycle.ps1 -PackagePath .\artifacts\release\WindowsDock-win-x64\payload
+~~~
+
+### Development build
 
 Use MSVC, the Windows SDK, CMake, and the .NET 10 SDK on Windows:
 
