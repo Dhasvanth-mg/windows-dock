@@ -443,6 +443,8 @@ public partial class DashboardWindow
         var changingFiles = false;
         var shownTurns = 40;
         SavedChat[] savedChats = [];
+        var showHiddenChats = false;
+        Guid? renamingChat = null, deletingChat = null;
         var catalog = new Dictionary<string, PlanModel[]>();
         var cooldownTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         cooldownTimer.Tick += (_, _) => SetBusy(busy);
@@ -743,15 +745,21 @@ public partial class DashboardWindow
         {
             history.Children.Clear();
             var query = findChat.Text.Trim();
-            var matches = savedChats.Where(item => item.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            var hiddenCount = savedChats.Count(item => item.Hidden);
+            if (hiddenCount == 0)
+                showHiddenChats = false;
+            var matches = savedChats.Where(item => (showHiddenChats || !item.Hidden) &&
+                (item.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 item.Persona.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                item.Folder?.Contains(query, StringComparison.OrdinalIgnoreCase) == true)
+                item.Folder?.Contains(query, StringComparison.OrdinalIgnoreCase) == true))
                 .OrderByDescending(item => item.Pinned).ThenByDescending(item => item.Updated);
             // Pinned first, then your groups, then everything else by when it was last used, the way the chat sites
-            // list conversations: one quiet line each, the open one filled in.
+            // list conversations: one quiet line each, the open one filled in. Hidden chats sit in their own group at
+            // the end, and only while you ask to see them.
             var today = DateTime.Today;
-            foreach (var group in matches.GroupBy(item => item.Pinned ? (0, "Pinned") : item.Folder is { Length: > 0 } folderName
-                ? (1, folderName) : (2, ChatAge(item.Updated.LocalDateTime.Date))))
+            foreach (var group in matches.GroupBy(item => item.Hidden ? (3, "Hidden") : item.Pinned ? (0, "Pinned") :
+                item.Folder is { Length: > 0 } folderName ? (1, folderName) : (2, ChatAge(item.Updated.LocalDateTime.Date)))
+                .OrderBy(group => group.Key.Item1 == 3 ? 1 : 0))
             {
                 var label = Text(group.Key.Item2, 11, AssistantFaint);
                 label.Margin = new Thickness(8, history.Children.Count == 0 ? 0 : 10, 0, 3);
@@ -763,6 +771,16 @@ public partial class DashboardWindow
                     if (targetSlot < 0)
                         continue;
                     var current = entry.Id == chat.Id;
+                    if (renamingChat == entry.Id)
+                    {
+                        history.Children.Add(RenameRow(entry));
+                        continue;
+                    }
+                    if (deletingChat == entry.Id)
+                    {
+                        history.Children.Add(DeleteRow(entry));
+                        continue;
+                    }
                     var name = Text(entry.Title, 12.5, current ? AssistantInk : AssistantSecondary);
                     name.TextTrimming = TextTrimming.CharacterEllipsis;
                     name.VerticalAlignment = VerticalAlignment.Center;
@@ -782,7 +800,7 @@ public partial class DashboardWindow
                     open.ToolTip = $"{entry.Title}\n{AssistantPersonas.All[targetSlot].Name}, {entry.Updated.LocalDateTime:g}";
                     if (current)
                         open.Background = controlSelected;
-                    history.Children.Add(open);
+                    history.Children.Add(ChatRow(entry, open));
                 }
             }
 
@@ -792,6 +810,207 @@ public partial class DashboardWindow
             if (history.Children.Count == 0)
                 history.Children.Add(Text(query.Length == 0 ? "Your chats will show up here." :
                     "No matching conversations.", 12, AssistantSecondary));
+            if (hiddenCount > 0)
+            {
+                var toggle = PlainButton(Text(showHiddenChats ? "Put hidden chats away" : $"Show hidden chats ({hiddenCount})", 11.5, AssistantFaint),
+                    showHiddenChats ? "Put hidden chats away" : "Show hidden chats", () =>
+                    {
+                        showHiddenChats = !showHiddenChats;
+                        RenderHistory();
+                    });
+                toggle.Margin = new Thickness(0, 10, 0, 0);
+                toggle.HorizontalAlignment = HorizontalAlignment.Left;
+                history.Children.Add(toggle);
+            }
+        }
+
+        // One chat in the list, with rename, hide and delete tucked on the right. They show while the pointer or the
+        // keyboard is on the row, the way the chat sites do it, so the list stays one quiet line per chat.
+        UIElement ChatRow(SavedChat entry, Button open)
+        {
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 1) };
+            row.Children.Add(open);
+            var tools = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 3, 0), Opacity = 0 };
+            tools.Children.Add(ChatTool(0xE8AC, $"Rename “{entry.Title}”", () =>
+            {
+                renamingChat = entry.Id;
+                deletingChat = null;
+                RenderHistory();
+            }));
+            tools.Children.Add(ChatTool(entry.Hidden ? 0xE7B3 : 0xED1A, entry.Hidden ? $"Unhide “{entry.Title}”" : $"Hide “{entry.Title}”",
+                () => _ = HideChatAsync(entry)));
+            tools.Children.Add(ChatTool(0xE74D, $"Delete “{entry.Title}”", () =>
+            {
+                deletingChat = entry.Id;
+                renamingChat = null;
+                RenderHistory();
+            }));
+            row.Children.Add(tools);
+            void Reveal() => tools.Opacity = row.IsMouseOver || row.IsKeyboardFocusWithin ? 1 : 0;
+            row.MouseEnter += (_, _) => Reveal();
+            row.MouseLeave += (_, _) => Reveal();
+            row.IsKeyboardFocusWithinChanged += (_, _) => Reveal();
+            // Leave room for the tools so a long title never runs underneath them.
+            open.Padding = new Thickness(8, 6, 8, 6);
+            row.MouseEnter += (_, _) => open.Padding = new Thickness(8, 6, 76, 6);
+            row.MouseLeave += (_, _) => open.Padding = new Thickness(8, 6, row.IsKeyboardFocusWithin ? 76 : 8, 6);
+            return row;
+        }
+
+        Button ChatTool(int icon, string label, Action action)
+        {
+            var button = IconButton(icon, label, action);
+            button.Width = 23;
+            button.Height = 23;
+            button.Margin = new Thickness(0);
+            button.Foreground = AssistantSecondary;
+            return button;
+        }
+
+        UIElement RenameRow(SavedChat entry)
+        {
+            var box = Field("Chat name", 100);
+            box.Text = entry.Title;
+            box.Margin = new Thickness(0, 0, 0, 1);
+            var done = false;
+            box.KeyDown += (_, args) =>
+            {
+                if (args.Key == System.Windows.Input.Key.Enter)
+                {
+                    args.Handled = true;
+                    done = true;
+                    _ = RenameChatAsync(entry, box.Text);
+                }
+                else if (args.Key == System.Windows.Input.Key.Escape)
+                {
+                    args.Handled = true;
+                    done = true;
+                    renamingChat = null;
+                    RenderHistory();
+                }
+            };
+            // Clicking away keeps what was typed, like renaming a file.
+            box.LostKeyboardFocus += (_, _) =>
+            {
+                if (done)
+                    return;
+                done = true;
+                _ = RenameChatAsync(entry, box.Text);
+            };
+            box.Loaded += (_, _) =>
+            {
+                box.Focus();
+                box.SelectAll();
+            };
+            return box;
+        }
+
+        UIElement DeleteRow(SavedChat entry)
+        {
+            var card = new Border
+            {
+                Background = controlSelected, CornerRadius = new CornerRadius(8), Padding = new Thickness(9, 7, 7, 7),
+                Margin = new Thickness(0, 0, 0, 1)
+            };
+            var stack = new StackPanel();
+            var question = Text($"Delete “{entry.Title}”?", 12, AssistantInk);
+            question.TextTrimming = TextTrimming.CharacterEllipsis;
+            stack.Children.Add(question);
+            var note = Text("It goes to the Recycle Bin with its files.", 11, AssistantFaint);
+            note.TextWrapping = TextWrapping.Wrap;
+            stack.Children.Add(note);
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+            var delete = ActionButton("Delete", () => _ = DeleteChatAsync(entry));
+            delete.Foreground = new SolidColorBrush(Color.FromRgb(0xD9, 0x5C, 0x4A));
+            delete.Margin = new Thickness(0, 0, 6, 0);
+            buttons.Children.Add(delete);
+            buttons.Children.Add(QuietButton("Keep", () =>
+            {
+                deletingChat = null;
+                RenderHistory();
+            }));
+            stack.Children.Add(buttons);
+            card.Child = stack;
+            card.Loaded += (_, _) => delete.Focus();
+            card.KeyDown += (_, args) =>
+            {
+                if (args.Key != System.Windows.Input.Key.Escape)
+                    return;
+                args.Handled = true;
+                deletingChat = null;
+                RenderHistory();
+            };
+            return card;
+        }
+
+        bool ChatInUse(SavedChat entry)
+        {
+            if (entry.Id != chat.Id || !(busy || changingFiles))
+                return false;
+            status.Text = "Wait for the reply to finish before changing this chat.";
+            return true;
+        }
+
+        async Task RenameChatAsync(SavedChat entry, string name)
+        {
+            renamingChat = null;
+            if (string.IsNullOrWhiteSpace(name) || name.Trim() == entry.Title || ChatInUse(entry))
+            {
+                RenderHistory();
+                return;
+            }
+            try
+            {
+                UpdateSavedChat(await Task.Run(() => DockChats.Organize(entry.Id, name, entry.Folder ?? "", entry.Pinned)));
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                status.Text = "Could not rename that chat.";
+                RenderHistory();
+            }
+        }
+
+        async Task HideChatAsync(SavedChat entry)
+        {
+            if (ChatInUse(entry))
+                return;
+            try
+            {
+                var saved = await Task.Run(() => DockChats.SetHidden(entry.Id, !entry.Hidden));
+                UpdateSavedChat(saved);
+                status.Text = saved.Hidden ? $"Hid “{saved.Title}”. Show hidden chats brings it back." : $"“{saved.Title}” is back in the list.";
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { status.Text = "Could not hide that chat."; }
+        }
+
+        async Task DeleteChatAsync(SavedChat entry)
+        {
+            deletingChat = null;
+            if (ChatInUse(entry))
+            {
+                RenderHistory();
+                return;
+            }
+            try
+            {
+                await Task.Run(() => DockChats.Delete(entry.Id));
+                savedChats = savedChats.Where(item => item.Id != entry.Id).ToArray();
+                for (var index = 0; index < assistantConversations.Length; index++)
+                    if (assistantConversations[index]?.Id == entry.Id && index != slot)
+                        assistantConversations[index] = new AssistantConversation();
+                if (entry.Id == chat.Id)
+                    SwitchChat(new AssistantConversation { SourceIndex = chat.SourceIndex });
+                else
+                    RenderHistory();
+                status.Text = $"Deleted “{entry.Title}”. It is in the Recycle Bin if you need it back.";
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or OperationCanceledException)
+            {
+                status.Text = "Could not delete that chat.";
+                RenderHistory();
+            }
         }
 
         void ResumeChat(SavedChat entry, int targetSlot)

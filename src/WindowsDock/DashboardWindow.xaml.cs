@@ -1,3 +1,4 @@
+using System.IO;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -347,9 +348,36 @@ public partial class DashboardWindow : Window
             ticker.Interval = interval;
     }
 
+    // With the taskbar controller running, its background monitor rings alarms. A dashboard started on its own has no
+    // monitor, so it rings them itself while it is open.
+    private DateTime alarmStamp;
+    private DateTimeOffset? nextAlarm;
+
+    private void RingAlarmsWithoutMonitor()
+    {
+        if (controllerPid > 0)
+            return;
+        try
+        {
+            var stamp = File.GetLastWriteTimeUtc(DockData.FilePath(DockAlarms.FileName));
+            if (stamp != alarmStamp)
+            {
+                alarmStamp = stamp;
+                nextAlarm = DockAlarms.Next(DockAlarms.Load());
+            }
+            if (nextAlarm is not { } due || due > DateTimeOffset.UtcNow)
+                return;
+            foreach (var alarm in DockAlarms.TakeDue(DateTimeOffset.UtcNow))
+                DockMonitor.Ring(alarm);
+            alarmStamp = default;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+    }
+
     private void UpdateDashboard()
     {
         TuneTicker();
+        RingAlarmsWithoutMonitor();
         UpdateCompletionCue();
         RefreshFocusState();
         updateAudioWidget?.Invoke();

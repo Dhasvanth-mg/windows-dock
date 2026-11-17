@@ -136,39 +136,6 @@ namespace
         return nullptr;
     }
 
-    class TaskbarVisibility
-    {
-    public:
-        ~TaskbarVisibility() { Hold(false); }
-
-        void Hold(bool visible)
-        {
-            APPBARDATA bar{sizeof(APPBARDATA)};
-            bar.hWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-            if (!bar.hWnd)
-                return;
-            const auto state = SHAppBarMessage(ABM_GETSTATE, &bar);
-            if (visible && !held && (state & ABS_AUTOHIDE))
-            {
-                bar.lParam = state & ~ABS_AUTOHIDE;
-                SHAppBarMessage(ABM_SETSTATE, &bar);
-                held = !(SHAppBarMessage(ABM_GETSTATE, &bar) & ABS_AUTOHIDE);
-            }
-            else if (!visible && held)
-            {
-                held = false;
-                if (!(state & ABS_AUTOHIDE))
-                {
-                    bar.lParam = state | ABS_AUTOHIDE;
-                    SHAppBarMessage(ABM_SETSTATE, &bar);
-                }
-            }
-        }
-
-    private:
-        bool held{};
-    };
-
     int Run(int argc, wchar_t** argv)
     {
         if (argc == 3 && std::wstring_view(argv[1]) == L"--restore")
@@ -335,7 +302,7 @@ namespace
         };
         if (openOnStart)
             SetEvent(session.openLauncher.get());
-        TaskbarVisibility visibility;
+
         const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get(), session.agent.get(),
             session.assistant.get(), session.openLauncher.get(), session.command.get(), session.visibilityChanged.get(), session.warmDashboard.get()};
         const HANDLE panels[] = {session.showDashboard.get(), session.showAgent.get(), session.showAssistant.get(),
@@ -368,7 +335,6 @@ namespace
             {
                 dashboardProcess.close();
                 ResetEvent(session.panelVisible.get());
-                visibility.Hold(false);
                 continue;
             }
             if (result == WAIT_OBJECT_0 + ARRAYSIZE(signals) - 1)
@@ -378,7 +344,8 @@ namespace
             }
             if (result == WAIT_OBJECT_0 + ARRAYSIZE(signals) - 2)
             {
-                visibility.Hold(dashboardProcess && WaitForSingleObject(session.panelVisible.get(), 0) == WAIT_OBJECT_0);
+                // Auto-hide is left as the user set it. Switching it off while the panel shows changes the work area, and
+                // Windows then resizes every maximised window to sit above the taskbar.
                 continue;
             }
             if (result >= WAIT_OBJECT_0 + 2 && result < WAIT_OBJECT_0 + 2 + ARRAYSIZE(panels))

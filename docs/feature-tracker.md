@@ -1,5 +1,15 @@
 # Feature tracker
 
+## Chat delete, rename and hide, and the dashboard no longer moves the window behind it
+
+- Status: Built and tested. The window fix is compiled into the native module but not yet checked in the running app.
+- Scope: Message received during the work below. Add delete, rename and hide for assistant chats. When the dashboard opens, the maximised window behind it moves up so it sits above the dock; it should open without disturbing that window.
+- Acceptance criteria: Each chat in the Assistant history can be renamed, hidden and deleted without opening another window. Hidden chats leave the list but can be shown again and unhidden. Delete asks first and can be undone. Opening the dashboard leaves the size and position of other windows alone.
+- Implementation: The cause of the moving window was the native controller switching taskbar auto-hide off while the panel showed, so the taskbar stayed up. That changes the screen's work area, and Windows resizes every maximised window to stop above the taskbar (in the owner's screenshots the window's bottom row moved from about y=876 to y=824). The controller now leaves auto-hide as the owner set it (`src/NativeTaskbar/Main.cpp`). In the chat history each row shows rename, hide and delete icons while the pointer or keyboard is on it. Rename turns the row into a text box (Enter or clicking away saves, Esc cancels). Hide moves the chat into a Hidden group shown only after "Show hidden chats (n)"; hiding unpins it. Delete turns the row into a short question with Delete and Keep, and sends the chat folder and its files to the Recycle Bin. A chat whose reply is still arriving cannot be changed. `DockChats.SetHidden` and `DockChats.Delete` hold the storage side; `SavedChat` has a new `Hidden` flag, so older chat files load unchanged.
+- Verification: 169 of 169 tests pass, including a new one for rename, hide, unhide and delete. A harness seeded four chats in a throwaway data folder, opened the real Assistant page and photographed the list plain, with the row tools showing, with the delete question, and with hidden chats shown.
+- Limitations: With auto-hide on, the taskbar may now slide away while the dashboard is open, because nothing holds it up any more; the dashboard keeps its place. The delete-to-Recycle-Bin path was exercised only through the plain-delete test seam, so the real Recycle Bin call has not been run yet.
+- Remaining work: Check both in the running build.
+
 ## Run the new build
 
 - Status: Running and verified.
@@ -22,7 +32,10 @@
 - Status: In progress.
 - Scope: Message received during the work above. Reduce popup windows as far as possible. Add a downward swipe on the taskbar to dismiss the dock, and reopen it at exactly the same spot. Let the assistants control the dock's widgets fully, including timers, alarms, focus mode, notes, stickies and to-dos.
 - Acceptance criteria: Tool panels that open their own window are moved into the dashboard window where practical, and what remains is listed with the reason. A downward swipe dismisses the dock; reopening returns to the same page, assistant, conversation and scroll position, including after the hidden dashboard process exits. Assistant dock actions cover the focus timer, alarms, Windows Focus, stickies, memos and to-dos, each proposed for review before it runs like the existing actions, and covered by tests.
-- Remaining work: Everything; see the outcome below once recorded.
+- Implementation so far (agents that run the widgets): New alarms (`DockAlarms.cs`): one-off alarms kept in `alarms.json`, rung by the background monitor with a sound and a topmost message even while the dashboard is closed, or by the dashboard itself when it runs without the taskbar. Each alarm is taken and removed in one locked step, so it never rings twice. Typing a time first in Today's box ("7:30 call mum") sets an alarm instead of a to-do; alarms show in Coming up with a bell and a cancel button. Assistants and MCP clients get new reviewed actions: add_todo, complete_todo, set_alarm, cancel_alarm, open_windows_focus, add_sticky (with paper colour and show on Today), add_memo, append_note and show_sticky_on_today, beside the existing focus timer. Their status now lists to-dos, alarms and note titles; notes that look like they hold a password, key or card number are withheld and cannot be found or changed by an assistant. Note text from assistants may span several lines.
+- Verification so far: 169 of 169 tests pass, 6 new for alarms and these actions (timing rules, ring-once, preview before running, secret notes withheld).
+- Limitations so far: Windows Focus itself can only be opened, not switched on, because Windows offers no supported way for an app to turn Do Not Disturb on. Alarm ringing was not heard live.
+- Remaining work: Swipe down to dismiss and resume in place; moving tool popups into the dashboard.
 
 ## Assistant chat inside Dashboard, styled like ChatGPT and Claude, with learned memory
 

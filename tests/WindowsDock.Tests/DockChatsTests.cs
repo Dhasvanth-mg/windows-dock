@@ -114,4 +114,26 @@ public sealed class DockChatsTests : IDisposable
         Assert.Equal("reply-2-file-1.py", ChatMarkdown.SuggestedName("python filename=../escape.py", 2, 1));
         Assert.Null(ChatMarkdown.WebLink("file:///C:/Windows"));
     }
+
+    [Fact]
+    public void ChatsCanBeRenamedHiddenAndDeleted()
+    {
+        var id = Guid.NewGuid();
+        SavedTurn[] turns = [new(true, "Plan my week"), new(false, "Sure.")];
+        DockChats.Save(new(id, "planner", DockChats.Title(turns), DateTimeOffset.UtcNow, turns, Pinned: true));
+
+        var renamed = DockChats.Organize(id, "Week plan", "", true);
+        Assert.Equal("Week plan", renamed.Title);
+
+        var hidden = DockChats.SetHidden(id, true);
+        Assert.True(hidden.Hidden);
+        Assert.False(hidden.Pinned);
+        Assert.Equal("Week plan", Assert.Single(DockChats.Load()).Title);
+        Assert.True(DockChats.Organize(id, "Week plan v2", "", false).Hidden);
+        Assert.False(DockChats.SetHidden(id, false).Hidden);
+
+        DockChats.Delete(id, recycle: false);
+        Assert.Empty(DockChats.Load());
+        DockChats.Delete(id, recycle: false);
+    }
 }

@@ -22,8 +22,17 @@ internal static class DockActions
         add_reminder {title: string, date: "YYYY-MM-DD"}
         edit_reminder {title: exact old title, date: old "YYYY-MM-DD", new_title: string, new_date: "YYYY-MM-DD"}
         complete_reminder {title: exact title, date: "YYYY-MM-DD"}
-        start_timer {minutes: integer 1 to 120}
+        add_todo {title: string, date: optional "YYYY-MM-DD", today if left out}
+        complete_todo {title: exact title from dock_status todos, date: optional "YYYY-MM-DD" when two share a title}
+        start_timer {minutes: integer 1 to 120} starts the dock's focus timer
         stop_timer {}
+        set_alarm {time: "HH:MM" 24-hour, date: optional "YYYY-MM-DD", label: optional string}
+        cancel_alarm {label or time from dock_status alarms}
+        open_windows_focus {} opens Windows Focus and Do Not Disturb; Windows only lets the person switch it on
+        add_sticky {text: string, color: optional "butter", "peach", "mint", "sky" or "lilac", show_on_today: optional boolean}
+        add_memo {text: string; the first line becomes its title}
+        append_note {title: a note title from dock_status notes, text: string to add on a new line}
+        show_sticky_on_today {title: a sticky title from dock_status notes}
         set_radio {radio: "wifi" or "bluetooth", enabled: boolean}
         set_startup {enabled: boolean}
         pin_widget {widget: widget ID}
@@ -101,6 +110,79 @@ internal static class DockActions
                     DockData.Update<FocusState>("focus.json", state => new(state?.Minutes ?? 25, null));
                     return "Focus timer stopped.";
                 });
+            case "add_todo":
+                var todoTitle = String(args, "title", 160);
+                var todoDate = OptionalDate(args, "date") ?? DateTime.Today;
+                return Local(name, $"Add to-do “{todoTitle}” for {DayName(todoDate)}", () =>
+                {
+                    DockReminders.Add(new(todoTitle, todoDate));
+                    return $"Added “{todoTitle}” to your to-dos for {DayName(todoDate)}.";
+                });
+            case "complete_todo":
+                var finished = FindTodo(String(args, "title", 160), OptionalDate(args, "date"));
+                return Local(name, $"Mark “{finished.Title}” ({DayName(finished.Date)}) done", () =>
+                {
+                    DockReminders.Change(finished, null);
+                    return $"Marked “{finished.Title}” done.";
+                });
+            case "set_alarm":
+                var alarmAt = DockAlarms.When(String(args, "time", 5), Optional(args, "date", 10), DateTimeOffset.Now);
+                var alarmLabel = Optional(args, "label", DockAlarms.LabelLimit) ?? "Alarm";
+                if (alarmAt <= DateTimeOffset.Now)
+                    throw new ArgumentException("That time has already passed.");
+                return Local(name, $"Set an alarm “{alarmLabel}” for {Moment(alarmAt)}", () =>
+                {
+                    DockAlarms.Add(alarmLabel, alarmAt, DateTimeOffset.Now);
+                    return $"Alarm set for {Moment(alarmAt)}.";
+                });
+            case "cancel_alarm":
+                var target = FindAlarm(Optional(args, "label", DockAlarms.LabelLimit), Optional(args, "time", 5));
+                return Local(name, $"Cancel the alarm “{target.Label}” at {Moment(target.At)}", () =>
+                    DockAlarms.Remove(target.Id) ? $"Cancelled the alarm for {Moment(target.At)}." : "That alarm had already rung or been removed.");
+            case "open_windows_focus":
+                return Local(name, "Open Windows Focus and Do Not Disturb", () =>
+                {
+                    ShellIntegration.Launch("ms-settings:quiethours");
+                    return "Opened Windows Focus. Windows asks you to switch Do Not Disturb on there yourself.";
+                });
+            case "add_sticky":
+                var stickyText = Text(args, "text", 2000);
+                var paper = Optional(args, "color", 16)?.ToLowerInvariant();
+                if (paper != null && DockNotes.Papers.All(item => item.Id != paper))
+                    throw new ArgumentException("Choose butter, peach, mint, sky or lilac for the sticky.");
+                var onToday = args.TryGetProperty("show_on_today", out _) && Boolean(args, "show_on_today");
+                return Local(name, $"Add a sticky: “{Short(stickyText)}”" + (onToday ? " and show it on Today" : ""), () =>
+                {
+                    var sticky = DockNotes.Add(DockNotes.Sticky, stickyText, paper);
+                    if (onToday)
+                        DockNotes.Change(sticky.Id, note => note with { Pinned = true });
+                    return onToday ? "Added the sticky and put it on Today." : "Added the sticky to Notes.";
+                });
+            case "add_memo":
+                var memoText = Text(args, "text", DockNotes.TextLimit);
+                return Local(name, $"Add a memo: “{Short(memoText)}”", () =>
+                {
+                    DockNotes.Add(DockNotes.Memo, memoText);
+                    return $"Added the memo “{DockNotes.Title(new(Guid.Empty, DockNotes.Memo, memoText, "", false, DateTimeOffset.Now))}”.";
+                });
+            case "append_note":
+                var appended = FindNote(String(args, "title", 80), null);
+                var addition = Text(args, "text", 2000);
+                return Local(name, $"Add “{Short(addition)}” to the {(appended.Kind == DockNotes.Sticky ? "sticky" : "memo")} “{DockNotes.Title(appended)}”", () =>
+                {
+                    DockNotes.Change(appended.Id, note => note with
+                    {
+                        Text = note.Text.TrimEnd() + (note.Text.Trim().Length == 0 ? "" : "\n") + addition, Updated = DateTimeOffset.UtcNow
+                    });
+                    return $"Added to “{DockNotes.Title(appended)}”.";
+                });
+            case "show_sticky_on_today":
+                var shown = FindNote(String(args, "title", 80), DockNotes.Sticky);
+                return Local(name, $"Show the sticky “{DockNotes.Title(shown)}” on Today", () =>
+                {
+                    DockNotes.Change(shown.Id, note => note with { Pinned = true });
+                    return $"“{DockNotes.Title(shown)}” is now the sticky on Today.";
+                });
             case "set_radio":
                 var kind = DockRadios.Kind(String(args, "radio", 16));
                 var radioEnabled = Boolean(args, "enabled");
@@ -165,14 +247,106 @@ internal static class DockActions
             bluetooth = await ReadRadioAsync(RadioKind.Bluetooth, token),
             startup = DockStartup.Enabled(),
             focusEnds = timer?.Ends > DateTimeOffset.Now ? timer.Ends : null,
-            layout
+            layout,
+            todos = Todos().Select(item => new { item.Title, date = item.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) }),
+            alarms = DockAlarms.Load().Select(alarm => new { alarm.Label, at = alarm.At.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) }),
+            notes = NoteSummaries()
         });
+    }
+
+    // What an assistant may see of your notes: the title and kind of each, plus which sticky is on Today. Notes that
+    // look like they hold a password, key or card number are withheld entirely, title included.
+    internal static object[] NoteSummaries() => DockNotes.Load()
+        .Where(note => !AssistantLearning.LooksSecret(note.Text))
+        .OrderByDescending(note => note.Updated).Take(40)
+        .Select(note => (object)new { title = DockNotes.Title(note), kind = note.Kind, onToday = note.Pinned && note.Kind == DockNotes.Sticky })
+        .ToArray();
+
+    private static IEnumerable<Reminder> Todos() =>
+        DockReminders.Load().Where(item => item.Date <= DateTime.Today.AddDays(30)).OrderBy(item => item.Date).Take(60);
+
+    private static Reminder FindTodo(string title, DateTime? date)
+    {
+        var matches = DockReminders.Load().Where(item => item.Title.Equals(title, StringComparison.OrdinalIgnoreCase) &&
+            (date == null || item.Date == date)).ToArray();
+        return matches.Length switch
+        {
+            1 => matches[0],
+            0 => throw new ArgumentException($"There is no to-do called “{title}”. Check dock_status for the exact title."),
+            _ => throw new ArgumentException($"More than one to-do is called “{title}”. Add its date.")
+        };
+    }
+
+    private static DockAlarm FindAlarm(string? label, string? time)
+    {
+        if (label == null && time == null)
+            throw new ArgumentException("Give the alarm's label or time.");
+        var matches = DockAlarms.Load().Where(alarm =>
+            (label == null || alarm.Label.Equals(label, StringComparison.OrdinalIgnoreCase)) &&
+            (time == null || alarm.At.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture) == time.Trim().PadLeft(5, '0'))).ToArray();
+        return matches.Length switch
+        {
+            1 => matches[0],
+            0 => throw new ArgumentException("No alarm matches that. Check dock_status for the alarms that are set."),
+            _ => throw new ArgumentException("More than one alarm matches. Give both the label and the time.")
+        };
+    }
+
+    // A note is named by its title, the first line. An exact title wins; otherwise one note whose title starts with
+    // what was given. Notes withheld from assistants cannot be found or changed by them either.
+    private static DockNote FindNote(string title, string? kind)
+    {
+        var notes = DockNotes.Load().Where(note => (kind == null || note.Kind == kind) && !AssistantLearning.LooksSecret(note.Text)).ToArray();
+        var exact = notes.Where(note => DockNotes.Title(note).Equals(title, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var matches = exact.Length > 0 ? exact
+            : notes.Where(note => DockNotes.Title(note).StartsWith(title, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var noun = kind == DockNotes.Sticky ? "sticky" : "note";
+        return matches.Length switch
+        {
+            1 => matches[0],
+            0 => throw new ArgumentException($"There is no {noun} called “{title}”. Check dock_status for note titles."),
+            _ => throw new ArgumentException($"More than one {noun} matches “{title}”. Use the full title.")
+        };
+    }
+
+    private static string? Optional(JsonElement args, string key, int limit) =>
+        args.TryGetProperty(key, out var value) && value.ValueKind != JsonValueKind.Null ? String(args, key, limit) : null;
+
+    private static DateTime? OptionalDate(JsonElement args, string key)
+    {
+        if (Optional(args, key, 10) is not { } value)
+            return null;
+        return DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+            ? date.Date : throw new ArgumentException($"Enter {key} as YYYY-MM-DD.");
+    }
+
+    private static string DayName(DateTime date) =>
+        date == DateTime.Today ? "today" : date == DateTime.Today.AddDays(1) ? "tomorrow" : date.ToString("ddd, MMM d", CultureInfo.CurrentCulture);
+
+    private static string Moment(DateTimeOffset at)
+    {
+        var local = at.ToLocalTime();
+        var day = local.Date == DateTime.Today ? "today" : local.Date == DateTime.Today.AddDays(1) ? "tomorrow" : local.ToString("ddd, MMM d", CultureInfo.CurrentCulture);
+        return $"{local.ToString("t", CultureInfo.CurrentCulture)} {day}";
+    }
+
+    private static string Short(string text)
+    {
+        var line = text.Replace('\n', ' ').Trim();
+        return line.Length > 60 ? line[..60].TrimEnd() + "…" : line;
     }
 
     internal static string String(JsonElement args, string key, int limit) =>
         args.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String &&
         value.GetString()?.Trim() is { Length: > 0 } text && text.Length <= limit && !text.Any(char.IsControl)
             ? text : throw new ArgumentException($"Enter a value for {key} of up to {limit} characters.");
+
+    // Note text may run over several lines, so line breaks and tabs are allowed; other control characters are not.
+    internal static string Text(JsonElement args, string key, int limit) =>
+        args.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String &&
+        value.GetString()?.Replace("\r\n", "\n").Trim() is { Length: > 0 } text && text.Length <= limit &&
+        !text.Any(character => char.IsControl(character) && character is not ('\n' or '\t'))
+            ? text : throw new ArgumentException($"Enter {key} of up to {limit} characters.");
 
     internal static bool IsActionError(Exception error) =>
         error is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or

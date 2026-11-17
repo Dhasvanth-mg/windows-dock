@@ -13,7 +13,7 @@ namespace WindowsDock;
 internal sealed record SavedTurn(bool User, string Text, ChatFile[]? Files = null, AssistantContext? Context = null,
     string[]? OutputFiles = null, string? ReplyProvider = null);
 internal sealed record SavedChat(Guid Id, string Persona, string Title, DateTimeOffset Updated, SavedTurn[] Turns,
-    AssistantProvider? Provider = null, string? Model = null, bool Pinned = false, string? Folder = null);
+    AssistantProvider? Provider = null, string? Model = null, bool Pinned = false, string? Folder = null, bool Hidden = false);
 internal sealed record ChatFile(Guid Id, string Name, string? MediaType, string? Text);
 internal sealed record PickedChatFile(ChatFile File, byte[] Bytes);
 internal sealed record ChatMedia(string Name, string MediaType, byte[] Bytes)
@@ -87,6 +87,43 @@ internal static class DockChats
             };
             Save(updated);
             return updated;
+        }
+    }
+
+    /// <summary>Hides a conversation from the list, or brings it back. Nothing is removed.</summary>
+    internal static SavedChat SetHidden(Guid id, bool hidden)
+    {
+        lock (LibraryLock)
+        {
+            var root = Root;
+            CheckLink(root);
+            var chat = ReadChat(Path.Combine(root, id.ToString("N"))) ??
+                throw new IOException("The conversation could not be read.");
+            var updated = chat with { Hidden = hidden, Pinned = !hidden && chat.Pinned };
+            Save(updated);
+            return updated;
+        }
+    }
+
+    /// <summary>
+    /// Deletes a conversation and its files. By default the folder goes to the Recycle Bin, so a slip can be undone
+    /// from there.
+    /// </summary>
+    internal static void Delete(Guid id, bool recycle = true)
+    {
+        lock (LibraryLock)
+        {
+            var root = Root;
+            CheckLink(root);
+            var directory = Path.Combine(root, id.ToString("N"));
+            if (!Directory.Exists(directory))
+                return;
+            CheckLink(directory);
+            if (recycle)
+                Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(directory,
+                    Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+            else
+                Directory.Delete(directory, recursive: true);
         }
     }
 

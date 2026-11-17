@@ -109,6 +109,7 @@ public partial class DashboardWindow
 
         var compose = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
         var input = Field("New reminder", 160);
+        input.ToolTip = "Type a to-do and press Enter. Start with a time, such as 7:30 call mum, to set an alarm.";
         var add = IconButton(0xE710, "Add reminder");
         add.IsEnabled = false;
         add.Margin = new Thickness(4, 0, -6, 0);
@@ -171,7 +172,17 @@ public partial class DashboardWindow
         {
             try
             {
-                DockReminders.Add(new(input.Text.Trim(), reminderDate));
+                // Starting with a time ("7:30 call mum") sets an alarm for the chosen day instead of a to-do.
+                var text = input.Text.Trim();
+                var timed = System.Text.RegularExpressions.Regex.Match(text, @"^(\d{1,2}:\d{2})\s+(.+)$");
+                if (timed.Success)
+                {
+                    var at = DockAlarms.When(timed.Groups[1].Value, reminderDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                        DateTimeOffset.Now);
+                    DockAlarms.Add(timed.Groups[2].Value, at, DateTimeOffset.Now);
+                }
+                else
+                    DockReminders.Add(new(text, reminderDate));
                 input.Clear();
                 RenderWeek();
                 RenderAgenda();
@@ -257,6 +268,30 @@ public partial class DashboardWindow
                     catch (Exception error) when (DockActions.IsActionError(error)) { ShowOwnedMessage(error.Message); }
                 });
                 items.Add((item.Date, AgendaRow(when, item.Title, done, late)));
+            }
+            List<DockAlarm> alarms;
+            try { alarms = DockAlarms.Load(); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { alarms = []; }
+            foreach (var alarm in alarms)
+            {
+                var local = alarm.At.ToLocalTime();
+                var when = local.Date == today ? local.ToString("t") : local.ToString("ddd ") + local.ToString("t");
+                var cancel = IconButton(0xE711, $"Cancel alarm: {alarm.Label}", () =>
+                {
+                    try { DockAlarms.Remove(alarm.Id); }
+                    catch (Exception error) when (DockActions.IsActionError(error)) { ShowOwnedMessage(error.Message); }
+                    RenderAgenda();
+                });
+                var row = AgendaRow(when, alarm.Label, cancel, false);
+                // A bell marks alarms apart from to-dos and meetings in the same list.
+                if (row is Border { Child: DockPanel line } && line.Children.OfType<TextBlock>().LastOrDefault() is { } label)
+                {
+                    label.Inlines.Clear();
+                    label.Inlines.Add(new Run(char.ConvertFromUtf32(0xEA8F) + "  ")
+                        { FontFamily = new System.Windows.Media.FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), Foreground = AccentFill, FontSize = 11 });
+                    label.Inlines.Add(new Run(alarm.Label));
+                }
+                items.Add((local.DateTime, row));
             }
             foreach (var meeting in homeMeetings)
             {
