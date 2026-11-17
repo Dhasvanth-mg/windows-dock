@@ -24,7 +24,14 @@ public partial class DashboardWindow
     {
         var system = SystemPane(out var update);
         updatePage = update;
-        return FillPage(Panes((1, system), (1, ShelfPane()), (1, WallpaperPane())));
+        var desk = new DockPanel();
+        var spaces = AccentButton("Deskspace", 0xE8B7, AccentFill, ShowDeskspaces);
+        spaces.HorizontalAlignment = HorizontalAlignment.Left;
+        spaces.Margin = new Thickness(0, 0, 0, 10);
+        DockPanel.SetDock(spaces, Dock.Top);
+        desk.Children.Add(spaces);
+        desk.Children.Add(Panes((1, system), (1, ShelfPane()), (1, WallpaperPane())));
+        return FillPage(desk);
     }
 
     // Live readings as plain rows. No gauges; the numbers are the display.

@@ -683,7 +683,7 @@ public partial class DashboardWindow
     private (Window Window, StackPanel Content, CancellationToken Cancellation) CreateDockPanel(
         string title, string subtitle, double width, int icon, SolidColorBrush tint, bool widget = false,
         Action? backAction = null, string backLabel = "Back to widgets", Border? portrait = null,
-        DockSection? section = null, UIElement? body = null, double? height = null)
+        DockSection? section = null, UIElement? body = null, double? height = null, bool expandable = false)
     {
         ParkToolPanel();
         ShowDockPanelHost();
@@ -731,6 +731,7 @@ public partial class DashboardWindow
             "Focus timer" => 218,
             _ => 436
         });
+        var expanded = false;
         window = new Window
         {
             Owner = this, Title = title, Width = Math.Min(width, screen.WorkingArea.Width / dpi.DpiScaleX - 24),
@@ -745,6 +746,14 @@ public partial class DashboardWindow
             Source = new Uri("/WindowsDock;component/DashboardControls.xaml", UriKind.Relative)
         });
         ApplyDashboardResources(window);
+        var compactWidth = window.Width;
+        var compactHeight = window.Height;
+        if (expandable)
+        {
+            var full = IconButton(0xE740, "Toggle fullscreen", ToggleFullscreen);
+            DockPanel.SetDock(full, Dock.Right);
+            header.Children.Insert(1, full);
+        }
         var footer = section is { } selected ? DockNavigation(window, selected) : DockGrip(window, swipe =>
         {
             if (swipe == DockSwipe.Right && backRoute != null)
@@ -793,6 +802,12 @@ public partial class DashboardWindow
         };
         window.PreviewKeyDown += (_, args) =>
         {
+            if (expandable && args.Key == Key.F11)
+            {
+                ToggleFullscreen();
+                args.Handled = true;
+                return;
+            }
             if (args.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
             {
                 args.Handled = true;
@@ -825,7 +840,7 @@ public partial class DashboardWindow
 
         void Position()
         {
-            if (PresentationSource.FromVisual(window) is not HwndSource hwnd)
+            if (expanded || PresentationSource.FromVisual(window) is not HwndSource hwnd)
                 return;
             var area = TaskbarScreen().Bounds;
             var scale = VisualTreeHelper.GetDpi(window);
@@ -833,6 +848,26 @@ public partial class DashboardWindow
             var y = Math.Max(area.Top, DockTaskbar.AnchorTop(area, scale.DpiScaleY) -
                 (window.ActualHeight + 6) * scale.DpiScaleY);
             MoveWindowWithoutActivation(hwnd.Handle, (int)x, (int)y);
+        }
+
+        void ToggleFullscreen()
+        {
+            if (PresentationSource.FromVisual(window) is not HwndSource source)
+                return;
+            expanded = !expanded;
+            if (expanded)
+            {
+                var bounds = TaskbarScreen().Bounds;
+                window.MaxHeight = double.PositiveInfinity;
+                SetWindowPos(source.Handle, 0, bounds.Left, bounds.Top, bounds.Width, bounds.Height, 0x0014);
+            }
+            else
+            {
+                window.MaxHeight = room;
+                window.Width = compactWidth;
+                window.Height = compactHeight;
+                Position();
+            }
         }
     }
 

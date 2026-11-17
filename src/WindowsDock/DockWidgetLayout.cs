@@ -8,7 +8,7 @@ internal sealed record DockWidgetLayout(string Pinned, string[] Favorites)
     internal const string FileName = "widget-layout.json";
     internal const int FavoriteLimit = 4;
     private static readonly string[] Ids =
-        ["audio", "audio-presets", "meetings", "clipboard", "github", "workspaces", "downloads", "focus", "notifications", "assistant", "activity", "jobs", "calculator", "wifi", "bluetooth", "favorites", "voice", "file-search"];
+        ["audio", "audio-presets", "meetings", "clipboard", "github", "workspaces", "downloads", "focus", "notifications", "assistant", "activity", "jobs", "calculator", "wifi", "bluetooth", "favorites", "voice", "file-search", "deskspace"];
     private sealed record Profile(int Version, DockWidgetLayout Layout);
 
     internal static string WidgetId(string id) => Array.Find(Ids, item => item.Equals(id, StringComparison.OrdinalIgnoreCase))

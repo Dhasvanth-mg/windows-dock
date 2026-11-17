@@ -258,6 +258,7 @@ public partial class DashboardWindow
             case "favorites": BuildPinnedFavorites(content); break;
             case "voice": BuildVoiceMemos(window, content, cancellation); break;
             case "file-search": BuildFileSearch(window, content, cancellation); break;
+            case "deskspace": content.Children.Add(ActionButton("Open Deskspace", ShowDeskspaces)); break;
             case "assistant":
                 var grid = Columns(1, 1);
                 for (var index = 0; index < AssistantPersonas.All.Length; index++)
@@ -312,7 +313,8 @@ public partial class DashboardWindow
         new("Bluetooth devices", "Paired devices and radio controls", "bluetooth pairing headphones", 0xE702, accent, ShowBluetoothWidget, "bluetooth"),
         new("Favorites", "Files, links, workspaces, and shortcuts", "favorites bookmarks pin", 0xE734, accent, ShowFavoritesWidget, "favorites"),
         new("Voice memos", "Record, play, and transcribe", "microphone audio speech dictation recording", 0xE720, accent, ShowVoiceMemos, "voice"),
-        new("File library", "Upload and search documents and images", "files search uploads index documents image ocr", 0xE721, accent, ShowFileSearch, "file-search")
+        new("File library", "Upload and search documents and images", "files search uploads index documents image ocr", 0xE721, accent, ShowFileSearch, "file-search"),
+        new("Deskspace", "Windows, notes, voice memos, and mind maps", "projects workspace people thoughts graph network", 0xE8B7, accent, ShowDeskspaces, "deskspace")
     ];
 
     private Button WidgetTile(WidgetAction widget, bool showArrow = true)
