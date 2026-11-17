@@ -1,6 +1,5 @@
 using System.IO;
 using System.IO.Compression;
-using Microsoft.Data.Sqlite;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Fonts.Standard14Fonts;
@@ -24,7 +23,7 @@ public sealed class DocumentRetrievalTests : IDisposable
     }
 
     [Fact]
-    public void FindsPdfPagesAndSpreadsheetTextAfterAnIndexVersionUpgrade()
+    public async Task FindsPdfPagesAndSpreadsheetTextInsideUploadedDocuments()
     {
         var folder = Directory.CreateDirectory(Path.Combine(root, "documents")).FullName;
         var pdf = new PdfDocumentBuilder();
@@ -43,29 +42,43 @@ public sealed class DocumentRetrievalTests : IDisposable
                 """);
         }
 
-        DockFileSearch.AddFolder(folder);
-        DockFileSearch.Update(folder, CancellationToken.None);
-        Assert.Equal("report.pdf", Assert.Single(DockFileSearch.Search("orchard")).Name);
-        Assert.Equal("budget.xlsx", Assert.Single(DockFileSearch.Search("conference rail 42")).Name);
-        using (var connection = new SqliteConnection("Data Source=" + DockData.FilePath("file-search.db") + ";Pooling=False"))
-        {
-            connection.Open();
-            using var command = connection.CreateCommand();
-            command.CommandText = "UPDATE document_text SET content = ''; PRAGMA user_version = 0;";
-            command.ExecuteNonQuery();
-        }
-        Assert.Empty(DockFileSearch.Search("orchard"));
-        DockFileSearch.Update(folder, CancellationToken.None);
-        var result = Assert.Single(DockFileSearch.Search("orchard"));
-        var excerpt = DockFileSearch.ExcerptText([result]);
-        Assert.Contains("report.pdf", excerpt);
-        Assert.Contains("Quarterly orchard findings", excerpt);
-        Assert.DoesNotContain(folder, excerpt);
+        Assert.True(await DockFileLibrary.UploadAsync(Path.Combine(folder, "report.pdf"), CancellationToken.None));
+        Assert.True(await DockFileLibrary.UploadAsync(Path.Combine(folder, "budget.xlsx"), CancellationToken.None));
+        var report = Assert.Single(DockFileLibrary.Search("orchard", CancellationToken.None));
+        Assert.Equal("report.pdf", report.Name);
+        Assert.Contains("Quarterly orchard findings", DockFileLibrary.Preview(report.Id)!.File.Text);
+        var workbookResult = Assert.Single(DockFileLibrary.Search("conference rail 42", CancellationToken.None));
+        Assert.Equal("budget.xlsx", workbookResult.Name);
+        Assert.Contains("Sheet Events", DockFileLibrary.Preview(workbookResult.Id)!.File.Text);
+        Assert.DoesNotContain(folder, report.Snippet);
     }
 
     private static void Part(ZipArchive archive, string path, string text)
     {
         using var writer = new StreamWriter(archive.CreateEntry(path).Open());
         writer.Write(text);
+    }
+
+    [Fact]
+    public async Task UploadedImagesHaveSearchableVisualPropertiesAndStayPreviewable()
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(root, "pictures")).FullName;
+        var image = Path.Combine(folder, "sample.png");
+        using (var bitmap = new System.Drawing.Bitmap(820, 280))
+        using (var canvas = System.Drawing.Graphics.FromImage(bitmap))
+        using (var font = new System.Drawing.Font("Segoe UI", 56))
+        {
+            canvas.Clear(System.Drawing.Color.MidnightBlue);
+            canvas.DrawString("COPPER PELICAN", font, System.Drawing.Brushes.White, 30, 100);
+            bitmap.Save(image, System.Drawing.Imaging.ImageFormat.Png);
+        }
+        Assert.True(await DockFileLibrary.UploadAsync(image, CancellationToken.None));
+        var match = Assert.Single(DockFileLibrary.Search("blue landscape", CancellationToken.None));
+        var preview = DockFileLibrary.Preview(match.Id)!;
+        Assert.True(preview.File.Image);
+        Assert.Equal(File.ReadAllBytes(image), preview.Image);
+        Assert.NotNull(await LibraryImageAnalysis.PreviewAsync(preview.Image!, CancellationToken.None));
+        if (!preview.File.Analysis.Contains("unavailable", StringComparison.OrdinalIgnoreCase))
+            Assert.Single(DockFileLibrary.Search("copper pelican", CancellationToken.None));
     }
 }

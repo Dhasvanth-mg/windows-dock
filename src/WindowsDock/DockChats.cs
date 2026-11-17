@@ -338,12 +338,14 @@ internal static class ChatAttachments
         var media = MediaType(bytes);
         if (media != null)
             return new(new(Guid.NewGuid(), name, media, null), bytes);
-        var text = Path.GetExtension(name).Equals(".docx", StringComparison.OrdinalIgnoreCase)
-            ? ReadWord(bytes) : ReadText(bytes);
+        var text = DocumentText(name, bytes);
         if (string.IsNullOrWhiteSpace(text))
             throw new IOException("Choose a text file, Word document, PDF, PNG, or JPEG.");
         return new(new(Guid.NewGuid(), name, null, text[..Math.Min(TextLimit, text.Length)]), bytes);
     }
+
+    internal static string? DocumentText(string name, byte[] bytes) =>
+        Path.GetExtension(name).Equals(".docx", StringComparison.OrdinalIgnoreCase) ? ReadWord(bytes) : ReadText(bytes);
 
     internal static PickedChatFile Screenshot(BitmapSource source)
     {

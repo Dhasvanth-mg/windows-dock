@@ -56,37 +56,43 @@ public sealed class LocalProductivityTests : IDisposable
     }
 
     [Fact]
-    public void IndexSearchIsOptInIncrementalAndRemovesFolderResults()
+    public async Task LibrarySearchUsesOnlyUploadedCopiesAndRemovesTheirTokens()
     {
         var folder = Directory.CreateDirectory(Path.Combine(root, "allowed")).FullName;
         var nested = Directory.CreateDirectory(Path.Combine(folder, "nested")).FullName;
         var outside = Directory.CreateDirectory(Path.Combine(root, "private")).FullName;
         var story = Path.Combine(nested, "story.md");
-        File.WriteAllText(story, "A purple mystery unfolds.");
+        File.WriteAllText(story, "A purple mystery unfolds. Café.");
         File.WriteAllText(Path.Combine(outside, "excluded.txt"), "private mystery");
-        File.WriteAllText(Path.Combine(folder, "expense-report.pdf"), "Name-only PDF");
-        Assert.Empty(DockFileSearch.Search("mystery"));
+        File.WriteAllText(Path.Combine(folder, "unselected.txt"), "purple mystery left in a nearby file");
+        var oldIndex = DockData.FilePath("file-search.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(oldIndex)!);
+        File.WriteAllText(oldIndex, "legacy index content");
+        Assert.Empty(DockFileLibrary.Search("mystery", CancellationToken.None));
 
-        DockFileSearch.AddFolder(folder);
-        Assert.Throws<ArgumentException>(() => DockFileSearch.AddFolder(nested));
-        Assert.Equal(2, DockFileSearch.Update(folder, CancellationToken.None).Count);
-        var found = Assert.Single(DockFileSearch.Search("purple myst"));
-        Assert.Equal(story, found.Path);
+        Assert.True(await DockFileLibrary.UploadAsync(story, CancellationToken.None));
+        Assert.False(await DockFileLibrary.UploadAsync(story, CancellationToken.None));
+        var found = Assert.Single(DockFileLibrary.Search("purple myst", CancellationToken.None));
+        Assert.Equal("story.md", found.Name);
         Assert.Contains("purple mystery", found.Snippet);
-        Assert.Empty(DockFileSearch.Search("private"));
-        Assert.Single(DockFileSearch.Search("expense report"));
+        Assert.Single(DockFileLibrary.Search("CAFE\u0301", CancellationToken.None));
+        Assert.Empty(DockFileLibrary.Search("private", CancellationToken.None));
+        Assert.Empty(DockFileLibrary.Search("nearby", CancellationToken.None));
+        Assert.Empty(DockFileLibrary.Search("legacy", CancellationToken.None));
+        var stored = System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(DockFileLibrary.DatabasePath));
+        Assert.DoesNotContain("purple", stored, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("story.md", stored, StringComparison.OrdinalIgnoreCase);
 
         File.WriteAllText(story, "Completely different terms");
         using var canceled = new CancellationTokenSource();
         canceled.Cancel();
-        Assert.Throws<OperationCanceledException>(() => DockFileSearch.Update(folder, canceled.Token));
-        Assert.Single(DockFileSearch.Search("purple"));
-        DockFileSearch.Update(folder, CancellationToken.None);
-        Assert.Empty(DockFileSearch.Search("purple"));
-        Assert.Single(DockFileSearch.Search("different"));
-        DockFileSearch.RemoveFolder(folder);
-        Assert.Empty(DockFileSearch.Search("different"));
-        Assert.Empty(DockFileSearch.Folders());
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => DockFileLibrary.UploadAsync(story, canceled.Token));
+        Assert.Contains("purple mystery", DockFileLibrary.Preview(found.Id)!.File.Text);
+        Assert.Empty(DockFileLibrary.Search("different", CancellationToken.None));
+        DockFileLibrary.Remove(found.Id);
+        Assert.Empty(DockFileLibrary.Search("purple", CancellationToken.None));
+        Assert.Null(DockFileLibrary.Preview(found.Id));
+        Assert.Equal("legacy index content", File.ReadAllText(oldIndex));
     }
 
     [Fact]

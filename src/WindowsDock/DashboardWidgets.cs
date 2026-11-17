@@ -312,7 +312,7 @@ public partial class DashboardWindow
         new("Bluetooth devices", "Paired devices and radio controls", "bluetooth pairing headphones", 0xE702, accent, ShowBluetoothWidget, "bluetooth"),
         new("Favorites", "Files, links, workspaces, and shortcuts", "favorites bookmarks pin", 0xE734, accent, ShowFavoritesWidget, "favorites"),
         new("Voice memos", "Record, play, and transcribe", "microphone audio speech dictation recording", 0xE720, accent, ShowVoiceMemos, "voice"),
-        new("File search", "Find words in folders you choose", "files search folders index documents", 0xE721, accent, ShowFileSearch, "file-search")
+        new("File library", "Upload and search documents and images", "files search uploads index documents image ocr", 0xE721, accent, ShowFileSearch, "file-search")
     ];
 
     private Button WidgetTile(WidgetAction widget, bool showArrow = true)

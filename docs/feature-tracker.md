@@ -1,5 +1,16 @@
 # Feature tracker
 
+## Keep uploaded files in a dock-owned library
+
+- Status: Implemented, verified, and installed.
+- Scope: Replace folder scanning with an upload-only library. Store uploaded files and their search index together in a single local dock-owned database. Expose the library through the dock UI.
+- Clarifications: Use a dock-owned file instead of a user-selected folder. Access is through the dock, with no exports, shared folder, assistant attachment, MCP, or external image processing path.
+- Acceptance criteria: Only explicit uploads are searchable. Text is tokenized, and local image analysis supplies searchable text and image characteristics. Files, extracted text, and stored search terms are protected on disk. Users can search, preview, and remove items inside the dock. The previous folder indexes are excluded.
+- Implementation: File Library handles explicit file selections and drag-and-drop. A single dock-owned SQLite database contains encrypted filenames, uploaded bytes, and analysis. Search uses HMAC-protected Unicode word prefixes. A Windows account-protected key unlocks the library for the dock. Image analysis uses Windows OCR, visual properties, and a bundled local object classifier. Previews and removal run inside the dock.
+- Verification: All 109 tests passed. A separate Windows desktop fixture dropped files into the widget, found a document after its source was moved, excluded an unselected neighbor, found recognized screenshot text and a sample photo by object tag, and rendered an image preview. File tests also verified duplicate handling, cancellation, encrypted filenames and text, removing search terms, and excluding the previous folder index. All nine files in the installed update matched the release package.
+- Limits: Windows account protection does not isolate the library from another process running under the same account. Source files remain where they were uploaded from. Extraction is bounded to 32 MB per upload, 300 PDF pages, 24 worksheets, and 250,000 characters. PDF previews show extracted text. Scanned PDF pages are outside the image OCR path.
+- Remaining work: Explorer is still rejecting native taskbar attachment in this session. The library was verified in an isolated dashboard window.
+
 ## Continue with custom MCP and document retrieval
 
 - Status: Implemented, tested, and installed.

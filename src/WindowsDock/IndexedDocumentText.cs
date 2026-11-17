@@ -12,20 +12,21 @@ namespace WindowsDock;
 internal static class IndexedDocumentText
 {
     private const int PartLimit = 2 * 1024 * 1024;
+    internal const int TextLimit = 250_000;
 
-    internal static string Read(string path, CancellationToken token) =>
-        Path.GetExtension(path).ToLowerInvariant() switch
+    internal static string Read(string name, byte[] bytes, CancellationToken token) =>
+        Path.GetExtension(name).ToLowerInvariant() switch
         {
-            ".pdf" => ReadPdf(path, token),
-            ".xlsx" => ReadWorkbook(path, token),
-            _ => ChatAttachments.Read(path).File.Text ?? ""
+            ".pdf" => ReadPdf(bytes, token),
+            ".xlsx" => ReadWorkbook(bytes, token),
+            _ => Crop(ChatAttachments.DocumentText(name, bytes) ?? "", TextLimit)
         };
 
-    private static string ReadPdf(string path, CancellationToken token)
+    private static string ReadPdf(byte[] bytes, CancellationToken token)
     {
-        using var document = PdfDocument.Open(path);
+        using var document = PdfDocument.Open(bytes);
         var text = new StringBuilder();
-        for (var pageNumber = 1; pageNumber <= Math.Min(document.NumberOfPages, 100); pageNumber++)
+        for (var pageNumber = 1; pageNumber <= Math.Min(document.NumberOfPages, 300); pageNumber++)
         {
             token.ThrowIfCancellationRequested();
             var page = ContentOrderTextExtractor.GetText(document.GetPage(pageNumber)).Trim();
@@ -38,9 +39,9 @@ internal static class IndexedDocumentText
         return Bounded(text);
     }
 
-    private static string ReadWorkbook(string path, CancellationToken token)
+    private static string ReadWorkbook(byte[] bytes, CancellationToken token)
     {
-        using var spreadsheet = ZipFile.OpenRead(path);
+        using var spreadsheet = new ZipArchive(new MemoryStream(bytes));
         var workbook = Part(spreadsheet, "xl/workbook.xml");
         var links = Part(spreadsheet, "xl/_rels/workbook.xml.rels");
         if (workbook == null || links == null)
@@ -76,9 +77,9 @@ internal static class IndexedDocumentText
                     if (!first)
                         text.Append(" | ");
                     first = false;
-                    var remaining = Math.Max(0, ChatAttachments.TextLimit - text.Length);
+                    var remaining = Math.Max(0, TextLimit - text.Length);
                     text.Append(value, 0, Math.Min(remaining, value.Length));
-                    if (text.Length >= ChatAttachments.TextLimit)
+                    if (text.Length >= TextLimit)
                         return Bounded(text);
                 }
                 if (!first)
@@ -121,20 +122,28 @@ internal static class IndexedDocumentText
 
     private static bool Append(StringBuilder text, string value)
     {
-        var remaining = ChatAttachments.TextLimit - text.Length;
+        var remaining = TextLimit - text.Length;
         if (remaining <= 0)
             return true;
         if (value.Length == 0)
             return false;
         text.Append(value, 0, Math.Min(remaining, value.Length)).AppendLine();
-        return text.Length >= ChatAttachments.TextLimit;
+        return text.Length >= TextLimit;
     }
 
     private static string Bounded(StringBuilder text)
     {
-        var length = Math.Min(text.Length, ChatAttachments.TextLimit);
+        var length = Math.Min(text.Length, TextLimit);
         if (length > 0 && char.IsHighSurrogate(text[length - 1]))
             length--;
         return text.ToString(0, length).Trim();
+    }
+
+    internal static string Crop(string value, int limit)
+    {
+        var length = Math.Min(value.Length, limit);
+        if (length > 0 && char.IsHighSurrogate(value[length - 1]))
+            length--;
+        return value[..length];
     }
 }
