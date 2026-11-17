@@ -94,19 +94,53 @@ public partial class DashboardWindow
         return true;
     }
 
+    // The chat lives on a page of the dashboard rather than in a window of its own. Every entry point that used to
+    // open the chat window lands here.
     internal void ShowAssistantWidget()
+    {
+        OpenMainDashboard();
+        ShowPage(DashboardPage.Assistant);
+        if (!IsVisible)
+            Show();
+        Activate();
+    }
+
+    // The page for one assistant is built once and kept, so a reply keeps streaming while you look at another page
+    // and the conversation is exactly where you left it when you come back.
+    private (int Slot, FrameworkElement Page, CancellationTokenSource Lifetime)? assistantPage;
+    private const string LearningFile = "assistant-learning.json";
+
+    private FrameworkElement AssistantPageHost()
+    {
+        if (assistantPage is { } kept && kept.Slot == assistantRole)
+            return kept.Page;
+        DiscardAssistantPage();
+        var pageLifetime = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        var page = BuildAssistantPage(pageLifetime.Token);
+        assistantPage = (assistantRole, page, pageLifetime);
+        return page;
+    }
+
+    private void DiscardAssistantPage()
+    {
+        if (assistantPage is not { } kept)
+            return;
+        assistantPage = null;
+        kept.Lifetime.Cancel();
+        kept.Lifetime.Dispose();
+    }
+
+    private FrameworkElement BuildAssistantPage(CancellationToken cancellation)
     {
         var slot = assistantRole;
         var persona = AssistantPersonas.All[slot];
         var chat = assistantConversations[slot];
         var tint = AssistantInk;
-        var figure = PersonaPortrait(persona, 38, lively: true);
+        Window window = this;
         var layout = new Grid();
-        var railColumn = new ColumnDefinition { Width = new GridLength(212) };
+        var railColumn = new ColumnDefinition { Width = new GridLength(196) };
         layout.ColumnDefinitions.Add(railColumn);
         layout.ColumnDefinitions.Add(new ColumnDefinition());
-        var (window, _, cancellation) = CreateDockPanel(persona.Name, persona.Role, 890, 0xEAB7, tint,
-            backAction: ShowAssistantPicker, backLabel: "Back to assistants", portrait: figure, body: layout, height: 610);
         var rail = new DockPanel { Margin = new Thickness(0, 0, 12, 0) };
         var railLine = new Border
         {
@@ -118,7 +152,7 @@ public partial class DashboardWindow
         Grid.SetColumn(chatPane, 1);
         layout.Children.Add(chatPane);
         var content = new StackPanel();
-        var toolbar = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
+        var toolbar = new DockPanel { Margin = new Thickness(0, -6, 0, 6) };
         var title = Text("New chat", 15, AssistantInk, true);
         title.TextTrimming = TextTrimming.CharacterEllipsis;
         var historyToggle = IconButton(0xE8FD, "Toggle chat history", () =>
@@ -126,7 +160,7 @@ public partial class DashboardWindow
             var shown = railLine.Visibility == Visibility.Visible;
             railLine.Visibility = shown ? Visibility.Collapsed : Visibility.Visible;
             railColumn.Width = shown ? new GridLength(0) :
-                new GridLength(window.Width < 650 ? 145 : 212);
+                new GridLength(window.Width < 650 ? 145 : 196);
         });
         historyToggle.Margin = new Thickness(0, 0, 6, 0);
         toolbar.Children.Add(historyToggle);
@@ -142,6 +176,20 @@ public partial class DashboardWindow
         DockPanel.SetDock(organize, Dock.Right);
         toolbar.Children.Add(organize);
         title.VerticalAlignment = VerticalAlignment.Center;
+        // Who you are talking to, then what about, the way the chat sites title a conversation.
+        var badge = PersonaPortrait(persona, 24, lively: false);
+        badge.Margin = new Thickness(2, 0, 7, 0);
+        badge.VerticalAlignment = VerticalAlignment.Center;
+        toolbar.Children.Add(badge);
+        var figure = badge;
+        var who = Text(persona.Name, 15, AssistantInk, true);
+        who.VerticalAlignment = VerticalAlignment.Center;
+        who.Margin = new Thickness(0, 0, 10, 0);
+        who.ToolTip = persona.Bio;
+        toolbar.Children.Add(who);
+        title.FontSize = 13;
+        title.FontWeight = FontWeights.Normal;
+        title.Foreground = AssistantSecondary;
         toolbar.Children.Add(title);
         DockPanel.SetDock(toolbar, Dock.Top);
         chatPane.Children.Add(toolbar);
@@ -162,9 +210,13 @@ public partial class DashboardWindow
             railLine.Visibility = Visibility.Collapsed;
             railColumn.Width = new GridLength(0);
         }
-        var intro = Text(persona.Greeting, 15, AssistantInk, strong: true);
+        // An empty chat opens on a centred welcome, like a new chat on the chat sites: the character, its question,
+        // and a couple of ways to start.
+        var intro = Text(persona.Greeting, 20, AssistantInk, strong: true);
         intro.TextWrapping = TextWrapping.Wrap;
-        intro.Margin = new Thickness(0, 2, 0, 8);
+        intro.TextAlignment = TextAlignment.Center;
+        intro.HorizontalAlignment = HorizontalAlignment.Center;
+        intro.Margin = new Thickness(0, 8, 0, 14);
         var toolRow = new WrapPanel();
         var setup = new StackPanel();
         var modelLabel = Text("Provider and model", 12, AssistantInk);
@@ -202,13 +254,14 @@ public partial class DashboardWindow
         }
         var jobs = QuietButton("Jobs", ShowAssistantJobs);
         toolRow.Children.Add(jobs);
-        if (persona.Id is "coding" or "casual")
+        // Each assistant's own quick action (web search, schedule, logs, idea jar) sits under its message box.
+        if (persona.Id is "coding" or "casual" or "research" or "housekeeping")
         {
             var quick = QuietButton(AssistantQuickLabel(persona), () => OpenAssistantQuickAction(slot));
             toolRow.Children.Add(quick);
         }
         content.Children.Add(toolRow);
-        var starters = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
+        var starters = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
         var providers = new ComboBox { ItemsSource = AssistantSources, DisplayMemberPath = nameof(AssistantSource.Label) };
         AutomationProperties.SetName(providers, "Assistant provider");
         var model = Field("Assistant model ID", 128);
@@ -255,24 +308,45 @@ public partial class DashboardWindow
         content.Children.Add(credentials);
 
         var messages = new StackPanel();
-        var liveText = Text("", 13, AssistantInk);
+        // While a reply streams in, the character sits beside it and wobbles; the text grows underneath.
+        var liveText = Text("", 13.5, AssistantInk);
         liveText.TextWrapping = TextWrapping.Wrap;
-        liveText.Margin = new Thickness(6, 4, 6, 10);
-        liveText.Visibility = Visibility.Collapsed;
-        var thread = new StackPanel { Children = { intro, starters, messages, liveText } };
+        liveText.LineHeight = 20;
+        var liveFigure = PersonaPortrait(persona, 22, lively: true);
+        liveFigure.Thinking = true;
+        liveFigure.HorizontalAlignment = HorizontalAlignment.Left;
+        liveFigure.Margin = new Thickness(-2, 0, 0, 4);
+        var live = new StackPanel { Margin = new Thickness(0, 6, 0, 12), Visibility = Visibility.Collapsed,
+            Children = { liveFigure, liveText } };
+        var welcomeFigure = PersonaPortrait(persona, 64, lively: true);
+        var welcomeBio = Text(persona.Bio, 12.5, AssistantSecondary);
+        welcomeBio.TextWrapping = TextWrapping.Wrap;
+        welcomeBio.TextAlignment = TextAlignment.Center;
+        welcomeBio.HorizontalAlignment = HorizontalAlignment.Center;
+        welcomeBio.Margin = new Thickness(0, -8, 0, 16);
+        var welcome = new StackPanel { Margin = new Thickness(24, 26, 24, 8), Children = { welcomeFigure, intro, welcomeBio, starters } };
+        var thread = new StackPanel { Margin = new Thickness(4, 0, 14, 4), Children = { welcome, messages, live } };
         var conversation = new ScrollViewer { Content = thread, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             PanningMode = PanningMode.VerticalOnly };
         var prompt = Field("Message", AssistantMessageLimit);
         prompt.AcceptsReturn = true;
         prompt.TextWrapping = TextWrapping.Wrap;
         prompt.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        prompt.Height = 68;
+        // The box starts one line tall and grows with what you type, like the chat sites.
+        prompt.MinHeight = 26;
+        prompt.MaxHeight = 118;
+        prompt.FontSize = 13.5;
         prompt.Tag = "Message " + persona.Name;
         prompt.Margin = new Thickness(0);
+        prompt.Padding = new Thickness(4, 4, 4, 2);
         prompt.Background = Brushes.Transparent;
         prompt.BorderThickness = new Thickness(0);
+        // The rounded box around it is the field; the text box itself draws no border, focused or not.
+        prompt.BorderBrush = Brushes.Transparent;
+        prompt.Resources["InputFocus"] = Brushes.Transparent;
+        prompt.Resources["FieldStroke"] = Brushes.Transparent;
         content.Children.Add(prompt);
-        var attachment = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+        var attachment = new WrapPanel { Margin = new Thickness(2, 0, 0, 2) };
         content.Children.Add(attachment);
         var preview = new ContentControl { Visibility = Visibility.Collapsed, HorizontalContentAlignment = HorizontalAlignment.Stretch };
         var proposal = new StackPanel();
@@ -284,36 +358,46 @@ public partial class DashboardWindow
         var fallback = new WrapPanel { Margin = new Thickness(0, 0, 0, 5), Visibility = Visibility.Collapsed };
         content.Children.Add(fallback);
 
-        var actions = new DockPanel { LastChildFill = false, Margin = new Thickness(2, 0, 2, 2) };
-        var send = PrimaryButton("Send");
-        AutomationProperties.SetName(send, "Send message");
-        send.ToolTip = "Send message (Ctrl+Enter)";
-        send.MinWidth = 68;
-        send.Margin = new Thickness(0, 0, 6, 0);
-        var clear = ActionButton("New chat");
-        clear.Margin = new Thickness(0, 0, 0, 8);
+        var actions = new DockPanel { LastChildFill = false, Margin = new Thickness(0, 4, 0, 0) };
+        var send = RoundIconButton(0xE74A, "Send message");
+        send.ToolTip = "Send (Enter). Shift+Enter starts a new line.";
+        send.Margin = new Thickness(6, 0, 0, 0);
+        var clear = MakeButton(IconLabel("New chat", 0xE70F, AssistantSecondary), "New chat", action: null);
+        clear.Style = (Style)FindResource("AssistantPickerButton");
+        clear.Foreground = AssistantInk;
+        clear.HorizontalContentAlignment = HorizontalAlignment.Left;
+        clear.Padding = new Thickness(8, 7, 8, 7);
+        clear.Margin = new Thickness(-2, 0, 0, 6);
         var findChat = Field("Search conversations", 100);
         findChat.Tag = "Search chats";
-        findChat.Margin = new Thickness(0, 0, 0, 8);
+        findChat.Margin = new Thickness(0, 0, 0, 10);
         var history = new StackPanel();
-        var folder = ActionButton("Chat storage folder");
-        var openFolder = IconButton(0xE8B7, "Open chat storage folder");
-        var autoSave = new CheckBox { Content = "Auto-save named files", IsChecked = DockChats.AutoSaveFiles,
-            Margin = new Thickness(0, 4, 0, 4) };
-        var memoryButton = ActionButton("Assistant memory");
-        var memoryInput = Field("What this assistant should remember", 2000);
+        var folder = ActionButton("Change folder");
+        var openFolder = ActionButton("Open folder");
+        var autoSave = new CheckBox { Content = "Save named code blocks", IsChecked = DockChats.AutoSaveFiles,
+            Margin = new Thickness(0, 6, 0, 2) };
+        var memoryButton = QuietButton("Memory");
+        var memoryInput = Field("What this assistant should remember", AssistantLearning.MemoryLimit);
         memoryInput.AcceptsReturn = true;
         memoryInput.TextWrapping = TextWrapping.Wrap;
-        memoryInput.Height = 90;
-        var memoryUsage = Text("Saved here and sent with each message to your selected provider.", 11, AssistantSecondary);
+        memoryInput.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        memoryInput.Height = 96;
+        var memoryUsage = Text($"What {persona.Name} keeps about you. It stays on this PC, encrypted, and goes with each message " +
+            "to the provider you chat with. Edit or clear it any time.", 11, AssistantSecondary);
         memoryUsage.TextWrapping = TextWrapping.Wrap;
+        memoryUsage.Margin = new Thickness(0, 0, 0, 6);
+        var learning = new CheckBox { Content = "Learn from my chats", IsChecked = DockData.Read<bool?>(LearningFile) ?? true,
+            Margin = new Thickness(0, 6, 0, 6) };
+        learning.ToolTip = "Lets assistants add lasting preferences you mention, such as how you like answers. Lines they add start with a dash.";
         var saveMemory = ActionButton("Save memory");
         var memory = new StackPanel
         {
-            Children = { memoryUsage, memoryInput, saveMemory },
+            Children = { memoryUsage, memoryInput, learning, saveMemory },
             Visibility = Visibility.Collapsed,
             Margin = new Thickness(0, 4, 0, 4)
         };
+        var filesButton = QuietButton("Chat files");
+        var filesPanel = new StackPanel { Visibility = Visibility.Collapsed, Margin = new Thickness(0, 4, 0, 4) };
         var memoryFile = $"assistant-memory-{persona.Id}.dat";
         var savedMemory = DockCredentials.ReadPrivateText(memoryFile) ?? "";
         var fallbackFile = $"assistant-fallback-{persona.Id}.json";
@@ -323,21 +407,31 @@ public partial class DashboardWindow
         var fallbackNotice = Text("On a usage limit, the selected fallback receives this request and can use your API credits.",
             11, AssistantSecondary);
         fallbackNotice.TextWrapping = TextWrapping.Wrap;
-        var storage = new StackPanel { Children = { memoryButton, memory, folder, autoSave, openFolder },
-            Margin = new Thickness(0, 8, 0, 0) };
+        // The bottom of the history rail holds the two things you set once: memory and where chats are kept.
+        var folderRow = new WrapPanel { Children = { folder, openFolder } };
+        folder.Margin = new Thickness(0, 0, 6, 0);
+        filesPanel.Children.Add(folderRow);
+        filesPanel.Children.Add(autoSave);
+        var railLinks = new StackPanel { Orientation = Orientation.Horizontal, Children = { memoryButton, filesButton } };
+        memoryButton.Margin = new Thickness(0, 0, 16, 0);
+        var storage = new StackPanel { Children = { memory, filesPanel, railLinks }, Margin = new Thickness(0, 8, 0, 0) };
+        storage.Children.Insert(0, Rule(0, 6));
         DockPanel.SetDock(storage, Dock.Bottom);
         rail.Children.Add(storage);
         var historyHeading = new StackPanel { Children = { clear, findChat } };
         DockPanel.SetDock(historyHeading, Dock.Top);
         rail.Children.Add(historyHeading);
         rail.Children.Add(new ScrollViewer { Content = history, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        var attachFiles = IconButton(0xE723, "Attach files or images");
-        attachFiles.Margin = new Thickness(4, 0, 0, 0);
-        var retryReply = ActionButton("Retry reply");
+        var attachFiles = IconButton(0xE710, "Attach files or images");
+        attachFiles.ToolTip = "Attach files or images. You can also drop them here or paste a screenshot.";
+        attachFiles.Margin = new Thickness(-4, 0, 0, 0);
+        var retryReply = ActionButton("Retry");
+        retryReply.Padding = new Thickness(10, 4, 10, 4);
         retryReply.Margin = new Thickness(6, 0, 0, 0);
         retryReply.Visibility = Visibility.Collapsed;
-        var cancel = ActionButton("Cancel");
-        cancel.Margin = new Thickness(0, 0, 5, 0);
+        // Stop replaces Send while a reply is coming, as on the chat sites.
+        var cancel = RoundIconButton(0xE71A, "Stop");
+        cancel.Margin = new Thickness(6, 0, 0, 0);
         cancel.Visibility = Visibility.Collapsed;
         CancellationTokenSource? pending = null;
         var watchingSignIn = false;
@@ -345,6 +439,7 @@ public partial class DashboardWindow
         var localModelStatus = "";
         var updating = false;
         var busy = false;
+        var sendReady = false;
         var changingFiles = false;
         var shownTurns = 40;
         SavedChat[] savedChats = [];
@@ -469,6 +564,7 @@ public partial class DashboardWindow
         };
         memoryButton.Click += (_, _) =>
         {
+            filesPanel.Visibility = Visibility.Collapsed;
             if (memory.Visibility == Visibility.Visible)
                 memory.Visibility = Visibility.Collapsed;
             else
@@ -476,6 +572,20 @@ public partial class DashboardWindow
                 memoryInput.Text = savedMemory;
                 memory.Visibility = Visibility.Visible;
                 memoryInput.Focus();
+            }
+        };
+        filesButton.Click += (_, _) =>
+        {
+            memory.Visibility = Visibility.Collapsed;
+            filesPanel.Visibility = filesPanel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+        };
+        learning.Click += (_, _) =>
+        {
+            try { DockData.Save(LearningFile, learning.IsChecked == true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                learning.IsChecked = !learning.IsChecked;
+                status.Text = "Could not save the learning setting.";
             }
         };
         saveMemory.Click += (_, _) =>
@@ -519,19 +629,56 @@ public partial class DashboardWindow
         {
             if (args.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control && !busy && !changingFiles && PasteScreenshot())
                 args.Handled = true;
-            else if (args.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control && send.IsEnabled)
+            // Enter sends, as on the chat sites. Shift+Enter starts a new line.
+            else if (args.Key == Key.Enter && Keyboard.Modifiers is ModifierKeys.None or ModifierKeys.Control)
             {
                 args.Handled = true;
-                await SendAsync();
+                if (send.IsEnabled && !string.IsNullOrWhiteSpace(prompt.Text))
+                    await SendAsync();
+                else if (!busy && !sendReady && !string.IsNullOrWhiteSpace(prompt.Text))
+                    // Nothing to send with yet: show where to pick a provider rather than doing nothing.
+                    modelMenu.IsOpen = true;
             }
         };
-        window.Loaded += async (_, _) => { prompt.Focus(); await ReloadHistoryAsync(); };
-        window.Closed += (_, _) =>
+        prompt.TextChanged += (_, _) => send.IsEnabled = sendReady && prompt.Text.Trim().Length > 0;
+        var firstShow = true;
+        layout.Loaded += async (_, _) =>
+        {
+            cooldownTimer.Start();
+            // The page is kept between visits, so pick up anything another part of the dock did to this chat while it
+            // was away: a draft from search or the idea jar, attached logs or lookups, or a conversation reopened.
+            if (!firstShow && !busy && !changingFiles)
+            {
+                if (!ReferenceEquals(chat, assistantConversations[slot]))
+                    SwitchChat(assistantConversations[slot]);
+                else
+                {
+                    if (prompt.Text != chat.Draft)
+                    {
+                        prompt.Text = chat.Draft;
+                        prompt.CaretIndex = prompt.Text.Length;
+                    }
+                    RenderAttachment();
+                    RenderProposal();
+                    SetProvider();
+                }
+            }
+            firstShow = false;
+            prompt.Focus();
+            await ReloadHistoryAsync();
+        };
+        // Leaving for another page keeps the chat (and any reply still arriving); only the menu and the timer stop.
+        layout.Unloaded += (_, _) =>
+        {
+            modelMenu.IsOpen = false;
+            cooldownTimer.Stop();
+        };
+        cancellation.Register(() =>
         {
             modelMenu.IsOpen = false;
             key.Clear();
             cooldownTimer.Stop();
-        };
+        });
         prompt.Text = chat.Draft;
         updating = true;
         providers.SelectedIndex = chat.SourceIndex;
@@ -547,13 +694,23 @@ public partial class DashboardWindow
             setup.Children.Add(part);
         foreach (Button link in toolRow.Children)
             link.Margin = new Thickness(0, 0, 18, 0);
+        // One rounded field: what you are attaching, what you are typing, then attach on the left and the model and
+        // the round send button on the right.
         var composerBox = new Border
         {
-            Child = new StackPanel { Children = { prompt, actions } },
+            Child = new StackPanel { Children = { attachment, prompt, actions } },
             Background = ControlFill, BorderBrush = AssistantRule, BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(9), Padding = new Thickness(5), Margin = new Thickness(0, 7, 0, 0)
+            CornerRadius = new CornerRadius(20), Padding = new Thickness(14, 8, 8, 8), Margin = new Thickness(0, 4, 0, 0)
         };
-        foreach (var part in new UIElement[] { proposal, preview, attachment, composerBox, status, fallback, toolRow })
+        composerBox.MouseLeftButtonDown += (_, _) => prompt.Focus();
+        prompt.GotKeyboardFocus += (_, _) => composerBox.BorderBrush = AssistantFaint;
+        prompt.LostKeyboardFocus += (_, _) => composerBox.BorderBrush = AssistantRule;
+        status.Margin = new Thickness(14, 5, 0, 0);
+        var footer = new DockPanel { Margin = new Thickness(12, 4, 0, 0) };
+        DockPanel.SetDock(toolRow, Dock.Right);
+        footer.Children.Add(toolRow);
+        footer.Children.Add(status);
+        foreach (var part in new UIElement[] { proposal, preview, composerBox, fallback, footer })
             content.Children.Add(part);
         var composer = new ScrollViewer
         {
@@ -563,9 +720,8 @@ public partial class DashboardWindow
         DockPanel.SetDock(composer, Dock.Bottom);
         chatPane.Children.Add(composer);
         chatPane.Children.Add(conversation);
-        window.Show();
-        cooldownTimer.Start();
         WatchActiveSignIn();
+        return FillPage(layout);
 
         async Task ReloadHistoryAsync()
         {
@@ -591,34 +747,50 @@ public partial class DashboardWindow
                 item.Persona.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 item.Folder?.Contains(query, StringComparison.OrdinalIgnoreCase) == true)
                 .OrderByDescending(item => item.Pinned).ThenByDescending(item => item.Updated);
-            foreach (var group in matches.GroupBy(item => item.Pinned ? (true, "Pinned") : (false, item.Folder ?? "")))
+            // Pinned first, then your groups, then everything else by when it was last used, the way the chat sites
+            // list conversations: one quiet line each, the open one filled in.
+            var today = DateTime.Today;
+            foreach (var group in matches.GroupBy(item => item.Pinned ? (0, "Pinned") : item.Folder is { Length: > 0 } folderName
+                ? (1, folderName) : (2, ChatAge(item.Updated.LocalDateTime.Date))))
             {
-                if (group.Key.Item2.Length > 0)
-                {
-                    var label = Text(group.Key.Item2, 11, AssistantSecondary);
-                    label.Margin = new Thickness(4, 5, 0, 4);
-                    label.TextTrimming = TextTrimming.CharacterEllipsis;
-                    history.Children.Add(label);
-                }
+                var label = Text(group.Key.Item2, 11, AssistantFaint);
+                label.Margin = new Thickness(8, history.Children.Count == 0 ? 0 : 10, 0, 3);
+                label.TextTrimming = TextTrimming.CharacterEllipsis;
+                history.Children.Add(label);
                 foreach (var entry in group)
                 {
                     var targetSlot = Array.FindIndex(AssistantPersonas.All, item => item.Id == entry.Persona);
                     if (targetSlot < 0)
                         continue;
-                    var name = Text(entry.Title, 12, AssistantInk);
+                    var current = entry.Id == chat.Id;
+                    var name = Text(entry.Title, 12.5, current ? AssistantInk : AssistantSecondary);
                     name.TextTrimming = TextTrimming.CharacterEllipsis;
-                    var detail = Text($"{AssistantPersonas.All[targetSlot].Name} · {entry.Updated.LocalDateTime:d}", 11, AssistantSecondary);
-                    var row = new StackPanel { Children = { name, detail } };
-                    var open = MakeButton(row, entry.Title, () => ResumeChat(entry, targetSlot));
+                    name.VerticalAlignment = VerticalAlignment.Center;
+                    var row = new DockPanel();
+                    // Chats with another assistant carry its face, so you can tell whose they are at a glance.
+                    if (targetSlot != slot)
+                    {
+                        var face = PersonaPortrait(AssistantPersonas.All[targetSlot], 16);
+                        face.Margin = new Thickness(0, 0, 6, 0);
+                        row.Children.Add(face);
+                    }
+                    row.Children.Add(name);
+                    var open = PlainButton(row, $"{entry.Title}, with {AssistantPersonas.All[targetSlot].Name}", () => ResumeChat(entry, targetSlot));
                     open.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-                    open.Margin = new Thickness(0, 0, 0, 4);
-                    if (entry.Id == chat.Id)
+                    open.Margin = new Thickness(0, 0, 0, 1);
+                    open.Padding = new Thickness(8, 6, 8, 6);
+                    open.ToolTip = $"{entry.Title}\n{AssistantPersonas.All[targetSlot].Name}, {entry.Updated.LocalDateTime:g}";
+                    if (current)
                         open.Background = controlSelected;
                     history.Children.Add(open);
                 }
             }
+
+            string ChatAge(DateTime day) =>
+                day >= today ? "Today" : day == today.AddDays(-1) ? "Yesterday" :
+                day > today.AddDays(-7) ? "Previous 7 days" : day > today.AddDays(-30) ? "Previous 30 days" : day.ToString("MMMM yyyy");
             if (history.Children.Count == 0)
-                history.Children.Add(Text(query.Length == 0 ? "Conversations appear here after you send a message." :
+                history.Children.Add(Text(query.Length == 0 ? "Your chats will show up here." :
                     "No matching conversations.", 12, AssistantSecondary));
         }
 
@@ -977,9 +1149,19 @@ public partial class DashboardWindow
             var provider = AssistantSources[chat.SourceIndex].Provider;
             var isPlan = provider == AssistantProvider.ChatGptPlan;
             var account = accounts.SelectedItem as PlanAccount;
-            send.IsEnabled = !busy && !changingFiles && (!isPlan || planModels.SelectedItem != null && account != null &&
+            sendReady = !changingFiles && (!isPlan || planModels.SelectedItem != null && account != null &&
                 assistantPlanCooldowns.GetValueOrDefault(account.ClientId) <= DateTimeOffset.UtcNow) &&
                 (provider != AssistantProvider.Ollama || localModels.SelectedItem is string);
+            // Send lights up only when there is something to send; Stop takes its place while a reply is coming.
+            send.IsEnabled = !busy && sendReady && prompt.Text.Trim().Length > 0;
+            send.Visibility = busy ? Visibility.Collapsed : Visibility.Visible;
+            if (busy && live.Visibility != Visibility.Visible)
+            {
+                live.Visibility = Visibility.Visible;
+                conversation.ScrollToEnd();
+            }
+            else if (!busy)
+                live.Visibility = Visibility.Collapsed;
             providers.IsEnabled = model.IsEnabled = key.IsEnabled = accounts.IsEnabled = planModels.IsEnabled = !busy;
             localModels.IsEnabled = refreshLocalModels.IsEnabled = !busy;
             addAccount.IsEnabled = connect.IsEnabled = !busy;
@@ -1135,7 +1317,7 @@ public partial class DashboardWindow
             var history = chat.Turns;
             RefreshRetry();
             title.Text = chat.Saved?.Title ?? DockChats.Title(history);
-            intro.Visibility = starters.Visibility = history.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            welcome.Visibility = history.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             messages.Children.Clear();
             var first = Math.Max(0, history.Count - shownTurns);
             if (first > 0)
@@ -1154,50 +1336,47 @@ public partial class DashboardWindow
                 var (user, text) = (turn.User, turn.Text);
                 var number = index + 1;
                 var line = new StackPanel();
-                var name = user ? "You" : turn.ReplyProvider is { } provider ? $"{persona.Name} · {provider}" : persona.Name;
-                var heading = new DockPanel();
-                var branch = IconButton(0xE8F1, "Branch from this message");
-                branch.Click += async (_, _) => await BranchAsync(number);
-                DockPanel.SetDock(branch, Dock.Right);
-                heading.Children.Add(branch);
-                if (user || (index > 0 && history[index - 1].User))
-                {
-                    var revise = IconButton(user ? 0xE70F : 0xE72C, user ? "Edit message in a branch" : "Regenerate in a branch");
-                    revise.Click += async (_, _) => await BranchAsync(number - 1, user ? turn : null, regenerate: !user);
-                    DockPanel.SetDock(revise, Dock.Right);
-                    heading.Children.Add(revise);
-                }
-                if (!user)
-                {
-                    var save = IconButton(0xE74E, "Save reply as Markdown", () => SaveReply($"reply-{number}.md", text));
-                    DockPanel.SetDock(save, Dock.Right);
-                    heading.Children.Add(save);
-                    var copy = IconButton(0xE8C8, "Copy reply", () =>
-                    {
-                        try
-                        {
-                            Clipboard.SetText(text);
-                            status.Text = "Reply copied.";
-                        }
-                        catch (ExternalException) { status.Text = "Clipboard is busy. Try again."; }
-                    });
-                    copy.Padding = new Thickness(4, 2, 4, 2);
-                    DockPanel.SetDock(copy, Dock.Right);
-                    heading.Children.Add(copy);
-                }
-                var author = Text(name, 11, AssistantSecondary);
-                author.VerticalAlignment = VerticalAlignment.Center;
-                heading.Children.Add(author);
-                line.Children.Add(heading);
+                // Actions sit quietly under each message: what you said can be edited or branched; a reply can be
+                // copied, regenerated, saved, or branched.
+                var tools = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(user ? 0 : -6, 2, 0, 0) };
                 if (user)
                 {
-                    var message = Field(name + " message", 0);
-                    message.Text = text;
-                    message.IsReadOnly = true;
-                    message.TextWrapping = TextWrapping.Wrap;
-                    message.Background = Brushes.Transparent;
-                    message.BorderBrush = Brushes.Transparent;
-                    message.Padding = new Thickness(0, 3, 0, 0);
+                    var revise = MessageAction(0xE70F, "Edit in a new branch");
+                    revise.Click += async (_, _) => await BranchAsync(number - 1, turn);
+                    tools.Children.Add(revise);
+                }
+                else
+                {
+                    var copy = MessageAction(0xE8C8, "Copy reply");
+                    copy.Click += (_, _) => CopyWithTick(copy, text);
+                    tools.Children.Add(copy);
+                    if (index > 0 && history[index - 1].User)
+                    {
+                        var regenerate = MessageAction(0xE72C, "Regenerate in a new branch");
+                        regenerate.Click += async (_, _) => await BranchAsync(number - 1, null, regenerate: true);
+                        tools.Children.Add(regenerate);
+                    }
+                    tools.Children.Add(MessageAction(0xE74E, "Save reply as Markdown", () => SaveReply($"reply-{number}.md", text)));
+                }
+                var branch = MessageAction(0xE8F1, "Branch from here");
+                branch.Click += async (_, _) => await BranchAsync(number);
+                tools.Children.Add(branch);
+                if (!user && turn.ReplyProvider is { } provider)
+                {
+                    var from = Text("Answered by " + provider, 11, AssistantFaint);
+                    from.VerticalAlignment = VerticalAlignment.Center;
+                    from.Margin = new Thickness(6, 0, 0, 0);
+                    tools.Children.Add(from);
+                }
+                if (user)
+                {
+                    var message = new TextBox
+                    {
+                        Text = text, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, Background = Brushes.Transparent,
+                        BorderThickness = new Thickness(0), Padding = new Thickness(0), Foreground = AssistantInk, FontSize = 13.5,
+                        SelectionBrush = AssistantSecondary, CaretBrush = Brushes.Transparent, IsTabStop = false
+                    };
+                    AutomationProperties.SetName(message, "Your message");
                     line.Children.Add(message);
                 }
                 else
@@ -1205,28 +1384,40 @@ public partial class DashboardWindow
                     line.Children.Add(FormatChatReply(text, number, SaveReply));
                     if (turn.OutputFiles is { Length: > 0 } outputs)
                     {
-                        var saved = Text("Saved files · " + string.Join(", ", outputs), 11, AssistantSecondary);
+                        var saved = Text("Saved to this chat's files: " + string.Join(", ", outputs), 11, AssistantSecondary);
                         saved.TextWrapping = TextWrapping.Wrap;
+                        saved.Margin = new Thickness(0, 4, 0, 0);
                         line.Children.Add(saved);
                     }
                 }
                 if (turn.Files is { Length: > 0 } files)
                 {
-                    var attached = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
+                    var attached = new WrapPanel { Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = user ? HorizontalAlignment.Right : HorizontalAlignment.Left };
                     foreach (var file in files)
                     {
-                        var chip = ActionButton(file.Name, () => ReviewFile(file));
+                        var chip = MakeButton(IconLabel(file.Name, file.MediaType?.StartsWith("image/") == true ? 0xEB9F : 0xE8A5,
+                            AssistantSecondary), "Open " + file.Name, () => ReviewFile(file));
+                        chip.Padding = new Thickness(9, 4, 9, 4);
                         chip.Margin = new Thickness(0, 0, 4, 4);
                         attached.Children.Add(chip);
                     }
                     line.Children.Add(attached);
                 }
-                var card = Card(line);
-                card.Background = user ? ControlFill : System.Windows.Media.Brushes.Transparent;
-                card.BorderBrush = System.Windows.Media.Brushes.Transparent;
-                card.Padding = user ? new Thickness(11, 7, 11, 8) : new Thickness(0, 2, 0, 4);
-                card.Margin = new Thickness(user ? 56 : 0, 0, 0, 8);
-                messages.Children.Add(card);
+                FrameworkElement body = user ? UserBubble(line) : line;
+                tools.HorizontalAlignment = user ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+                // Under your bubble the actions only show when you point at it, so the thread stays calm; under a reply
+                // they always show, because that is where you reach for copy.
+                var group = new StackPanel { Margin = new Thickness(user ? 56 : 0, user ? 6 : 2, 0, user ? 4 : 14), Background = Brushes.Transparent,
+                    Children = { body, tools } };
+                if (user)
+                {
+                    tools.Opacity = 0;
+                    group.MouseEnter += (_, _) => tools.Opacity = 1;
+                    group.MouseLeave += (_, _) => tools.Opacity = tools.IsKeyboardFocusWithin ? 1 : 0;
+                    tools.GotKeyboardFocus += (_, _) => tools.Opacity = 1;
+                    tools.LostKeyboardFocus += (_, _) => tools.Opacity = group.IsMouseOver ? 1 : 0;
+                }
+                messages.Children.Add(group);
             }
             if (toEnd)
                 conversation.ScrollToEnd();
@@ -1365,8 +1556,10 @@ public partial class DashboardWindow
                     RenderAttachment();
                 }
                 status.Text = $"Waiting for {source.Label}…";
-                var personaInstructions = savedMemory.Length == 0 ? persona.Instructions : persona.Instructions +
-                    "\nUser-authored preferences for this assistant: " + JsonSerializer.Serialize(savedMemory);
+                var learn = learning.IsChecked == true;
+                var personaInstructions = (savedMemory.Length == 0 ? persona.Instructions : persona.Instructions +
+                    "\nWhat this person has asked you to keep in mind (from earlier chats, written or approved by them): " +
+                    JsonSerializer.Serialize(savedMemory)) + (learn ? AssistantLearning.Instruction : "");
                 var response = await DockAssistantTurn.RunAsync(persona.Id, personaInstructions, requestTurns,
                     SendWithPreviewAsync,
                     progress =>
@@ -1393,6 +1586,27 @@ public partial class DashboardWindow
                     key.Clear();
                 }
                 var reply = response.Text[..Math.Min(response.Text.Length, 40_000)];
+                // A "REMEMBER:" line is bookkeeping for the memory, not part of the answer. Take it out either way, and
+                // keep the note only while learning is on.
+                var (visibleReply, notes) = AssistantLearning.Extract(reply);
+                reply = visibleReply.Length > 0 ? visibleReply : "Noted.";
+                string? learned = null;
+                if (learn && notes.Length > 0)
+                {
+                    var (merged, added) = AssistantLearning.Merge(savedMemory, notes);
+                    if (added.Length > 0)
+                    {
+                        try
+                        {
+                            DockCredentials.WritePrivateText(memoryFile, merged);
+                            savedMemory = merged;
+                            learned = $"{persona.Name} will remember: " + string.Join(" ", added);
+                        }
+                        catch (Exception error) when (error is IOException or UnauthorizedAccessException or
+                            System.Security.Cryptography.CryptographicException)
+                        { learned = "Could not save what was learned. Open Memory to add it yourself."; }
+                    }
+                }
                 var outputs = new List<string>();
                 string? fileIssue = null;
                 if (autoSave.IsChecked == true)
@@ -1426,6 +1640,8 @@ public partial class DashboardWindow
                     status.Text = $"{usedFallback.Label} answered after {source.Label} reached a usage limit.";
                 if (fileIssue != null)
                     status.Text = fileIssue;
+                else if (learned != null)
+                    status.Text = learned + " (Memory to change it)";
                 try { await SaveTranscriptAsync(source.Provider, modelId); }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                 { status.Text = "The reply is visible but could not be saved. Check the chat storage folder."; }
@@ -1522,7 +1738,7 @@ public partial class DashboardWindow
                         prefix[0] is '{' or '`')
                         return;
                     var follow = conversation.ScrollableHeight - conversation.VerticalOffset < 32;
-                    liveText.Text = text;
+                    liveText.Text = AssistantLearning.HidePartial(text);
                     liveText.Visibility = Visibility.Visible;
                     if (follow)
                         conversation.ScrollToEnd();

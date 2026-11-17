@@ -12,7 +12,8 @@ public partial class DashboardWindow
 {
     private enum DockSection { Widgets, Chats, Assistants }
     private enum DockSwipe { None, Left, Right, Down }
-    private static readonly DashboardPage[] dashboardTabOrder = Enum.GetValues<DashboardPage>();
+    private static readonly DashboardPage[] dashboardTabOrder =
+        Enum.GetValues<DashboardPage>().Where(page => page != DashboardPage.Assistant).ToArray();
     private readonly TranslateTransform dashboardPageSlide = new();
     private DashboardPage lastDashboardPage = DashboardPage.Home;
     private long dashboardWheelAt;

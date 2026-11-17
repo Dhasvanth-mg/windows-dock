@@ -144,6 +144,13 @@ public partial class DashboardWindow : Window
                 ShowCommandPalette();
                 return;
             }
+            // Alt+1 to Alt+4 open Lark, Fern, Bolt and Orbit from anywhere in the dashboard.
+            if (e.Key == Key.System && Keyboard.Modifiers == ModifierKeys.Alt && e.SystemKey is >= Key.D1 and <= Key.D4)
+            {
+                e.Handled = true;
+                OpenAssistantConversation(e.SystemKey - Key.D1);
+                return;
+            }
             if (e.Key == Key.Escape && !e.Handled)
             {
                 e.Handled = true;
@@ -293,8 +300,11 @@ public partial class DashboardWindow : Window
             codingWorkspace?.Dispose();
             codingWorkspace = null;
         }
-        PageScroll.VerticalScrollBarVisibility = page == DashboardPage.Agents ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Hidden;
-        PageScroll.PanningMode = page == DashboardPage.Agents ? PanningMode.None : PanningMode.VerticalOnly;
+        // Chats scroll their own threads, so the page itself must not scroll around them.
+        var ownScroll = page is DashboardPage.Agents or DashboardPage.Assistant;
+        PageScroll.VerticalScrollBarVisibility = ownScroll ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Hidden;
+        PageScroll.PanningMode = ownScroll ? PanningMode.None : PanningMode.VerticalOnly;
+        MarkAssistantShortcut(page == DashboardPage.Assistant ? assistantRole : -1);
         if (!compactAgents)
             lastDashboardPage = page;
         updatePage = null;
@@ -315,6 +325,7 @@ public partial class DashboardWindow : Window
             DashboardPage.Desk => DeskPage(),
             DashboardPage.Notes => NotesPage(),
             DashboardPage.Play => PlayPage(),
+            DashboardPage.Assistant => AssistantPageHost(),
             _ => ControlsPage()
         };
 
@@ -600,5 +611,6 @@ public partial class DashboardWindow : Window
     [DllImport("user32")]
     private static extern bool SetWindowPos(nint window, nint insertAfter, int x, int y, int width, int height, uint flags);
 
-    private enum DashboardPage { Home, Widgets, Agents, Notes, Controls, Desk, Play }
+    // Assistant has no tab of its own: the four faces in the header open it.
+    private enum DashboardPage { Home, Widgets, Agents, Notes, Controls, Desk, Play, Assistant }
 }
