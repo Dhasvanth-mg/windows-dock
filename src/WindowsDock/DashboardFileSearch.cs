@@ -34,8 +34,29 @@ public partial class DashboardWindow
         notice.TextWrapping = TextWrapping.Wrap;
         var status = Text("", 11, AssistantSecondary);
         status.TextWrapping = TextWrapping.Wrap;
+        var share = ActionButton("Review selected excerpts");
+        share.IsEnabled = false;
+        var recipients = new ComboBox { ItemsSource = AssistantPersonas.All, DisplayMemberPath = nameof(AssistantPersona.Name),
+            SelectedIndex = assistantRole };
+        AutomationProperties.SetName(recipients, "Assistant for these excerpts");
+        var excerpt = Field("Excerpts to attach", AssistantContext.TextLimit);
+        excerpt.Height = 120;
+        excerpt.AcceptsReturn = true;
+        excerpt.TextWrapping = TextWrapping.Wrap;
+        excerpt.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        var attach = ActionButton("Attach excerpts to draft");
+        var disclosure = Text("Your provider receives these excerpts when you send the chat message.", 11, AssistantSecondary);
+        disclosure.TextWrapping = TextWrapping.Wrap;
+        var review = new StackPanel
+        {
+            Children = { disclosure, excerpt, recipients, attach },
+            Visibility = Visibility.Collapsed
+        };
+        var reviewed = Card(review);
+        reviewed.Visibility = Visibility.Collapsed;
+        var selected = new HashSet<SearchDocument>();
         var list = new StackPanel();
-        foreach (var element in new UIElement[] { notice, folders, controls, input, status, list })
+        foreach (var element in new UIElement[] { notice, folders, controls, input, status, share, reviewed, list })
             content.Children.Add(element);
         CancellationTokenSource? indexing = null;
         var queryVersion = 0;
@@ -77,6 +98,24 @@ public partial class DashboardWindow
         };
         stop.Click += (_, _) => indexing?.Cancel();
         input.TextChanged += (_, _) => _ = FindAsync();
+        share.Click += (_, _) =>
+        {
+            excerpt.Text = DockFileSearch.ExcerptText(selected);
+            review.Visibility = reviewed.Visibility = Visibility.Visible;
+            excerpt.Focus();
+        };
+        attach.Click += (_, _) =>
+        {
+            if (recipients.SelectedIndex is var slot && slot >= 0 && !string.IsNullOrWhiteSpace(excerpt.Text))
+            {
+                var conversation = assistantConversations[slot];
+                if (conversation.Context != null && MessageBox.Show(window, "Replace the context already attached to this draft?",
+                    "Attach excerpts", MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
+                    return;
+                conversation.Context = new AssistantContext("Indexed document excerpts", excerpt.Text.Trim());
+                OpenAssistantConversation(slot);
+            }
+        };
         ReloadFolders();
 
         void ReloadFolders(string? selected = null)
@@ -97,6 +136,11 @@ public partial class DashboardWindow
             add.IsEnabled = !active;
             folders.IsEnabled = refresh.IsEnabled = remove.IsEnabled = !active && folders.SelectedItem != null;
             stop.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+            if (active)
+            {
+                ResetShare();
+                list.Children.Clear();
+            }
         }
 
         async Task ScanAsync(string folder)
@@ -129,11 +173,10 @@ public partial class DashboardWindow
         {
             var version = ++queryVersion;
             var query = input.Text.Trim();
+            ResetShare();
+            list.Children.Clear();
             if (query.Length == 0)
-            {
-                list.Children.Clear();
                 return;
-            }
             try
             {
                 await Task.Delay(150, cancellation);
@@ -156,7 +199,21 @@ public partial class DashboardWindow
                     open.HorizontalAlignment = HorizontalAlignment.Left;
                     var detail = Text(result.Snippet, 11, AssistantSecondary);
                     detail.TextWrapping = TextWrapping.Wrap;
-                    var card = Card(new StackPanel { Children = { open, detail } });
+                    var pick = new CheckBox { Content = "Select excerpt", IsEnabled = !string.IsNullOrWhiteSpace(result.Snippet) };
+                    AutomationProperties.SetName(pick, "Select excerpt from " + result.Name);
+                    pick.Checked += (_, _) =>
+                    {
+                        if (selected.Count >= 5)
+                        {
+                            pick.IsChecked = false;
+                            status.Text = "Select up to five excerpts.";
+                            return;
+                        }
+                        selected.Add(result);
+                        UpdateShare();
+                    };
+                    pick.Unchecked += (_, _) => { selected.Remove(result); UpdateShare(); };
+                    var card = Card(new StackPanel { Children = { open, detail, pick } });
                     card.Margin = new Thickness(0, 5, 0, 0);
                     list.Children.Add(card);
                 }
@@ -166,6 +223,19 @@ public partial class DashboardWindow
             catch (OperationCanceledException) { }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or SqliteException)
             { status.Text = "Could not search the file index."; }
+        }
+
+        void ResetShare()
+        {
+            selected.Clear();
+            UpdateShare();
+        }
+
+        void UpdateShare()
+        {
+            share.IsEnabled = selected.Count > 0;
+            review.Visibility = reviewed.Visibility = Visibility.Collapsed;
+            excerpt.Clear();
         }
     }
 }

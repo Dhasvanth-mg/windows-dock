@@ -15,10 +15,10 @@ internal static class DockFileSearch
     private static readonly HashSet<string> TextTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         ".txt", ".md", ".csv", ".tsv", ".json", ".xml", ".html", ".log", ".cs", ".py", ".ts", ".tsx",
-        ".js", ".jsx", ".css", ".sql", ".c", ".cpp", ".h", ".ps1", ".java", ".rs", ".go", ".docx"
+        ".js", ".jsx", ".css", ".sql", ".c", ".cpp", ".h", ".ps1", ".java", ".rs", ".go", ".docx", ".pdf", ".xlsx"
     };
     private static readonly HashSet<string> NameTypes = new(StringComparer.OrdinalIgnoreCase)
-    { ".pdf", ".doc", ".xlsx", ".xls", ".pptx", ".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3" };
+    { ".doc", ".xls", ".pptx", ".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3" };
 
     private static SqliteConnection Open()
     {
@@ -43,6 +43,22 @@ internal static class DockFileSearch
             {
                 using var secure = Command(connection, "INSERT INTO document_text(document_text, rank) VALUES ('secure-delete', 1)");
                 secure.ExecuteNonQuery();
+            }
+            using var version = Command(connection, "PRAGMA user_version");
+            if (Convert.ToInt64(version.ExecuteScalar()) < 1)
+            {
+                using var migration = connection.BeginTransaction();
+                version.Transaction = migration;
+                if (Convert.ToInt64(version.ExecuteScalar()) < 1)
+                {
+                    using var upgrade = Command(connection, """
+                        UPDATE files SET stamp = -1 WHERE lower(path) LIKE '%.pdf' OR lower(path) LIKE '%.xlsx';
+                        PRAGMA user_version = 1;
+                        """);
+                    upgrade.Transaction = migration;
+                    upgrade.ExecuteNonQuery();
+                }
+                migration.Commit();
             }
             return connection;
         }
@@ -163,9 +179,10 @@ internal static class DockFileSearch
                 var content = "";
                 if (text && info.Length is > 0 and <= 4_194_304)
                 {
-                    try { content = ChatAttachments.Read(path).File.Text ?? ""; }
+                    try { content = IndexedDocumentText.Read(path, cancellation); }
                     catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or
-                        InvalidDataException or System.Xml.XmlException)
+                        InvalidDataException or System.Xml.XmlException or InvalidOperationException or NotSupportedException or
+                        UglyToad.PdfPig.Core.PdfDocumentFormatException or UglyToad.PdfPig.Exceptions.PdfDocumentEncryptedException)
                     { unreadable++; }
                 }
                 if (previous.Id != 0)
@@ -210,6 +227,14 @@ internal static class DockFileSearch
             result.Add(new(rows.GetString(0), rows.GetString(1), rows.GetString(2)));
         return result.ToArray();
     }
+
+    internal static string ExcerptText(IEnumerable<SearchDocument> results) => string.Join("\n\n", results.Take(5).Select(result =>
+    {
+        var length = Math.Min(result.Snippet.Length, 1300);
+        if (length > 0 && char.IsHighSurrogate(result.Snippet[length - 1]))
+            length--;
+        return $"{result.Name}\n{result.Snippet[..length]}";
+    }));
 
     private static void ValidateFolder(string path)
     {

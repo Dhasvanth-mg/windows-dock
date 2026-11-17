@@ -1,5 +1,14 @@
 # Feature tracker
 
+## Continue with custom MCP and document retrieval
+
+- Status: In progress.
+- Scope: Add configurable MCP connections for assistant roles, and extend local file search and excerpt sharing.
+- Acceptance criteria: Discover tools from a user-chosen endpoint, save and remove connections, limit availability to the assigned role, and keep credentials local. Extract and search text from indexed PDFs and spreadsheets, and let users review an excerpt before sharing it with an assistant. Verify with isolated fixtures.
+- Retrieval implementation: Index text-based PDFs and cached Excel .xlsx values in the folders the user selected. Updating an existing index detects the extraction upgrade. Search results can be selected, reviewed, redacted, and attached to an assistant's draft.
+- Retrieval verification: Automated tests passed for both document extractors, an upgraded index, and including filenames without absolute paths. An isolated Windows fixture selected an excerpt and attached the edited text to an assistant draft.
+- Remaining work: Complete the final custom MCP fixture and publish the managed update. Native attachment still returns `0x8000FFFF` in the current Explorer session.
+
 ## Continue with workspace restore and installation
 
 - Status: Workspace update installed. Release ZIP built and installer verified in isolated directories.
