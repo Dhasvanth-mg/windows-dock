@@ -46,6 +46,10 @@ public partial class DashboardWindow
         var clock = Text("", 20, AssistantInk, strong: true);
         var stats = Text("", 12, AssistantSecondary);
         stats.TextWrapping = TextWrapping.Wrap;
+        var gathering = Text("", 12, AssistantSecondary);
+        gathering.TextWrapping = TextWrapping.Wrap;
+        var attend = ActionButton("Attend gathering");
+        var town = QuietButton("Town schedule");
         var diary = new StackPanel();
         var profile = Text("", 13, AssistantInk);
         profile.TextWrapping = TextWrapping.Wrap;
@@ -72,6 +76,12 @@ public partial class DashboardWindow
             }
         };
         apply.Click += (_, _) => TakeAction("apply " + careers.SelectedItem);
+        attend.Click += (_, _) => TakeAction("attend gathering");
+        town.Click += (_, _) =>
+        {
+            if (live is { } active)
+                ShowTownSchedule(active.Id);
+        };
         timer.Tick += (_, _) =>
         {
             if (live is not { Speed: > 0 } current || cancellation.IsCancellationRequested)
@@ -157,11 +167,13 @@ public partial class DashboardWindow
         {
             var world = live!;
             stage.Children.Clear();
-            foreach (var element in new FrameworkElement[] { clock, stats, action, places, people, profile, portrait,
-                decisions, memories, diary, careers, apply })
+            foreach (var element in new FrameworkElement[] { clock, stats, gathering, attend, town, action, places, people,
+                profile, portrait, decisions, memories, diary, careers, apply })
                 if (element.Parent is Panel previous)
                     previous.Children.Remove(element);
-            var summary = Card(new StackPanel { Children = { clock, stats } });
+            var summary = Card(new StackPanel { Children = { clock, stats, gathering,
+                new WrapPanel { Margin = new Thickness(0, 4, 0, 0), Children = { town, attend } } } });
+            town.Margin = new Thickness(0, 0, 8, 0);
             stage.Children.Add(summary);
             var speeds = new WrapPanel();
             foreach (var rate in new[] { 0, 1, 2, 5, 10, 25, 50, 100 })
@@ -238,6 +250,9 @@ public partial class DashboardWindow
             stats.Text = $"{world.Location} · {world.Cash:N2} cash · {world.Groceries} groceries · " +
                 $"{world.Work} shifts · study level {world.Study} · {world.People.Count(person => person.Alive)} residents" +
                 (string.IsNullOrEmpty(world.Career) ? "" : $" · {world.Career}");
+            var upcoming = DockLife.NextGathering(world.World, world.At);
+            gathering.Text = $"{upcoming.Title} · {upcoming.Date:ddd, MMM d} at 18:00 · {upcoming.Venue.Name}";
+            attend.Visibility = DockLife.CanAttend(world) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         void Render()
@@ -287,12 +302,14 @@ public partial class DashboardWindow
             AutomationProperties.SetName(portrait, $"Portrait of {person.Name}");
             var partner = world.Partner == person.Id ? world.Player : world.People.FirstOrDefault(item => item.Id == person.Partner)?.Name;
             var age = person.Alive ? DockLife.Age(person, DateOnly.FromDateTime(world.At.UtcDateTime)) : person.Lifespan;
-            profile.Text = $"{person.Name} · {age} · {person.Trait} · {person.Location}\n" +
-                $"{person.Job} · {person.Worked} shifts · {person.Savings:N2} savings" +
+            var presence = DockLife.Presence(world, person);
+            var schooling = person.Job == "Student" ? $"{person.SchoolDays} school days" : $"{person.Worked} shifts";
+            profile.Text = $"{person.Name} · {age} · {person.Trait}\n{presence.Activity} · {presence.Place}\n" +
+                $"{person.Job} · {schooling} · {person.Savings:N2} savings" +
                 (partner == null ? "" : $" · {(person.Married || (world.Partner == person.Id && world.Married) ? "spouse" : "partner")} {partner}") +
                 (person.Children == 0 ? "" : $" · {person.Children} children") + $" · rapport {person.Affinity}";
-            if (person.Alive && person.Location != world.Location)
-                decisions.Children.Add(QuietButton($"Visit {person.Location}", () => TakeAction("travel " + person.Location)));
+            if (person.Alive && presence.District != world.Location)
+                decisions.Children.Add(QuietButton($"Visit {presence.District}", () => TakeAction("travel " + presence.District)));
             else
                 foreach (var choice in DockLife.SocialChoices(world, person))
                 {

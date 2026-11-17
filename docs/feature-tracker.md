@@ -1,5 +1,15 @@
 # Feature tracker
 
+## Poker tournaments and the living town
+
+- Status: Implemented, verified in an isolated Windows dashboard, and installed.
+- Scope: Add a saveable offline Hold’em tournament with a bracket and rising blinds. Give residents individual places to go during the day, business opening hours, and social events that progress when time is skipped.
+- Acceptance criteria: Bracket matches, chip stacks, and open hands survive a restart. Tournament chips stay separate from the casino wallet. Residents have usable schedules, form friendships independently, and attend gatherings. Time skips produce the same events as incremental advances. Older casino wallets and life saves remain readable.
+- Casino implementation: The new Hold’em tournament has a four-player bracket, Quick and Standard structures, automated rival matches, rising blinds, short-stack all-ins, and a persistent record of recent finishes. The player plays two heads-up rounds with fresh stacks at the final. Tournament chips and outcomes live in a separate save.
+- Life Simulator implementation: Residents have individual work shifts, school attendance, and locations during the day. Businesses list opening hours, and groceries follow market hours. Residents form friendships at Saturday gatherings without player input. The player can attend and gain rapport. The schedule viewer shows businesses and resident routines by date. Older saves carry forward the shift already credited on the day of the upgrade.
+- Verification: All 122 tests passed. Engine tests covered bracket advancement, short-stack elimination, wallet isolation, shift timing, legacy saves, and identical town outcomes across split and continuous time skips. The isolated Windows dashboard opened the tournament from Casino, reopened an unfinished hand, and verified the blind and wallet state. It also navigated the town schedule and attended a gathering. All five managed startup files matched the published build.
+- Remaining work: Dealer profiles, additional casino betting variants and artwork, deeper life decisions and schedules, and optional AI dialogue and world generation. Live native taskbar access remains blocked by Explorer error 0x8000FFFF in this session.
+
 ## Continue the Casino and Life Simulator applets
 
 - Status: Implemented, verified in an isolated Windows dashboard, and installed.
@@ -8,7 +18,7 @@
 - Casino implementation: Heads-up Hold’em supports alternating blinds, selectable rivals, four betting streets, minimum raises, all-in runouts, split pots, and uncalled refunds. The original reveal flow remains available for hands saved by the previous version. Hand transcripts, a recent profit chart, milestones, and table and rival totals are available in the panel. Totals survive ledger truncation and recover whatever results an older wallet still has in its ledger.
 - Life Simulator implementation: Character profiles have stable local portraits and recent memories. Contextual choices support helping, meals, dating, partnership, marriage, adoption, and separation. Career applications build on study. Relationship cards open a family and social graph for the selected resident. NPC households can marry independently and newly created children retain both parents.
 - Verification: All 117 automated tests passed. The isolated Windows dashboard checked opponent selection, call and check controls, invalid raise handling, wallet state, the profit chart and replay disclosure, family creation, a career application, and relationship navigation. Engine tests covered old hands, all-in ties, refunds, stale actions, and simulations split across different time skips. All five managed files in the startup installation matched the published release by hash.
-- Remaining work: Casino tournaments, persistent dealer profiles, other tables’ betting variants, and richer table themes and animations. Life Simulator still needs broader actions, deeper independent scheduling, and optional AI dialogue and world generation. Explorer still returns 0x8000FFFF, so access through the live taskbar remains unverified.
+- Remaining work: The tournament and town schedule are recorded above. Persistent dealer profiles, additional wagers and artwork, broader life decisions, and optional AI dialogue and world generation remain open. Explorer still returns 0x8000FFFF, so access through the live taskbar remains unverified.
 
 ## Deskspace, mind maps, and game applets
 

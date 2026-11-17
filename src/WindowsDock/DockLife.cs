@@ -5,11 +5,13 @@ namespace WindowsDock;
 
 internal sealed record LifePerson(Guid Id, string Name, string Trait, DateOnly Birth, int Lifespan, string Job, string Location,
     decimal Savings, int Worked, bool Alive = true, Guid? Partner = null, Guid? Parent = null, int Children = 0, int Affinity = 0,
-    Guid? OtherParent = null, bool Married = false, int Dates = 0, LifeEvent[]? Memories = null);
+    Guid? OtherParent = null, bool Married = false, int Dates = 0, LifeEvent[]? Memories = null,
+    DateOnly? LastShift = null, int SchoolDays = 0);
 internal sealed record LifeEvent(DateTimeOffset At, string Text);
 internal sealed record LifeSave(Guid Id, string Player, string World, int Seed, DateTimeOffset At, DateTimeOffset ClockAnchor, double Speed,
     LifePerson[] People, LifeEvent[] History, decimal Cash, int Work, int Study, int Groceries, string Location, decimal Prices,
-    Guid? Partner = null, bool Married = false, string Career = "");
+    Guid? Partner = null, bool Married = false, string Career = "", LifeTownBond[]? TownBonds = null,
+    DateOnly? LastGathering = null, bool ScheduledShifts = false);
 
 internal static partial class DockLife
 {
@@ -33,7 +35,8 @@ internal static partial class DockLife
             DateOnly.FromDateTime(begin.UtcDateTime).AddYears(-random.Next(18, 65)).AddDays(-random.Next(180)),
             jobs[index % jobs.Length], places[index % places.Length])).ToArray();
         return new(Guid.NewGuid(), player, world, seed, begin, now, 0, people,
-            [new(begin, $"{player} arrived in {world}. The town is already at work.")], 250, 0, 0, 0, places[0], 1);
+            [new(begin, $"{player} arrived in {world}. The town is already at work.")], 250, 0, 0, 0, places[0], 1,
+            ScheduledShifts: true);
     }
 
     internal static void SaveNew(LifeSave world) => DockData.Update<LifeSave[]>(Store, saves => [world, .. saves ?? []]);
@@ -68,15 +71,25 @@ internal static partial class DockLife
         if (target <= world.At)
             return world;
         var people = world.People.ToList();
+        if (!world.ScheduledShifts && world.At.Hour >= 8 && !Weekend.Contains(world.At.DayOfWeek))
+        {
+            // Older saves paid weekday workers at 08:00. Avoid paying the same shift again after upgrading.
+            var legacyDay = DateOnly.FromDateTime(world.At.UtcDateTime);
+            for (var index = 0; index < people.Count; index++)
+                if (people[index] is { Alive: true, Worked: > 0, Job: not ("Student" or "Retired") } worker)
+                    people[index] = worker with { LastShift = legacyDay };
+        }
         var history = new Queue<LifeEvent>(world.History);
         var places = Places(world.World);
         var jobs = Jobs(world.World);
+        var venues = Venues(world.World);
         var prices = world.Prices;
+        Dictionary<(Guid, Guid), LifeTownBond>? bonds = null;
         for (var day = world.At.UtcDateTime.Date; day <= target.UtcDateTime.Date; day = day.AddDays(1))
         {
             var date = DateOnly.FromDateTime(day);
             var morning = new DateTimeOffset(day.AddHours(8), TimeSpan.Zero);
-            var evening = morning.AddHours(10);
+            var evening = morning.AddHours(12);
             var random = new Random(unchecked(world.Seed ^ (date.DayNumber * 16777619)));
             if (morning > world.At && morning <= target)
             {
@@ -112,13 +125,53 @@ internal static partial class DockLife
                         people[index] = person with { Job = jobs[random.Next(jobs.Length)] };
                         PersonEvent(morning, $"{person.Name} graduated and started work as {people[index].Job.ToLowerInvariant()}.", index);
                     }
-                    else if (age is >= 18 and < 65 && day.DayOfWeek is not (DayOfWeek.Sunday or DayOfWeek.Saturday))
+                }
+            }
+            for (var hour = 15; hour <= 18; hour++)
+            {
+                var end = new DateTimeOffset(day.AddHours(hour), TimeSpan.Zero);
+                if (end <= world.At || end > target)
+                    continue;
+                for (var index = 0; index < people.Count; index++)
+                {
+                    var person = people[index];
+                    if (person.LastShift == date || Duty(person, date, venues) is not { } shift || shift.Ends != hour)
+                        continue;
+                    if (person.Job == "Student")
                     {
-                        var job = random.Next(440) == 0 ? jobs[random.Next(jobs.Length)] : person.Job;
-                        people[index] = person with { Job = job, Savings = person.Savings + 22, Worked = person.Worked + 1 };
-                        if (job != person.Job)
-                            PersonEvent(morning, $"{person.Name} changed careers to {job.ToLowerInvariant()}.", index);
+                        people[index] = person with { LastShift = date, SchoolDays = person.SchoolDays + 1 };
+                        continue;
                     }
+                    var shiftRandom = new Random(unchecked(world.Seed ^ (date.DayNumber * 809) ^ person.Id.GetHashCode()));
+                    var job = shiftRandom.Next(440) == 0 ? jobs[shiftRandom.Next(jobs.Length)] : person.Job;
+                    people[index] = person with { LastShift = date, Job = job, Savings = person.Savings + 22, Worked = person.Worked + 1 };
+                    if (job != person.Job)
+                        PersonEvent(end, $"{person.Name} changed careers to {job.ToLowerInvariant()}.", index);
+                }
+            }
+            var doors = new DateTimeOffset(day.AddHours(LifeGathering.Starts), TimeSpan.Zero);
+            if (day.DayOfWeek == DayOfWeek.Saturday && doors > world.At && doors <= target)
+            {
+                var visitors = Attendees(world.Seed, date, people);
+                if (visitors.Length > 0)
+                {
+                    var gathering = Gathering(world.World, date, venues);
+                    Event(doors, $"{visitors.Length} residents met for {gathering.Title.ToLowerInvariant()} at {gathering.Venue.Name}.");
+                    bonds ??= (world.TownBonds ?? []).ToDictionary(bond => (bond.First, bond.Second));
+                    for (var group = 0; group + 1 < visitors.Length; group += 2)
+                    {
+                        var a = visitors[group];
+                        var b = visitors[group + 1];
+                        var pair = a.Id.CompareTo(b.Id) < 0 ? (a.Id, b.Id) : (b.Id, a.Id);
+                        var meetings = bonds.TryGetValue(pair, out var prior) ? prior.Meetings + 1 : 1;
+                        bonds[pair] = new(pair.Item1, pair.Item2, meetings, date);
+                        if (meetings is 2 or 6 && !Related(a, b))
+                            PersonEvent(doors, $"{a.Name} and {b.Name} became {(meetings == 2 ? "friends" : "close friends")}.",
+                                people.FindIndex(person => person.Id == a.Id), people.FindIndex(person => person.Id == b.Id));
+                    }
+                    if (bonds.Count > 1024)
+                        foreach (var old in bonds.OrderBy(item => item.Value.LastMet).ThenBy(item => item.Key).Take(bonds.Count - 1024).ToArray())
+                            bonds.Remove(old.Key);
                 }
             }
             // A separate seed keeps each scheduled phase reproducible when the clock crosses it in a different call.
@@ -173,7 +226,8 @@ internal static partial class DockLife
                 }
             }
         }
-        return world with { At = target, People = people.ToArray(), History = history.ToArray(), Prices = prices };
+        return world with { At = target, People = people.ToArray(), History = history.ToArray(), Prices = prices, ScheduledShifts = true,
+            TownBonds = bonds == null ? world.TownBonds : bonds.Values.OrderBy(bond => bond.First).ThenBy(bond => bond.Second).ToArray() };
 
         void Event(DateTimeOffset at, string text)
         {
@@ -201,6 +255,8 @@ internal static partial class DockLife
         var words = input.Trim().ToLowerInvariant();
         if (world.At >= LastDate)
             throw new ArgumentException("This world has reached the end of its calendar.");
+        if (words == "attend gathering")
+            return Attend(world);
         var text = "";
         var hours = 1;
         if (words.StartsWith("work", StringComparison.Ordinal))
@@ -220,6 +276,9 @@ internal static partial class DockLife
             return SocialAction(world, words, person);
         else if (words.StartsWith("buy", StringComparison.Ordinal))
         {
+            var market = Venues(world.World)[(int)LifeVenueKind.Market];
+            if (!market.IsOpen(world.At))
+                throw new ArgumentException($"{market.Name} is closed. It opens at 08:00 and closes at 19:00, Monday through Saturday.");
             var price = Math.Round(12 * world.Prices, 2);
             if (price > world.Cash)
                 throw new ArgumentException("You cannot afford groceries right now.");

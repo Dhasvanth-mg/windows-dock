@@ -7,7 +7,7 @@ internal static partial class DockLife
 {
     internal static LifeChoice[] SocialChoices(LifeSave world, LifePerson guest)
     {
-        if (!guest.Alive || guest.Location != world.Location)
+        if (!guest.Alive || Presence(world, guest).District != world.Location)
             return [];
         var options = new List<LifeChoice>
         {
@@ -45,8 +45,9 @@ internal static partial class DockLife
     {
         var guest = world.People.FirstOrDefault(person => person.Id == personId && person.Alive) ??
             throw new ArgumentException("Choose a living person first.");
-        if (world.Location != guest.Location)
-            throw new ArgumentException($"Travel to {guest.Location} to see {guest.Name}.");
+        var present = Presence(world, guest);
+        if (world.Location != present.District)
+            throw new ArgumentException($"Travel to {present.District} to see {guest.Name} at {present.Place}.");
         var choice = SocialChoices(world, guest).FirstOrDefault(item => item.Command == action) ??
             throw new ArgumentException("That choice is unavailable right now. Select the person to see their available actions.");
         var name = guest.Name;
@@ -54,8 +55,8 @@ internal static partial class DockLife
         {
             "talk" => $"{world.Player} caught up with {name}. {Conversation(guest)}",
             "help" => $"{world.Player} helped {name} with {(guest.Job == "Student" ? "schoolwork" : "a few errands")}.",
-            "share meal" => $"{world.Player} and {name} shared a meal in {guest.Location}.",
-            "date" => $"{world.Player} and {name} went on a date in {guest.Location}.",
+            "share meal" => $"{world.Player} and {name} shared a meal in {present.District}.",
+            "date" => $"{world.Player} and {name} went on a date in {present.District}.",
             "become partners" => $"{world.Player} and {name} became partners.",
             "marry" => $"{world.Player} and {name} got married.",
             "break up" => $"{world.Player} and {name} ended their relationship.",
@@ -118,6 +119,12 @@ internal static partial class DockLife
                     Add(relative.Id, "Child", relative);
                 else if (ShareParent(person, relative) && !edges.ContainsKey(relative.Id))
                     Add(relative.Id, "Sibling", relative);
+            }
+            foreach (var bond in (world.TownBonds ?? []).Where(link => link.Meetings >= 2 && (link.First == focus || link.Second == focus)))
+            {
+                var otherResident = bond.First == focus ? bond.Second : bond.First;
+                if (!edges.ContainsKey(otherResident))
+                    Add(otherResident, bond.Meetings >= 6 ? "Close friend" : "Friend");
             }
         }
         return edges.Values.OrderBy(item => item.Kind is "Parent" or "Child" or "Spouse" or "Partner" or "Sibling" ? 0 : 1)
