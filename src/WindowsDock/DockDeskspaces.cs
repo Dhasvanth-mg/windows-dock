@@ -10,11 +10,12 @@ internal sealed record DeskEdge(Guid From, Guid To, string Label);
 internal sealed record DeskMap(Guid Id, string Name, DeskNode[] Nodes, DeskEdge[] Edges);
 internal sealed record Deskspace(Guid Id, string Name, WorkspaceWindow[] Windows, DeskLink[] Links,
     Guid[] Notes, Guid[] Voice, DeskMap[] Maps, DeskCanvas[]? Canvases = null);
+internal sealed record DeskCanvasEntry(DeskCanvas Canvas, Guid? SpaceId, string? SpaceName);
 
 internal static class DockDeskspaces
 {
     private const string FileName = "deskspaces.json";
-    private sealed record Collection(Deskspace[] Spaces, DeskPerson[] People);
+    private sealed record Collection(Deskspace[] Spaces, DeskPerson[] People, DeskCanvas[]? StandaloneCanvases = null);
     private static Collection Load() => DockData.Read<Collection>(FileName) ?? new([], []);
     internal static Deskspace[] Spaces() => Load().Spaces;
     internal static DeskPerson[] People() => Load().People;
@@ -75,21 +76,66 @@ internal static class DockDeskspaces
             return item with { Maps = item.Maps.Select(board => board.Id == map ? edit(board) : board).ToArray() };
         });
 
-    internal static DeskCanvas AddCanvas(Guid space, string name)
+    internal static DeskCanvasEntry[] ListCanvases()
+    {
+        var state = Load();
+        return (state.StandaloneCanvases ?? []).Select(board => new DeskCanvasEntry(board, null, null))
+            .Concat(state.Spaces.SelectMany(space => (space.Canvases ?? []).Select(board => new DeskCanvasEntry(board, space.Id, space.Name))))
+            .OrderBy(entry => entry.SpaceId.HasValue).ThenBy(entry => entry.Canvas.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
+    }
+
+    internal static DeskCanvas? FindCanvas(Guid? space, Guid id)
+    {
+        var state = Load();
+        var boards = space is { } parent ? state.Spaces.FirstOrDefault(item => item.Id == parent)?.Canvases : state.StandaloneCanvases;
+        return boards?.FirstOrDefault(board => board.Id == id);
+    }
+
+    internal static DeskCanvas AddCanvas(Guid? space, string name)
     {
         var board = new DeskCanvas(Guid.NewGuid(), Label(name), []);
-        Change(space, entry => entry with { Canvases = [.. entry.Canvases ?? [], board] });
+        EditCanvases(space, boards => [.. boards, board]);
         return board;
     }
 
-    internal static void ChangeCanvas(Guid space, Guid id, Func<DeskCanvas, DeskCanvas> edit) =>
-        Change(space, entry =>
+    internal static void ChangeCanvas(Guid? space, Guid id, Func<DeskCanvas, DeskCanvas> edit) =>
+        EditCanvases(space, boards =>
         {
-            var boards = entry.Canvases ?? [];
             if (!boards.Any(board => board.Id == id))
-                throw new IOException("This canvas has been removed.");
-            return entry with { Canvases = boards.Select(board => board.Id == id ? edit(board) : board).ToArray() };
+                throw new IOException("This canvas is no longer in this location.");
+            return boards.Select(board => board.Id == id ? edit(board) : board).ToArray();
         });
+
+    internal static void RemoveCanvas(Guid? space, Guid id) =>
+        EditCanvases(space, boards => boards.Where(board => board.Id != id).ToArray());
+
+    internal static void MakeCanvasStandalone(Guid space, Guid id) => DockData.Update<Collection>(FileName, saved =>
+    {
+        var current = saved ?? new([], []);
+        var desk = current.Spaces.FirstOrDefault(item => item.Id == space);
+        var board = desk?.Canvases?.FirstOrDefault(item => item.Id == id) ??
+            throw new IOException("This canvas is no longer in that deskspace.");
+        return current with
+        {
+            StandaloneCanvases = [.. current.StandaloneCanvases ?? [], board],
+            Spaces = current.Spaces.Select(item => item.Id == space
+                ? item with { Canvases = item.Canvases!.Where(canvas => canvas.Id != id).ToArray() } : item).ToArray()
+        };
+    });
+
+    private static void EditCanvases(Guid? space, Func<DeskCanvas[], DeskCanvas[]> edit)
+    {
+        if (space is { } parent)
+        {
+            Change(parent, item => item with { Canvases = edit(item.Canvases ?? []) });
+            return;
+        }
+        DockData.Update<Collection>(FileName, saved =>
+        {
+            var current = saved ?? new([], []);
+            return current with { StandaloneCanvases = edit(current.StandaloneCanvases ?? []) };
+        });
+    }
 
     internal static DeskNode Node(string title, string notes, double x, double y, Guid? person = null)
     {

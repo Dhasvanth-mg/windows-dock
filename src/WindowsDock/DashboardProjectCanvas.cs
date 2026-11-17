@@ -23,14 +23,16 @@ public partial class DashboardWindow
     ];
     private static readonly string[] CanvasColors = ["#F3F0E7", "#E7BF68", "#DE8A8A", "#C9A3DA", "#8BB5DA", "#8BC6B1", "#A9BE83", "#93989F"];
 
-    private void ShowProjectCanvas(Guid desk, Guid boardId)
+    private void ShowProjectCanvas(Guid? desk, Guid boardId, bool fromLibrary = false)
     {
-        var board = (DockDeskspaces.Get(desk).Canvases ?? []).FirstOrDefault(item => item.Id == boardId);
+        var board = DockDeskspaces.FindCanvas(desk, boardId);
         if (board == null)
             return;
+        var library = fromLibrary || desk == null;
+        Action back = library ? ShowProjectCanvases : () => ShowDeskspaces(desk);
         var layout = new DockPanel();
         var (window, _, _) = CreateDockPanel(board.Name, "Project canvas", 1120, 0xE7C3, accent,
-            backAction: () => ShowDeskspaces(desk), backLabel: "Back to deskspace", body: layout, height: 665, expandable: true);
+            backAction: back, backLabel: library ? "Back to canvases" : "Back to deskspace", body: layout, height: 665, expandable: true);
         var viewport = new Grid { ClipToBounds = true, Background = assistantInset, Focusable = true };
         AutomationProperties.SetName(viewport, "Project canvas drawing surface");
         var drawing = new Canvas { Background = Brushes.Transparent };
@@ -425,9 +427,8 @@ public partial class DashboardWindow
                         MessageBoxImage.None, MessageBoxResult.No) == MessageBoxResult.Yes)
                         Run(() =>
                         {
-                            DockDeskspaces.Change(desk, space => space with
-                                { Canvases = space.Canvases!.Where(entry => entry.Id != boardId).ToArray() });
-                            ShowDeskspaces(desk);
+                            DockDeskspaces.RemoveCanvas(desk, boardId);
+                            back();
                         });
                 }));
                 sidebar.Children.Add(status);

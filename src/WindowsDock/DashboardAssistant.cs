@@ -52,7 +52,7 @@ public partial class DashboardWindow
     private readonly PlanSignIn planSignIn = new();
     private int assistantRole = 3;
 
-    private bool HasActiveWork => runningJobs.Count != 0 || planSignIn.Active != null;
+    private bool HasActiveWork => runningJobs.Count != 0 || planSignIn.Active != null || activeCodingRequests != 0;
 
     private Task<PlanAccount> StartPlanSignIn(PlanAccount? account)
     {

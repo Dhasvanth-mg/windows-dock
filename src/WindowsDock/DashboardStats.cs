@@ -25,11 +25,13 @@ public partial class DashboardWindow
         var system = SystemPane(out var update);
         updatePage = update;
         var desk = new DockPanel();
-        var spaces = AccentButton("Deskspace", 0xE8B7, AccentFill, ShowDeskspaces);
-        spaces.HorizontalAlignment = HorizontalAlignment.Left;
-        spaces.Margin = new Thickness(0, 0, 0, 10);
-        DockPanel.SetDock(spaces, Dock.Top);
-        desk.Children.Add(spaces);
+        var shortcuts = new WrapPanel { Margin = new Thickness(0, 0, 0, 10), Children =
+        {
+            AccentButton("Deskspace", 0xE8B7, AccentFill, ShowDeskspaces),
+            AccentButton("Project canvases", 0xE7C3, AccentFill, ShowProjectCanvases)
+        } };
+        DockPanel.SetDock(shortcuts, Dock.Top);
+        desk.Children.Add(shortcuts);
         desk.Children.Add(Panes((1, system), (1, ShelfPane()), (1, WallpaperPane())));
         return FillPage(desk);
     }

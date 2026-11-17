@@ -52,6 +52,31 @@ internal static class CodingSummaryClient
             JsonSerializer.Serialize(turns.Select(item => new { role = item.User ? "user" : "assistant", text = item.Text }), InputJson),
             cancellation);
 
+    internal static async Task<(string Id, string Text)> ContinueClaudeCopyAsync(string source, bool fork,
+        string folder, string? model, string? effort, string prompt, CancellationToken cancellation)
+    {
+        var executable = FindExecutable(AssistantProvider.ClaudeCode) ??
+            throw new CodingSummaryException("Install the Claude Code CLI and sign in to continue a copy here.");
+        var start = CreateStart(executable, folder);
+        foreach (var option in ClaudeOptions.Where(option => option != "--no-session-persistence"))
+            start.ArgumentList.Add(option);
+        start.ArgumentList.Add("--resume");
+        start.ArgumentList.Add(source);
+        if (fork)
+            start.ArgumentList.Add("--fork-session");
+        if (model != null)
+            start.ArgumentList.Add("--model=" + model);
+        if (effort != null)
+            start.ArgumentList.Add("--effort=" + effort);
+        var json = await CaptureAsync(start, "Claude Code", prompt, cancellation).ConfigureAwait(false);
+        using var result = JsonDocument.Parse(json);
+        var reply = ReadClaude(result.RootElement, json);
+        var id = String(result.RootElement, "session_id");
+        if (!Guid.TryParseExact(id, "D", out _) || (fork ? id == source : id != source))
+            throw new CodingSummaryException("Claude Code didn't confirm the separate session.");
+        return (id!, reply);
+    }
+
     private static async Task<string> RunAsync(AssistantProvider provider, string model, string instruction, string input,
         CancellationToken cancellation)
     {
@@ -63,16 +88,7 @@ internal static class CodingSummaryClient
         var workingDirectory = Directory.CreateTempSubdirectory("windows-dock-summary-").FullName;
         try
         {
-            var start = new ProcessStartInfo(executable)
-            {
-                WorkingDirectory = workingDirectory, UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
-                StandardInputEncoding = new UTF8Encoding(false), StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8
-            };
-            foreach (var variable in new[] { "CODEX_THREAD_ID", "CODEX_API_KEY", "OPENAI_API_KEY", "CLAUDECODE",
-                "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SIMPLE", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN" })
-                start.Environment.Remove(variable);
+            var start = CreateStart(executable, workingDirectory);
             foreach (var option in codex ? CodexOptions : ClaudeOptions)
                 start.ArgumentList.Add(option);
             if (model.Length != 0)
@@ -89,25 +105,53 @@ internal static class CodingSummaryClient
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
             timeout.CancelAfter(TimeSpan.FromSeconds(75));
+            var json = await CaptureAsync(start, name, input, timeout.Token).ConfigureAwait(false);
+            if (codex)
+                return ReadCodex(json);
+            using var result = JsonDocument.Parse(json);
+            return ReadClaude(result.RootElement, json);
+        }
+        finally
+        {
+            try { Directory.Delete(workingDirectory); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    private static ProcessStartInfo CreateStart(string executable, string directory)
+    {
+        var start = new ProcessStartInfo(executable)
+        {
+            WorkingDirectory = directory, UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            StandardInputEncoding = new UTF8Encoding(false), StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+        foreach (var variable in new[] { "CODEX_THREAD_ID", "CODEX_API_KEY", "OPENAI_API_KEY", "CLAUDECODE",
+            "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SIMPLE", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN" })
+            start.Environment.Remove(variable);
+        return start;
+    }
+
+    private static async Task<string> CaptureAsync(ProcessStartInfo start, string name, string input, CancellationToken token)
+    {
+        try
+        {
             using var process = Process.Start(start) ?? throw new CodingSummaryException($"Could not start {name}.");
             try
             {
-                var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
-                var errors = process.StandardError.ReadToEndAsync(timeout.Token);
-                try
-                {
-                    await process.StandardInput.WriteAsync(input.AsMemory(), timeout.Token);
-                    await process.StandardInput.FlushAsync(timeout.Token);
-                }
+                var output = process.StandardOutput.ReadToEndAsync(token);
+                var errors = process.StandardError.ReadToEndAsync(token);
+                try { await process.StandardInput.WriteAsync(input.AsMemory(), token).ConfigureAwait(false); }
                 catch (IOException) { }
                 try { process.StandardInput.Close(); }
                 catch (IOException) { }
-                await process.WaitForExitAsync(timeout.Token);
-                var json = await output;
-                var diagnostics = await errors;
+                await process.WaitForExitAsync(token).ConfigureAwait(false);
+                var json = await output.ConfigureAwait(false);
+                var diagnostics = await errors.ConfigureAwait(false);
                 if (process.ExitCode != 0)
                     throw new CodingSummaryException(ExplainFailure(name, json + "\n" + diagnostics));
-                return codex ? ReadCodex(json) : ReadClaude(json);
+                return json;
             }
             finally
             {
@@ -116,15 +160,7 @@ internal static class CodingSummaryClient
                     catch (Exception error) when (error is InvalidOperationException or Win32Exception) { }
             }
         }
-        catch (Win32Exception)
-        {
-            throw new CodingSummaryException($"Could not start {name}. Check the local CLI installation.");
-        }
-        finally
-        {
-            try { Directory.Delete(workingDirectory); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-        }
+        catch (Win32Exception) { throw new CodingSummaryException($"Could not start {name}. Check the local CLI installation."); }
     }
 
     private static string ReadCodex(string output)
@@ -156,10 +192,8 @@ internal static class CodingSummaryClient
         return complete ? answer : "";
     }
 
-    private static string ReadClaude(string output)
+    private static string ReadClaude(JsonElement root, string output)
     {
-        using var result = JsonDocument.Parse(output);
-        var root = result.RootElement;
         if (Property(root, "is_error").ValueKind == JsonValueKind.True)
             throw new CodingSummaryException(ExplainFailure("Claude Code", output));
         return String(root, "type") == "result" ? String(root, "result") ?? "" : "";

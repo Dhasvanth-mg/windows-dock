@@ -37,9 +37,9 @@ public partial class DashboardWindow
 
     private void ShowAgentUsage() => ShowCodingWorkspace().ShowUsage();
 
-    private sealed class CodingWorkspace : IDisposable
+    private sealed partial class CodingWorkspace : IDisposable
     {
-        private enum Pane { Reply, Approval, Slot, Usage, Setup, Activity, Jobs }
+        private enum Pane { Reply, Controls, Approval, Slot, Usage, Setup, Activity, Jobs }
 
         private readonly DashboardWindow dock;
         private readonly ListBox conversations = new();
@@ -182,7 +182,8 @@ public partial class DashboardWindow
             header.Children.Add(portrait);
             header.Children.Add(new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { title, metadata } });
 
-            foreach (var (target, label) in new[] { (Pane.Reply, "Reply"), (Pane.Approval, "Approval"), (Pane.Slot, "Agent slot"), (Pane.Usage, "Usage") })
+            foreach (var (target, label) in new[] { (Pane.Reply, "Reply"), (Pane.Controls, "Controls"), (Pane.Approval, "Approval"),
+                (Pane.Slot, "Agent slot"), (Pane.Usage, "Usage") })
             {
                 var button = Tab(label, () => Navigate(target));
                 tabs.Add(target, button);
@@ -264,7 +265,7 @@ public partial class DashboardWindow
             chat = selected;
             approval = request;
             SyncRail(filtered, ranked.Length > 0);
-            if (!hasBody || changedChat && pane is Pane.Reply or Pane.Approval or Pane.Slot)
+            if (!hasBody || changedChat && pane is Pane.Reply or Pane.Controls or Pane.Approval or Pane.Slot)
                 Navigate(approval == null ? Pane.Reply : Pane.Approval);
             else if (pane == Pane.Reply && !showSummary && changedReply || pane == Pane.Approval && changedApproval ||
                      pane == Pane.Usage && changedChat)
@@ -368,6 +369,7 @@ public partial class DashboardWindow
             back.Visibility = GlobalPane ? Visibility.Visible : Visibility.Collapsed;
             chatTabs.Visibility = GlobalPane ? Visibility.Collapsed : Visibility.Visible;
             tabs[Pane.Approval].Visibility = approval == null && pane != Pane.Approval ? Visibility.Collapsed : Visibility.Visible;
+            tabs[Pane.Controls].IsEnabled = chat != null;
             tabs[Pane.Slot].IsEnabled = chat != null;
             foreach (var (target, button) in tabs)
                 SelectTab(button, target == pane);
@@ -431,6 +433,10 @@ public partial class DashboardWindow
             switch (target)
             {
                 case Pane.Reply: BuildReply(content, token); break;
+                case Pane.Controls:
+                    if (chat != null)
+                        BuildControls(content, chat, token);
+                    break;
                 case Pane.Approval:
                     if (approval != null)
                         content.Children.Add(dock.ApprovalDetails(approval));
@@ -536,7 +542,14 @@ public partial class DashboardWindow
             void Load()
             {
                 if (choices.SelectedIndex >= 0)
-                    settings.Content = dock.BuildAgentSettings(providers[choices.SelectedIndex]);
+                {
+                    var provider = providers[choices.SelectedIndex];
+                    var body = new StackPanel();
+                    if (provider == AgentProvider.Codex)
+                        dock.BuildCodexConnectionSettings(body, paneLifetime!.Token);
+                    body.Children.Add(dock.BuildAgentSettings(provider));
+                    settings.Content = body;
+                }
             }
         }
 
