@@ -1,5 +1,14 @@
 # Feature tracker
 
+## Remaining features inventory
+
+- Status: Inventory reviewed against the current source, the expansion specification, and the original roadmap.
+- Scope: Check the expansion specification, the original roadmap, and the current implementation for unfinished features.
+- Acceptance criteria: Identify outstanding builds, partial features, and work that only needs live verification. Reconcile older entries with newer releases.
+- Partial features: Assistants has searchable history, attachments, combined provider selection, and retry for unanswered messages. Live response streaming, conversation organization and branching, editable memory, and automatic provider fallback are outstanding. Coding chats can display local sessions, summarize replies, and handle supported approvals. Sending into existing desktop sessions and changing their live model or effort remain open. Orbit handoffs and role-specific MCP tools exist. General connector setup, reusable multi-step workflows, and job recovery are outstanding.
+- Additional builds: Calendar sync and event editing; cloud and local document editing integrations; voice memos, transcription, and voice commands; opt-in file content indexing and retrieval; knowledge graph, contact profiles, and mind maps; encrypted vault and password manager. Existing workspace layouts, favorites, calculator, and wireless controls still have gaps documented below. Native dock editing and a verified install, update, and rollback path are also outstanding.
+- Verification: Inspected current code and checked the installed controller log. Explorer is still returning `0x8000FFFF` during attachment. A fresh shell needs to verify the native button, four-slot row, gestures, and recovery. Live device and account checks still include Bluetooth playback across outputs, wireless transitions, provider sign-in and uploads, and coding approvals. No application source changed for this inventory.
+
 ## Assistant chat history, attachments, and shared storage
 
 - Status: Built, verified, and installed.
@@ -189,9 +198,9 @@
 
 ### Assistant chats like ChatGPT or Claude, files, history, memory, fewer popups
 
-- Status: Not started.
+- Status: Partly delivered in the newer Assistant chat history and Widgets work above.
 - Scope: Messages received during the redesign. Assistant chats should look like a ChatGPT or Claude conversation, accept attached files, keep earlier conversations, and learn from the owner's behaviour. Minimise popups and extra windows. Performance targets are set aside for now in favour of feature work.
-- Remaining work: All of it. A separate session is already moving Widgets into the dashboard window, so this work needs to be coordinated with that one.
+- Remaining work: Add user-controlled, editable memory and consolidate the remaining separate panels where appropriate.
 
 ## Fix top repository-analysis findings
 
