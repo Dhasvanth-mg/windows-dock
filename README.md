@@ -80,9 +80,9 @@ Open **Desk → Deskspace** or find it in Widgets. Each named space keeps select
 
 ### Play
 
-**Play → Casino** keeps a local fictional chip wallet and round history. Play blackjack, both roulette wheels, baccarat, slots, pass-line craps, sic bo, four-spot keno, video poker, three-card poker, or fixed-stake heads-up Texas Hold’em. The game panel lists each table’s rules and supported wagers. Use the settings to set starting chips, apply a table palette, or skip the result animation.
+**Play → Casino** keeps a local fictional chip wallet and round history. Play blackjack, both roulette wheels, baccarat, slots, pass-line craps, sic bo, four-spot keno, video poker, three-card poker, or heads-up no-limit Texas Hold’em. Choose a poker rival and big blind, then check, call, bet, raise, go all in, or fold as each street allows. Both seats start with the same effective stack, capped at 100 big blinds, and the button alternates. Statistics show results by table and rival, milestones, and recent profit and loss. Reopen a poker hand in Play history to see its betting transcript. [Poker TDA rulebook](https://www.pokertda.com/view-poker-tda-rules/)
 
-**Play → Life simulator** keeps separate local worlds. Adjust the clock speed or jump ahead and read the timeline to see changes in residents’ jobs, families, and lives. Work, study, shop, travel, or talk to a resident from the directory. When a running save is reopened, the town catches up to the elapsed time. Pause a save to keep it at its current date.
+**Play → Life simulator** keeps separate local worlds. Adjust the clock speed or jump ahead and read the timeline to see changes in residents’ jobs, families, and lives. Study to qualify for a career. Select a resident and visit their district to talk, help, share a meal, or pursue a relationship as rapport grows. Profiles keep recent memories and show a persistent portrait. Open **My relationships** or **Selected person's relationships** and select a portrait to trace family and social connections. A running save catches up to elapsed time when reopened.
 
 Use the fullscreen button or **F11** in either game, People network, or project canvas to expand and return to the popup.
 

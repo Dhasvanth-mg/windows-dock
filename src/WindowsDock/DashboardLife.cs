@@ -10,7 +10,9 @@ namespace WindowsDock;
 
 public partial class DashboardWindow
 {
-    private void ShowLifeSimulator()
+    private void ShowLifeSimulator() => ShowLifeSimulator(null);
+
+    private void ShowLifeSimulator(Guid? initial)
     {
         var (window, content, cancellation) = CreateDockPanel("Life simulator", "A town that keeps its own time", 800, 0xE80F, accent,
             height: 640, expandable: true);
@@ -20,7 +22,7 @@ public partial class DashboardWindow
         var worldName = Field("World name", 100);
         playerName.Tag = "Your name";
         worldName.Tag = "Town name or setting";
-        var creation = new Expander { Header = "New life" };
+        var creation = new Expander { Header = "New life", Style = (Style)window.FindResource("AppletSection") };
         var status = Text("", 12, AssistantSecondary);
         status.TextWrapping = TextWrapping.Wrap;
         creation.Content = new StackPanel { Children =
@@ -47,14 +49,29 @@ public partial class DashboardWindow
         var diary = new StackPanel();
         var profile = Text("", 13, AssistantInk);
         profile.TextWrapping = TextWrapping.Wrap;
+        var portrait = new Image { Width = 48, Height = 48, Margin = new Thickness(0, 0, 9, 0) };
+        Guid? illustrated = null;
+        var decisions = new WrapPanel();
+        var memories = new StackPanel();
         var people = new ComboBox { DisplayMemberPath = nameof(LifePersonItem.Label) };
         AutomationProperties.SetName(people, "People in this world");
         var places = new ComboBox();
         AutomationProperties.SetName(places, "Life simulator location");
+        var careers = new ComboBox();
+        AutomationProperties.SetName(careers, "Career to apply for");
+        var apply = ActionButton("Apply for job");
         var action = Field("Action to take", 120);
-        action.Tag = "Work, study, rest, talk, buy groceries, travel …";
+        action.Tag = "Type an action, such as “help” or “share meal”";
         var timer = new DispatcherTimer(DispatcherPriority.Background, window.Dispatcher) { Interval = TimeSpan.FromSeconds(1) };
-        action.KeyDown += (_, args) => { if (args.Key == Key.Enter) TakeAction(action.Text); };
+        action.KeyDown += (_, args) =>
+        {
+            if (args.Key == Key.Enter)
+            {
+                SubmitTextAction();
+                args.Handled = true;
+            }
+        };
+        apply.Click += (_, _) => TakeAction("apply " + careers.SelectedItem);
         timer.Tick += (_, _) =>
         {
             if (live is not { Speed: > 0 } current || cancellation.IsCancellationRequested)
@@ -81,7 +98,7 @@ public partial class DashboardWindow
             });
         };
         people.SelectionChanged += (_, _) => RenderProfile();
-        Reload(null);
+        Reload(initial);
         window.Show();
 
         void Reload(Guid? id)
@@ -95,18 +112,18 @@ public partial class DashboardWindow
                 creation.IsExpanded = false;
         }
 
-        void Run(Action work)
+        bool Run(Action work)
         {
-            try { work(); status.Text = ""; }
+            try { work(); status.Text = ""; return true; }
             catch (Exception error) when (error is ArgumentException or IOException or UnauthorizedAccessException)
-            { status.Text = error.Message; }
+            { status.Text = error.Message; return false; }
         }
 
-        void Commit(Func<LifeSave, LifeSave> edit)
+        bool Commit(Func<LifeSave, LifeSave> edit)
         {
             if (live is not { } current)
-                return;
-            Run(() =>
+                return false;
+            return Run(() =>
             {
                 var now = DateTimeOffset.UtcNow;
                 live = DockLife.Change(current.Id, item => edit(DockLife.Tick(item, now)));
@@ -116,10 +133,16 @@ public partial class DashboardWindow
             });
         }
 
-        void TakeAction(string text)
+        bool TakeAction(string text)
         {
             var person = (people.SelectedItem as LifePersonItem)?.Id;
-            Commit(item => DockLife.Act(item, text, person));
+            return Commit(item => DockLife.Act(item, text, person));
+        }
+
+        void SubmitTextAction()
+        {
+            if (TakeAction(action.Text))
+                action.Clear();
         }
 
         void SetTimer()
@@ -134,7 +157,8 @@ public partial class DashboardWindow
         {
             var world = live!;
             stage.Children.Clear();
-            foreach (var element in new FrameworkElement[] { clock, stats, action, places, people, profile, diary })
+            foreach (var element in new FrameworkElement[] { clock, stats, action, places, people, profile, portrait,
+                decisions, memories, diary, careers, apply })
                 if (element.Parent is Panel previous)
                     previous.Children.Remove(element);
             var summary = Card(new StackPanel { Children = { clock, stats } });
@@ -176,25 +200,44 @@ public partial class DashboardWindow
             })) } });
 
             var actions = new WrapPanel();
-            foreach (var verb in new[] { "Work", "Study", "Rest", "Buy groceries", "Talk" })
+            foreach (var verb in new[] { "Work", "Study", "Rest", "Buy groceries" })
                 actions.Children.Add(ActionButton(verb, () => TakeAction(verb)));
             places.ItemsSource = DockLife.Places(world.World);
             places.SelectedItem = world.Location;
+            careers.ItemsSource = DockLife.Jobs(world.World);
+            careers.SelectedItem = string.IsNullOrEmpty(world.Career) ? careers.Items[0] : world.Career;
             stage.Children.Add(Card(new StackPanel { Children =
             {
-                SectionTitle("What do you do?"), actions, action, QuietButton("Take action", () => TakeAction(action.Text)),
-                new WrapPanel { Children = { places, QuietButton("Travel", () => TakeAction("travel " + places.SelectedItem)) } }
+                SectionTitle("What do you do?"), actions, action, QuietButton("Take action", SubmitTextAction),
+                new WrapPanel { Children = { places, QuietButton("Travel", () => TakeAction("travel " + places.SelectedItem)) } },
+                new WrapPanel { Children = { careers, apply } }
             } }));
-            stage.Children.Add(Card(new StackPanel { Children = { SectionTitle("People"), people, profile } }));
+            var personal = new DockPanel { Margin = new Thickness(0, 4, 0, 4), Children = { portrait, profile } };
+            stage.Children.Add(Card(new StackPanel { Children =
+            {
+                SectionTitle("People"), people, personal, decisions, memories,
+                new WrapPanel { Children =
+                {
+                    QuietButton("My relationships", () => OpenGraph(live?.Id)),
+                    QuietButton("Selected person's relationships", () => OpenGraph((people.SelectedItem as LifePersonItem)?.Id))
+                } }
+            } }));
             stage.Children.Add(Card(new StackPanel { Children = { SectionTitle("Timeline"), diary } }));
             Render();
+        }
+
+        void OpenGraph(Guid? focus)
+        {
+            if (live is { } world)
+                ShowLifeRelationships(world.Id, focus ?? world.Id);
         }
 
         void UpdateClock(LifeSave world)
         {
             clock.Text = $"{world.At:ddd, MMM d yyyy · HH:mm}   {(world.Speed == 0 ? "Paused" : $"{world.Speed:0.##}×")}";
             stats.Text = $"{world.Location} · {world.Cash:N2} cash · {world.Groceries} groceries · " +
-                $"{world.Work} shifts · study level {world.Study} · {world.People.Count(person => person.Alive)} residents";
+                $"{world.Work} shifts · study level {world.Study} · {world.People.Count(person => person.Alive)} residents" +
+                (string.IsNullOrEmpty(world.Career) ? "" : $" · {world.Career}");
         }
 
         void Render()
@@ -202,6 +245,8 @@ public partial class DashboardWindow
             if (live is not { } world)
                 return;
             UpdateClock(world);
+            apply.IsEnabled = world.Study >= 2;
+            apply.ToolTip = world.Study >= 2 ? "An application takes 3 simulated hours" : "Study twice to apply";
             var selected = (people.SelectedItem as LifePersonItem)?.Id;
             var entries = world.People.OrderByDescending(person => person.Alive).ThenBy(person => person.Name)
                 .Select(person => new LifePersonItem(person.Id, $"{person.Name} · {(person.Alive ? person.Job : "Deceased")}")).ToArray();
@@ -223,19 +268,45 @@ public partial class DashboardWindow
 
         void RenderProfile()
         {
+            decisions.Children.Clear();
+            memories.Children.Clear();
             if (live is not { } world || people.SelectedItem is not LifePersonItem row ||
                 world.People.FirstOrDefault(person => person.Id == row.Id) is not { } person)
             {
                 profile.Text = "";
+                portrait.Source = null;
+                illustrated = null;
                 return;
             }
-            var partner = world.People.FirstOrDefault(item => item.Id == person.Partner)?.Name;
-            var parent = world.People.FirstOrDefault(item => item.Id == person.Parent)?.Name;
+            if (illustrated != person.Id)
+            {
+                portrait.Source = LifePortrait(person.Id);
+                illustrated = person.Id;
+            }
+            portrait.Opacity = person.Alive ? 1 : .55;
+            AutomationProperties.SetName(portrait, $"Portrait of {person.Name}");
+            var partner = world.Partner == person.Id ? world.Player : world.People.FirstOrDefault(item => item.Id == person.Partner)?.Name;
             var age = person.Alive ? DockLife.Age(person, DateOnly.FromDateTime(world.At.UtcDateTime)) : person.Lifespan;
             profile.Text = $"{person.Name} · {age} · {person.Trait} · {person.Location}\n" +
                 $"{person.Job} · {person.Worked} shifts · {person.Savings:N2} savings" +
-                (partner == null ? "" : $" · partner {partner}") + (parent == null ? "" : $" · parent {parent}") +
+                (partner == null ? "" : $" · {(person.Married || (world.Partner == person.Id && world.Married) ? "spouse" : "partner")} {partner}") +
                 (person.Children == 0 ? "" : $" · {person.Children} children") + $" · rapport {person.Affinity}";
+            if (person.Alive && person.Location != world.Location)
+                decisions.Children.Add(QuietButton($"Visit {person.Location}", () => TakeAction("travel " + person.Location)));
+            else
+                foreach (var choice in DockLife.SocialChoices(world, person))
+                {
+                    var button = ActionButton(choice.Label, () => TakeAction(choice.Command));
+                    button.Margin = new Thickness(0, 3, 5, 3);
+                    button.ToolTip = $"{choice.Hours}h" + (choice.Cost > 0 ? $" · costs {choice.Cost:N2}" : "");
+                    decisions.Children.Add(button);
+                }
+            foreach (var memory in (person.Memories ?? []).TakeLast(3).Reverse())
+            {
+                var note = Text($"{memory.At:MMM d} · {memory.Text}", 11, AssistantSecondary);
+                note.TextWrapping = TextWrapping.Wrap;
+                memories.Children.Add(note);
+            }
         }
     }
 

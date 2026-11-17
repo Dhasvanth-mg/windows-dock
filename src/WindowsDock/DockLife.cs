@@ -4,12 +4,14 @@ using System.Security.Cryptography;
 namespace WindowsDock;
 
 internal sealed record LifePerson(Guid Id, string Name, string Trait, DateOnly Birth, int Lifespan, string Job, string Location,
-    decimal Savings, int Worked, bool Alive = true, Guid? Partner = null, Guid? Parent = null, int Children = 0, int Affinity = 0);
+    decimal Savings, int Worked, bool Alive = true, Guid? Partner = null, Guid? Parent = null, int Children = 0, int Affinity = 0,
+    Guid? OtherParent = null, bool Married = false, int Dates = 0, LifeEvent[]? Memories = null);
 internal sealed record LifeEvent(DateTimeOffset At, string Text);
 internal sealed record LifeSave(Guid Id, string Player, string World, int Seed, DateTimeOffset At, DateTimeOffset ClockAnchor, double Speed,
-    LifePerson[] People, LifeEvent[] History, decimal Cash, int Work, int Study, int Groceries, string Location, decimal Prices);
+    LifePerson[] People, LifeEvent[] History, decimal Cash, int Work, int Study, int Groceries, string Location, decimal Prices,
+    Guid? Partner = null, bool Married = false, string Career = "");
 
-internal static class DockLife
+internal static partial class DockLife
 {
     private const string Store = "life-simulator.json";
     private static readonly DateTimeOffset LastDate = new(2199, 12, 31, 23, 59, 0, TimeSpan.Zero);
@@ -98,24 +100,24 @@ internal static class DockLife
                     if (age >= person.Lifespan)
                     {
                         people[index] = person with { Alive = false, Job = "Deceased" };
-                        Event(morning, $"{person.Name} died at age {age}.");
+                        PersonEvent(morning, $"{person.Name} died at age {age}.", index);
                     }
                     else if (age >= 65 && person.Job != "Retired")
                     {
                         people[index] = person with { Job = "Retired" };
-                        Event(morning, $"{person.Name} retired.");
+                        PersonEvent(morning, $"{person.Name} retired.", index);
                     }
                     else if (age >= 18 && person.Job == "Student")
                     {
                         people[index] = person with { Job = jobs[random.Next(jobs.Length)] };
-                        Event(morning, $"{person.Name} graduated and started work as {people[index].Job.ToLowerInvariant()}.");
+                        PersonEvent(morning, $"{person.Name} graduated and started work as {people[index].Job.ToLowerInvariant()}.", index);
                     }
                     else if (age is >= 18 and < 65 && day.DayOfWeek is not (DayOfWeek.Sunday or DayOfWeek.Saturday))
                     {
                         var job = random.Next(440) == 0 ? jobs[random.Next(jobs.Length)] : person.Job;
                         people[index] = person with { Job = job, Savings = person.Savings + 22, Worked = person.Worked + 1 };
                         if (job != person.Job)
-                            Event(morning, $"{person.Name} changed careers to {job.ToLowerInvariant()}.");
+                            PersonEvent(morning, $"{person.Name} changed careers to {job.ToLowerInvariant()}.", index);
                     }
                 }
             }
@@ -134,29 +136,41 @@ internal static class DockLife
                 if (place != chosen.Location)
                 {
                     people[first] = chosen = chosen with { Location = place };
-                    Event(evening, $"{chosen.Name} moved to {place}.");
+                    PersonEvent(evening, $"{chosen.Name} moved to {place}.", first);
+                    chosen = people[first];
                 }
             }
-            var unpaired = adults.Where(person => person.Id != chosen.Id &&
-                !adults.Any(other => other.Id == person.Partner)).ToArray();
+            if (chosen.Id == world.Partner)
+                continue;
+            var unpaired = adults.Where(person => person.Id != chosen.Id && person.Id != world.Partner &&
+                !Related(chosen, person) && !adults.Any(other => other.Id == person.Partner)).ToArray();
             if (!adults.Any(person => person.Id == chosen.Partner) && unpaired.Length > 0 && random.Next(50) == 0)
             {
                 var partner = unpaired[random.Next(unpaired.Length)];
-                people[first] = chosen with { Partner = partner.Id };
+                people[first] = chosen with { Partner = partner.Id, Married = false };
                 var index = people.FindIndex(item => item.Id == partner.Id);
-                people[index] = partner with { Partner = chosen.Id };
-                Event(evening, $"{chosen.Name} and {partner.Name} became partners.");
+                people[index] = partner with { Partner = chosen.Id, Married = false };
+                PersonEvent(evening, $"{chosen.Name} and {partner.Name} became partners.", first, index);
             }
-            else if (chosen.Partner is { } partnerId && adults.FirstOrDefault(person => person.Id == partnerId) is { } family &&
-                chosen.Children < 3 && family.Children < 3 && Age(chosen, date) <= 50 && Age(family, date) <= 50 &&
-                people.Count(item => item.Alive) < 44 && random.Next(175) == 0)
+            else if (chosen.Partner is { } partnerId &&
+                adults.FirstOrDefault(person => person.Id == partnerId && person.Partner == chosen.Id) is { } family)
             {
-                var child = NewPerson(random, FreshName(), date, "Student", chosen.Location) with { Parent = chosen.Id };
-                people.Add(child);
-                people[first] = chosen with { Children = chosen.Children + 1 };
                 var index = people.FindIndex(item => item.Id == partnerId);
-                people[index] = family with { Children = family.Children + 1 };
-                Event(evening, $"{chosen.Name} and {family.Name} welcomed {child.Name} to their family.");
+                if (!chosen.Married && random.Next(120) == 0)
+                {
+                    people[first] = chosen with { Married = true };
+                    people[index] = family with { Married = true };
+                    PersonEvent(evening, $"{chosen.Name} and {family.Name} got married.", first, index);
+                }
+                else if (chosen.Children < 3 && family.Children < 3 && Age(chosen, date) <= 50 && Age(family, date) <= 50 &&
+                    people.Count(item => item.Alive) < 44 && random.Next(175) == 0)
+                {
+                    var child = NewPerson(random, FreshName(), date, "Student", chosen.Location) with { Parent = chosen.Id, OtherParent = family.Id };
+                    people.Add(child);
+                    people[first] = chosen with { Children = chosen.Children + 1 };
+                    people[index] = family with { Children = family.Children + 1 };
+                    PersonEvent(evening, $"{chosen.Name} and {family.Name} welcomed {child.Name} to their family.", first, index, people.Count - 1);
+                }
             }
         }
         return world with { At = target, People = people.ToArray(), History = history.ToArray(), Prices = prices };
@@ -166,6 +180,13 @@ internal static class DockLife
             history.Enqueue(new(at, text));
             if (history.Count > 280)
                 history.Dequeue();
+        }
+
+        void PersonEvent(DateTimeOffset at, string text, params int[] indexes)
+        {
+            Event(at, text);
+            foreach (var index in indexes)
+                people[index] = Remember(people[index], new(at, text));
         }
 
         string FreshName()
@@ -178,13 +199,16 @@ internal static class DockLife
     internal static LifeSave Act(LifeSave world, string input, Guid? person)
     {
         var words = input.Trim().ToLowerInvariant();
+        if (world.At >= LastDate)
+            throw new ArgumentException("This world has reached the end of its calendar.");
         var text = "";
         var hours = 1;
         if (words.StartsWith("work", StringComparison.Ordinal))
         {
             hours = 8;
-            world = world with { Cash = world.Cash + 55 + Math.Min(40, world.Study * 2), Work = world.Work + 1 };
-            text = $"{world.Player} finished a work shift and was paid.";
+            var pay = 55 + Math.Min(40, world.Study * 2) + (string.IsNullOrEmpty(world.Career) ? 0 : 13);
+            world = world with { Cash = world.Cash + pay, Work = world.Work + 1 };
+            text = $"{world.Player} finished {(string.IsNullOrEmpty(world.Career) ? "a work shift" : $"a shift as {world.Career.ToLowerInvariant()}")} and earned {pay}.";
         }
         else if (words.StartsWith("study", StringComparison.Ordinal))
         {
@@ -192,13 +216,8 @@ internal static class DockLife
             world = world with { Study = world.Study + 1 };
             text = $"{world.Player} spent three hours studying. Skills improve future shift pay.";
         }
-        else if (words.StartsWith("talk", StringComparison.Ordinal))
-        {
-            var guest = world.People.FirstOrDefault(item => item.Alive && item.Id == person) ??
-                throw new ArgumentException("Choose a living person from the directory first.");
-            world = world with { People = world.People.Select(item => item.Id != guest.Id ? item : item with { Affinity = item.Affinity + 1 }).ToArray() };
-            text = $"{world.Player} caught up with {guest.Name}, who was {(guest.Job == "Retired" ? "enjoying retirement" : "talking about work")}.";
-        }
+        else if (words is "talk" or "help" or "share meal" or "date" or "become partners" or "marry" or "adopt" or "break up")
+            return SocialAction(world, words, person);
         else if (words.StartsWith("buy", StringComparison.Ordinal))
         {
             var price = Math.Round(12 * world.Prices, 2);
@@ -220,8 +239,20 @@ internal static class DockLife
             hours = 8;
             text = $"{world.Player} took an evening off.";
         }
+        else if (words.StartsWith("apply ", StringComparison.Ordinal))
+        {
+            var job = Jobs(world.World).FirstOrDefault(item => words[6..].Equals(item, StringComparison.OrdinalIgnoreCase)) ??
+                throw new ArgumentException("Choose a job from the career list.");
+            if (world.Study < 2)
+                throw new ArgumentException("Study twice before applying for a career.");
+            if (job == world.Career)
+                throw new ArgumentException("You already work in that career.");
+            hours = 3;
+            world = world with { Career = job };
+            text = $"{world.Player} accepted a job as {job.ToLowerInvariant()}.";
+        }
         else
-            throw new ArgumentException("Try work, study, talk, buy groceries, rest, or travel followed by a location.");
+            throw new ArgumentException("Try one of the actions shown, or type travel followed by a district or apply followed by a career.");
         world = Advance(world, world.At.AddHours(hours));
         return world with { History = [.. world.History.TakeLast(279), new(world.At, text)] };
     }
@@ -237,7 +268,7 @@ internal static class DockLife
         : world.Contains("medieval", StringComparison.OrdinalIgnoreCase) ? ["The Keep", "Village Square", "Mill Road"]
         : ["Town Centre", "Riverside", "Market District"];
 
-    private static string[] Jobs(string world) => world.Contains("cyber", StringComparison.OrdinalIgnoreCase)
+    internal static string[] Jobs(string world) => world.Contains("cyber", StringComparison.OrdinalIgnoreCase)
         ? ["Technician", "Courier", "Medtech", "Archivist"]
         : world.Contains("medieval", StringComparison.OrdinalIgnoreCase) ? ["Smith", "Baker", "Herbalist", "Scribe"]
         : ["Teacher", "Mechanic", "Shopkeeper", "Nurse", "Carpenter"];
