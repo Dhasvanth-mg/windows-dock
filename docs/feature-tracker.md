@@ -1,5 +1,29 @@
 # Feature tracker
 
+## Run the new build
+
+- Status: Running and verified.
+- Scope: Message received during the work below. Let the owner use the current build.
+- Implementation: Built `6d3b157` with `scripts/Build-WindowsDockRelease.ps1` into `artifacts/release-20261117-1350`. Stopped the previous controller (`artifacts/dock-reveal-20261116-105047`) through its own stop signal, which also ended its monitor, then started the new `NativeTaskbar.exe` from the package's `payload` folder. The previous folder is kept as a fallback.
+- Verification: The release build succeeded. The old controller exited within 20 seconds of the signal. The new controller logged one retry while Explorer's taskbar was unavailable, then Explorer logged "Taskbar styled", and its monitor started. `WindowsDock.exe --open` from the new package exited cleanly and Windows UI Automation found the visible 896 by 454 dashboard owned by the new executable.
+- Limitations: The taskbar was auto-hidden when checked, so the styled taskbar was confirmed from the log, not a screenshot. The Windows sign-in entry still starts the previous build; turning Start at sign-in off and on in Controls points it at the new one. The two `--dock-mcp` processes used by the coding assistants still run from `artifacts/native-dock` and were left alone. The installer was not used, so nothing was registered in the Start menu.
+- Remaining work: None for running the build.
+
+## Fix the casino, polish the Miro-style canvas, and standardize the UI
+
+- Status: In progress.
+- Scope: Owner's request after the assistant chat merge. Fix the casino widget, identify the Miro-like canvas and make it look good, and make the UI consistent across the whole app. Preceded by the merge into `main` (`350f4be`) and a commit of the stopped session's coding-control and canvas work (`6d3b157`).
+- Acceptance criteria: The casino's broken behaviour is identified, reproduced, fixed and covered by a test where the fault is in logic. The Miro-like surface is named and restyled to match the rest of the dock without losing features. Panels across the app share the same title bar, spacing, buttons, fields and empty states, checked by rendering every reachable surface before and after. Build and all tests pass.
+- Findings so far: The Miro-like surface is Project canvases (`DashboardProjectCanvas.cs`, library in `DashboardCanvasLibrary.cs`). The casino engine has no functional fault: a probe played 66 rounds across all 11 tables through the real panel against throwaway data, and every round settled, no action was missing, nothing threw, and the chips added up exactly. What is broken is the panel itself: a 690 by 615 popup whose 11 games hide in a dropdown, cards shown as text for every game except Hold'em, collapsible sections styled like dropdowns, and cramped labels.
+- Remaining work: Everything; see the outcome below once recorded.
+
+### Fewer popups, swipe down to dismiss and resume, and agents that run the widgets
+
+- Status: In progress.
+- Scope: Message received during the work above. Reduce popup windows as far as possible. Add a downward swipe on the taskbar to dismiss the dock, and reopen it at exactly the same spot. Let the assistants control the dock's widgets fully, including timers, alarms, focus mode, notes, stickies and to-dos.
+- Acceptance criteria: Tool panels that open their own window are moved into the dashboard window where practical, and what remains is listed with the reason. A downward swipe dismisses the dock; reopening returns to the same page, assistant, conversation and scroll position, including after the hidden dashboard process exits. Assistant dock actions cover the focus timer, alarms, Windows Focus, stickies, memos and to-dos, each proposed for review before it runs like the existing actions, and covered by tests.
+- Remaining work: Everything; see the outcome below once recorded.
+
 ## Assistant chat inside Dashboard, styled like ChatGPT and Claude, with learned memory
 
 - Status: Built, tested, and rendered. Merged into `main` by fast-forward to `350f4be`. Not installed.
