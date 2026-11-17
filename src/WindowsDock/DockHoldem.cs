@@ -6,9 +6,11 @@ internal enum HoldemRival { Mara, Ivo, June }
 internal enum HoldemMove { Check, Call, Raise, Fold }
 
 internal sealed record HoldemOpponent(HoldemRival Id, string Name, string Style, string Profile);
+internal sealed record HoldemReplayStep(int BoardCount, decimal Pot, string Detail);
+internal sealed record HoldemReplay(int[] Player, int[] Board, int[]? RevealedRival, HoldemReplayStep[] Steps);
 internal sealed record HoldemHand(Guid Id, HoldemRival Rival, decimal Blind, decimal Stack, bool PlayerOnButton,
     decimal PlayerTotal, decimal RivalTotal, decimal PlayerStreet, decimal RivalStreet, decimal LastRaise, string[] Moves,
-    bool PlayerActed = false, bool RivalActed = false, int Turn = 0)
+    bool PlayerActed = false, bool RivalActed = false, int Turn = 0, HoldemReplayStep[]? Steps = null)
 {
     internal decimal Pot => PlayerTotal + RivalTotal;
 }
@@ -36,8 +38,9 @@ internal static partial class DockCasino
         var player = wallet.NextPokerButton ? small : big;
         var rival = wallet.NextPokerButton ? big : small;
         var name = Opponent(wallet.Opponent).Name;
+        var posted = $"Blinds · You {player:#,0} · {name} {rival:#,0}";
         var hand = new HoldemHand(Guid.NewGuid(), wallet.Opponent, blind, stack, wallet.NextPokerButton,
-            player, rival, player, rival, blind, [$"Blinds · You {player:#,0} · {name} {rival:#,0}"]);
+            player, rival, player, rival, blind, [posted], Steps: [new(0, player + rival, posted)]);
         int[] early = [deck[0], deck[2]];
         int[] late = [deck[1], deck[3]];
         var round = new CasinoRound(CasinoGame.Holdem, player, wallet.NextPokerButton ? late : early,
@@ -63,10 +66,10 @@ internal static partial class DockCasino
         if (wallet.Round is not { Poker: { } hand } round || hand.Id != expectedId || hand.Turn != expectedTurn)
             throw new ArgumentException("This hand changed. Reopen Casino to see the current action.");
         if (move == HoldemMove.Fold)
-            return SettleHoldem(wallet, round, Note(hand, "You fold"), -1, "You folded");
+            return SettleHoldem(wallet, round, Note(hand, round.Point, "You fold"), -1, "You folded");
 
         var amount = HoldemAmount(hand, true, move, raiseTo);
-        var next = ApplyHoldem(hand, true, move, amount);
+        var next = ApplyHoldem(hand, round.Point, true, move, amount);
         return RunHoldem(wallet with { Balance = wallet.Balance - amount }, round, next, false);
     }
 
@@ -85,7 +88,7 @@ internal static partial class DockCasino
         };
     }
 
-    private static HoldemHand ApplyHoldem(HoldemHand hand, bool player, HoldemMove move, decimal amount)
+    private static HoldemHand ApplyHoldem(HoldemHand hand, int boardCount, bool player, HoldemMove move, decimal amount)
     {
         var name = player ? "You" : Opponent(hand.Rival).Name;
         var street = (player ? hand.PlayerStreet : hand.RivalStreet) + amount;
@@ -101,7 +104,8 @@ internal static partial class DockCasino
             hand = hand with { LastRaise = Math.Max(hand.LastRaise, street - facing) };
         return Note(player
             ? hand with { PlayerTotal = hand.PlayerTotal + amount, PlayerStreet = street, PlayerActed = true, RivalActed = !aggressive && hand.RivalActed }
-            : hand with { RivalTotal = hand.RivalTotal + amount, RivalStreet = street, RivalActed = true, PlayerActed = !aggressive && hand.PlayerActed }, line);
+            : hand with { RivalTotal = hand.RivalTotal + amount, RivalStreet = street, RivalActed = true, PlayerActed = !aggressive && hand.PlayerActed },
+            boardCount, line);
     }
 
     private static CasinoWallet RunHoldem(CasinoWallet wallet, CasinoRound round, HoldemHand hand, bool playerTurn)
@@ -122,7 +126,7 @@ internal static partial class DockCasino
 
                 round = round with { Point = round.Point == 0 ? 3 : round.Point + 1 };
                 hand = Note(hand with { PlayerStreet = 0, RivalStreet = 0, LastRaise = hand.Blind, PlayerActed = false, RivalActed = false },
-                    $"{HoldemStreet(round.Point)} · {Hand(round.Deck.Take(round.Point))}");
+                    round.Point, $"{HoldemStreet(round.Point)} · {Hand(round.Deck.Take(round.Point))}");
                 playerTurn = !hand.PlayerOnButton;
                 continue;
             }
@@ -134,9 +138,9 @@ internal static partial class DockCasino
             if (move == HoldemMove.Fold)
             {
                 var name = Opponent(hand.Rival).Name;
-                return SettleHoldem(wallet, round, Note(hand, $"{name} folds"), 1, $"{name} folded");
+                return SettleHoldem(wallet, round, Note(hand, round.Point, $"{name} folds"), 1, $"{name} folded");
             }
-            hand = ApplyHoldem(hand, false, move, HoldemAmount(hand, false, move, target));
+            hand = ApplyHoldem(hand, round.Point, false, move, HoldemAmount(hand, false, move, target));
             playerTurn = true;
         }
     }
@@ -191,8 +195,12 @@ internal static partial class DockCasino
         return Enumerable.Range(0, known.Length).Max(skip => FiveCardScore(known.Where((_, index) => index != skip).ToArray()));
     }
 
-    private static HoldemHand Note(HoldemHand hand, string line) =>
-        hand with { Turn = hand.Turn + 1, Moves = [.. hand.Moves.TakeLast(95), line] };
+    private static HoldemHand Note(HoldemHand hand, int boardCount, string line) => hand with
+    {
+        Turn = hand.Turn + 1,
+        Moves = [.. hand.Moves.TakeLast(95), line],
+        Steps = hand.Steps == null ? null : [.. hand.Steps.TakeLast(95), new(boardCount, hand.Pot, line)]
+    };
 
     private static CasinoWallet SettleHoldem(CasinoWallet wallet, CasinoRound round, HoldemHand hand, int outcome,
         string label, bool reveal = false)
@@ -205,7 +213,11 @@ internal static partial class DockCasino
             description += $" · {Opponent(hand.Rival).Name} {Hand(round.Dealer)} · Board {Hand(round.Deck)}";
         if (refund > 0)
             description += $" · {refund:#,0} uncalled chips returned";
+        var finished = Note(hand, round.Point, description);
+        var replay = finished.Steps is { } steps
+            ? new HoldemReplay(round.Cards, round.Deck.Take(round.Point).ToArray(), reveal ? round.Dealer : null, steps)
+            : null;
         return Settle(wallet with { Balance = wallet.Balance + refund }, CasinoGame.Holdem, matched, payout, description,
-            hand.Rival, Note(hand, description).Moves);
+            hand.Rival, finished.Moves, replay);
     }
 }

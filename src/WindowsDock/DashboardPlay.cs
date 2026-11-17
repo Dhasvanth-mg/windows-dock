@@ -24,7 +24,7 @@ public partial class DashboardWindow
         best.VerticalAlignment = VerticalAlignment.Center;
         DockPanel.SetDock(best, Dock.Right);
         bar.Children.Add(best);
-        var applets = new WrapPanel { Children = { QuietButton("Casino", ShowCasino), QuietButton("Life simulator", ShowLifeSimulator) } };
+        var applets = new WrapPanel { Children = { ActionButton("Poker", ShowPokerLobby), QuietButton("Casino", ShowCasino) } };
         DockPanel.SetDock(applets, Dock.Right);
         bar.Children.Add(applets);
         var stage = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch,

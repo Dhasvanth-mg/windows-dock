@@ -15,7 +15,7 @@ internal sealed record PokerTournament(Guid Id, PokerFormat Format, HoldemRival 
     internal HoldemRival Opponent => ReachedFinal ? FinalOpponent : FirstOpponent;
 }
 
-internal sealed record TournamentSave(PokerTournament? Current, TournamentMedal[] Results);
+internal sealed record TournamentSave(PokerTournament? Current, TournamentMedal[] Results, CasinoEntry[]? Replays = null);
 
 internal static class DockPokerTournament
 {
@@ -84,7 +84,9 @@ internal static class DockPokerTournament
             OnButton = wallet.NextPokerButton };
         if (wallet.Round != null)
             return saved with { Current = next };
-        var last = wallet.History[0].Detail;
+        var entry = wallet.History[0];
+        saved = saved with { Replays = [entry, .. (saved.Replays ?? []).Take(79)] };
+        var last = entry.Detail;
         next = next with { TableHands = match.TableHands + 1, Hands = match.Hands + 1, LastResult = last };
         if (next.PlayerChips == 0)
             return Complete(saved, next with { Stage = TournamentStage.Eliminated });
@@ -105,7 +107,7 @@ internal static class DockPokerTournament
         match = match with { WinningRival = champion };
         var result = new TournamentMedal(match.Id, match.Format, match.Stage, match.ReachedFinal, match.Hands,
             champion, DateTimeOffset.Now);
-        return new(match, [result, .. saved.Results.Take(19)]);
+        return saved with { Current = match, Results = [result, .. saved.Results.Take(19)] };
     }
 
     private static (HoldemRival Winner, int Hands) RunOtherMatch(PokerFormat format, HoldemRival first, HoldemRival second)

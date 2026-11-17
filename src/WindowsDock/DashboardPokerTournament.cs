@@ -7,10 +7,13 @@ namespace WindowsDock;
 
 public partial class DashboardWindow
 {
-    private void ShowPokerTournament()
+    private void ShowPokerTournament() => ShowPokerTournament(false);
+
+    private void ShowPokerTournament(bool fromPoker)
     {
         var (window, content, _) = CreateDockPanel("Hold’em tournament", "Offline · four entrants", 765, 0xE7FC, accent,
-            backAction: ShowCasino, backLabel: "Back to Casino", height: 625, expandable: true);
+            backAction: fromPoker ? ShowPokerLobby : ShowCasino, backLabel: fromPoker ? "Back to Poker" : "Back to Casino",
+            height: 625, expandable: true);
         var saved = DockPokerTournament.Load();
         var format = new ComboBox { ItemsSource = Enum.GetValues<PokerFormat>(), SelectedItem = saved.Current?.Format ?? PokerFormat.Quick };
         AutomationProperties.SetName(format, "Tournament format");

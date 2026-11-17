@@ -7,7 +7,7 @@ internal enum CasinoGame { Blackjack, EuropeanRoulette, AmericanRoulette, Baccar
 internal sealed record CasinoRound(CasinoGame Game, decimal Stake, int[] Cards, int[] Dealer, int[] Deck, int Point = 0,
     HoldemHand? Poker = null);
 internal sealed record CasinoEntry(CasinoGame? Game, decimal Stake, decimal Returned, decimal Balance, string Detail, DateTimeOffset At,
-    HoldemRival? Rival = null, string[]? Moves = null);
+    HoldemRival? Rival = null, string[]? Moves = null, HoldemReplay? Replay = null);
 internal sealed record CasinoWallet(decimal Balance, decimal Initial, DateOnly? Bonus, CasinoEntry[] History,
     CasinoRound? Round = null, string Theme = "Midnight", bool Instant = false, bool NextPokerButton = true,
     CasinoStats? Statistics = null, HoldemRival Opponent = HoldemRival.Mara);
@@ -81,10 +81,10 @@ internal static partial class DockCasino
     }
 
     private static CasinoWallet Settle(CasinoWallet wallet, CasinoGame? game, decimal stake, decimal payout, string result,
-        HoldemRival? rival = null, string[]? moves = null)
+        HoldemRival? rival = null, string[]? moves = null, HoldemReplay? replay = null)
     {
         var balance = wallet.Balance + payout;
-        var entry = new CasinoEntry(game, stake, payout, balance, result, DateTimeOffset.Now, rival, moves);
+        var entry = new CasinoEntry(game, stake, payout, balance, result, DateTimeOffset.Now, rival, moves, replay);
         return wallet with { Balance = balance, Round = null, History = [entry, .. wallet.History.Take(499)],
             Statistics = CasinoStats.For(wallet).Record(entry) };
     }

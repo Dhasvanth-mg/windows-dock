@@ -27,13 +27,16 @@ public partial class DashboardWindow
         (CasinoGame.Holdem, "Texas Hold’em", "Heads-up no-limit with alternating blinds and four betting streets. Both seats start each hand with the same effective stack, up to 100 big blinds.", [])
     ];
 
-    private void ShowCasino()
+    private void ShowCasino() => ShowCasino(null);
+
+    private void ShowCasino(CasinoGame? initial)
     {
         var (window, content, _) = CreateDockPanel("Casino", "Offline · fictional chips", 690, 0xE7FC, accent,
-            height: 615, expandable: true);
+            backAction: initial == null ? null : ShowPokerLobby, backLabel: "Back to Poker", height: 615, expandable: true);
         var sectionStyle = (Style)window.FindResource("AppletSection");
         var wallet = DockCasino.Load();
-        var table = new ComboBox { ItemsSource = CasinoTables.Select(item => item.Name), SelectedIndex = 0 };
+        var table = new ComboBox { ItemsSource = CasinoTables.Select(item => item.Name),
+            SelectedIndex = initial is { } selectedGame ? Array.FindIndex(CasinoTables, item => item.Game == selectedGame) : 0 };
         AutomationProperties.SetName(table, "Casino game");
         var stake = Field("Chips to wager", 6);
         stake.Text = "10";
