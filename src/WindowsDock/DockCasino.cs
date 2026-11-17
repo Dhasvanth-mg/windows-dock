@@ -335,7 +335,7 @@ internal static partial class DockCasino
     internal static string Card(int card) => $"{("A 2 3 4 5 6 7 8 9 10 J Q K".Split(' ')[card % 13])}{"♠♥♣♦"[(card % 52) / 13]}";
     internal static string Hand(IEnumerable<int> cards) => string.Join("  ", cards.Select(Card));
 
-    private static int[] Shuffle(int count)
+    internal static int[] Shuffle(int count)
     {
         var deck = Enumerable.Range(0, count).ToArray();
         for (var index = deck.Length - 1; index > 0; index--)

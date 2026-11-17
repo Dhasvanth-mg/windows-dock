@@ -26,14 +26,15 @@ internal static partial class DockCasino
 
     internal static HoldemOpponent Opponent(HoldemRival rival) => Opponents.First(entry => entry.Id == rival);
 
-    internal static CasinoWallet BeginHoldem(CasinoWallet wallet, decimal blind, int[] deck)
+    internal static CasinoWallet BeginHoldem(CasinoWallet wallet, decimal blind, int[] deck, decimal? tournamentRivalStack = null)
     {
-        var stack = Math.Min(decimal.Floor(wallet.Balance), blind * 100);
-        if (blind < 2 || blind != decimal.Truncate(blind) || blind > stack)
+        var stack = Math.Min(decimal.Floor(wallet.Balance), tournamentRivalStack ?? blind * 100);
+        if (blind < 2 || blind != decimal.Truncate(blind) || stack < 1 || (tournamentRivalStack == null && blind > stack))
             throw new ArgumentException("Set a whole-chip big blind of at least 2 chips within your balance.");
-        var small = decimal.Floor(blind / 2);
-        var player = wallet.NextPokerButton ? small : blind;
-        var rival = wallet.NextPokerButton ? blind : small;
+        var small = Math.Min(stack, decimal.Floor(blind / 2));
+        var big = Math.Min(stack, blind);
+        var player = wallet.NextPokerButton ? small : big;
+        var rival = wallet.NextPokerButton ? big : small;
         var name = Opponent(wallet.Opponent).Name;
         var hand = new HoldemHand(Guid.NewGuid(), wallet.Opponent, blind, stack, wallet.NextPokerButton,
             player, rival, player, rival, blind, [$"Blinds · You {player:#,0} · {name} {rival:#,0}"]);
@@ -141,6 +142,17 @@ internal static partial class DockCasino
     }
 
     internal static string HoldemStreet(int cards) => cards switch { 0 => "Preflop", 3 => "Flop", 4 => "Turn", _ => "River" };
+
+    internal static (HoldemMove Move, decimal Amount) SimulatedPlayerMove(CasinoRound round, HoldemRival style)
+    {
+        var hand = round.Poker!;
+        var reversed = hand with
+        {
+            Rival = style, PlayerTotal = hand.RivalTotal, RivalTotal = hand.PlayerTotal,
+            PlayerStreet = hand.RivalStreet, RivalStreet = hand.PlayerStreet
+        };
+        return RivalMove(round with { Dealer = round.Cards }, reversed, HoldemLimits(hand));
+    }
 
     private static (HoldemMove Move, decimal Target) RivalMove(CasinoRound round, HoldemHand hand, HoldemBet limits)
     {

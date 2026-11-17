@@ -120,6 +120,10 @@ public partial class DashboardWindow
                     Commit(current => DockCasino.Reset(current, ParseChips(startingChips.Text)));
             })
         } };
+        var tournament = ActionButton("Hold’em tournament", ShowPokerTournament);
+        tournament.HorizontalAlignment = HorizontalAlignment.Left;
+        tournament.Margin = new Thickness(0, 5, 0, 1);
+        content.Children.Add(tournament);
         content.Children.Add(configuration);
         content.Children.Add(statsSection);
         content.Children.Add(historySection);
@@ -221,7 +225,11 @@ public partial class DashboardWindow
                         DockCasino.Continue(current, action, holds.Select((hold, index) => (hold, index))
                             .Where(item => item.hold.IsChecked == true).Select(item => item.index).ToHashSet()))));
                 if (round.Poker is { } poker)
-                    RenderPoker(round, poker);
+                {
+                    outcome.Text = $"{DockCasino.HoldemStreet(round.Point)} · {poker.Pot:#,0} chips in pot";
+                    PopulatePokerHand(round, poker, hand, choices, (move, amount) => Commit(current =>
+                        DockCasino.ContinueHoldem(current, poker.Id, poker.Turn, move, amount?.Invoke() ?? 0)));
+                }
             }
             else
                 outcome.Text = wallet.History.FirstOrDefault() is { } result
@@ -232,46 +240,6 @@ public partial class DashboardWindow
                 RenderStatistics();
             if (historySection.IsExpanded)
                 RenderHistory();
-        }
-
-        void RenderPoker(CasinoRound round, HoldemHand poker)
-        {
-            var opponent = DockCasino.Opponent(poker.Rival).Name;
-            var limits = DockCasino.HoldemLimits(poker);
-            outcome.Text = $"{DockCasino.HoldemStreet(round.Point)} · {poker.Pot:#,0} chips in pot";
-            var details = Text($"{opponent} · {poker.Stack - poker.PlayerTotal:#,0} behind · " +
-                (poker.PlayerOnButton ? "You have the button" : $"{opponent} has the button"), 11, AssistantSecondary);
-            hand.Children.Add(details);
-            var cards = new WrapPanel { Margin = new Thickness(0, 8, 0, 5) };
-            foreach (var card in round.Cards)
-                cards.Children.Add(PokerCard(card));
-            for (var index = 0; index < 5; index++)
-                cards.Children.Add(PokerCard(index < round.Point ? round.Deck[index] : null, index == 0));
-            hand.Children.Add(cards);
-            foreach (var move in poker.Moves.TakeLast(2))
-                hand.Children.Add(Text(move, 12, AssistantSecondary));
-            var call = limits.Call == 0 ? "Check" : $"Call {limits.Call:#,0}";
-            AddMove(ActionButton(call, () => Move(limits.Call == 0 ? HoldemMove.Check : HoldemMove.Call)));
-            if (limits.CanRaise)
-            {
-                var raise = Field("Poker bet or raise total", 9);
-                raise.Width = 80;
-                raise.Text = limits.MinimumTo.ToString(CultureInfo.CurrentCulture);
-                AddMove(raise);
-                AddMove(ActionButton(poker.RivalStreet == 0 ? "Bet" : "Raise to", () =>
-                    Commit(current => DockCasino.ContinueHoldem(current, poker.Id, poker.Turn, HoldemMove.Raise, ParseChips(raise.Text)))));
-                AddMove(QuietButton("All in", () => Move(HoldemMove.Raise, limits.MaximumTo)));
-            }
-            AddMove(QuietButton("Fold", () => Move(HoldemMove.Fold)));
-
-            void AddMove(FrameworkElement control)
-            {
-                control.Margin = new Thickness(0, 5, 9, 4);
-                choices.Children.Add(control);
-            }
-
-            void Move(HoldemMove move, decimal amount = 0) =>
-                Commit(current => DockCasino.ContinueHoldem(current, poker.Id, poker.Turn, move, amount));
         }
 
         void RenderStatistics()
@@ -326,6 +294,42 @@ public partial class DashboardWindow
                 };
                 ledger.Children.Add(replay);
             }
+        }
+    }
+
+    private void PopulatePokerHand(CasinoRound round, HoldemHand poker, StackPanel hand, WrapPanel choices,
+        Action<HoldemMove, Func<decimal>?> move)
+    {
+        var opponent = DockCasino.Opponent(poker.Rival).Name;
+        var limits = DockCasino.HoldemLimits(poker);
+        hand.Children.Add(Text($"{opponent} · {poker.Stack - poker.PlayerTotal:#,0} effective chips behind · " +
+            (poker.PlayerOnButton ? "You have the button" : $"{opponent} has the button"), 11, AssistantSecondary));
+        var cards = new WrapPanel { Margin = new Thickness(0, 8, 0, 5) };
+        foreach (var card in round.Cards)
+            cards.Children.Add(PokerCard(card));
+        for (var index = 0; index < 5; index++)
+            cards.Children.Add(PokerCard(index < round.Point ? round.Deck[index] : null, index == 0));
+        hand.Children.Add(cards);
+        foreach (var detail in poker.Moves.TakeLast(2))
+            hand.Children.Add(Text(detail, 12, AssistantSecondary));
+        var call = limits.Call == 0 ? "Check" : $"Call {limits.Call:#,0}";
+        AddMove(ActionButton(call, () => move(limits.Call == 0 ? HoldemMove.Check : HoldemMove.Call, null)));
+        if (limits.CanRaise)
+        {
+            var raise = Field("Poker bet or raise total", 9);
+            raise.Width = 80;
+            raise.Text = limits.MinimumTo.ToString(CultureInfo.CurrentCulture);
+            AddMove(raise);
+            AddMove(ActionButton(poker.RivalStreet == 0 ? "Bet" : "Raise to", () =>
+                move(HoldemMove.Raise, () => ParseChips(raise.Text))));
+            AddMove(QuietButton("All in", () => move(HoldemMove.Raise, () => limits.MaximumTo)));
+        }
+        AddMove(QuietButton("Fold", () => move(HoldemMove.Fold, null)));
+
+        void AddMove(FrameworkElement control)
+        {
+            control.Margin = new Thickness(0, 5, 9, 4);
+            choices.Children.Add(control);
         }
     }
 
