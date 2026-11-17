@@ -17,7 +17,7 @@ internal static class PlannerMcp
             ToolCollection = [McpServerTool.Create(ReadSchedule, new McpServerToolCreateOptions
             {
                 Name = "upcoming_schedule",
-                Description = "Read due and upcoming Windows Dock reminders and meetings from the configured calendar export.",
+                Description = "Read due and upcoming Windows Dock reminders and events, including meetings from the configured calendar export.",
                 ReadOnly = true
             })]
         };
@@ -49,6 +49,8 @@ internal static class PlannerMcp
         return JsonSerializer.Serialize(new
         {
             today = DateTime.Today.ToString("yyyy-MM-dd"), calendar, reminders,
+            localEvents = DockEvents.Load().Where(item => item.End >= DateTimeOffset.Now && item.Start.LocalDateTime < until)
+                .Take(40).Select(item => new { title = item.Title, starts = item.Start.ToLocalTime(), ends = item.End.ToLocalTime() }),
             meetings = meetings.Where(item => item.Start.LocalDateTime < until)
                 .Select(item => new { title = item.Title, starts = item.Start.ToLocalTime() })
         });

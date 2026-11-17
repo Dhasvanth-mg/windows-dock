@@ -248,6 +248,28 @@ public partial class DashboardWindow
                     updateJobsPanel = null;
             });
         }
+        else if (job.Status is DockJobStatus.Canceled or DockJobStatus.Failed or DockJobStatus.Interrupted)
+        {
+            actions.Children.Add(ActionButton("Retry job", () =>
+            {
+                if (job.Role == "coding")
+                {
+                    if (MessageBox.Show(owner, "Start this coding brief again in its original project? Review any changes from the previous run first.",
+                        "Retry coding job", MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
+                        return;
+                    try
+                    {
+                        QueueAssistantJob(new(job.Role, job.Task), job.Workspace, null);
+                        status.Text = "Retry started. Open Jobs to see the new run.";
+                    }
+                    catch (Exception error) when (DockActions.IsActionError(error)) { status.Text = error.Message; }
+                    return;
+                }
+                var handoff = $"Hand this task off to {job.Specialist}:\n\n{job.Task}";
+                if (!TryOpenOrbitWithDraft(handoff))
+                    status.Text = "The brief and your current Orbit draft are too long together. Shorten the draft first.";
+            }));
+        }
         if (job.Result.Length > 0)
         {
             actions.Children.Add(ActionButton("Copy result", () =>

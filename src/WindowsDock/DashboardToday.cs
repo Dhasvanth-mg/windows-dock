@@ -89,6 +89,9 @@ public partial class DashboardWindow
         later.Margin = new Thickness(0, 0, -6, 0);
         DockPanel.SetDock(later, Dock.Right);
         DockPanel.SetDock(earlier, Dock.Right);
+        var calendar = IconButton(0xE787, "Open calendar", ShowMeetingWidget);
+        DockPanel.SetDock(calendar, Dock.Right);
+        masthead.Children.Add(calendar);
         masthead.Children.Add(later);
         masthead.Children.Add(earlier);
         var weekday = Text("", 13, AssistantSecondary);
@@ -186,6 +189,7 @@ public partial class DashboardWindow
         {
             var today = DateTime.Today;
             var reminders = Reminders();
+            var eventDays = DockEvents.Load().Select(item => item.Start.LocalDateTime.Date).ToHashSet();
             var first = calendarWeek.AddDays(-(((int)calendarWeek.DayOfWeek + 6) % 7));
             var thisWeek = first <= today && today < first.AddDays(7);
             weekday.Text = thisWeek ? today.ToString("dddd") : "Week of";
@@ -207,7 +211,7 @@ public partial class DashboardWindow
                 cell.Children.Add(new System.Windows.Shapes.Ellipse
                 {
                     Width = 4, Height = 4, Margin = new Thickness(0, 1, 0, 0), HorizontalAlignment = HorizontalAlignment.Center,
-                    Fill = AssistantSecondary, Opacity = reminders.Any(item => item.Date == entry) ? 1 : 0
+                    Fill = AssistantSecondary, Opacity = eventDays.Contains(entry) || reminders.Any(item => item.Date == entry) ? 1 : 0
                 });
                 var button = new Button
                 {
@@ -230,6 +234,13 @@ public partial class DashboardWindow
             agenda.Children.Clear();
             var today = DateTime.Today;
             var items = new List<(DateTime At, FrameworkElement Row)>();
+            foreach (var local in DockEvents.Load().Where(item => item.End >= DateTimeOffset.Now &&
+                item.Start.LocalDateTime < today.AddDays(7)))
+            {
+                var starts = local.Start.LocalDateTime;
+                var when = starts.Date == today ? starts.ToString("t") : starts.ToString("ddd t");
+                items.Add((starts, AgendaRow(when, local.Title, null, false)));
+            }
             foreach (var item in Reminders())
             {
                 var late = item.Date < today;

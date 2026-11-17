@@ -21,6 +21,7 @@
     <EmbeddedResource Include="../Shared/AgentFaces.txt" LogicalName="WindowsDock.AgentFaces.txt" />
     <Resource Include="../Shared/DockIcon.ico" Link="DockIcon.ico" />
     <PackageReference Include="Ical.Net" Version="5.2.4" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
     <PackageReference Include="ModelContextProtocol.Core" Version="2.4.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="Tomlyn" Version="0.19.0" />

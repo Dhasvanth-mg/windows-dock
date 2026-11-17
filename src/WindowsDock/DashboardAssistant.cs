@@ -82,6 +82,18 @@ public partial class DashboardWindow
         ShowAssistantWidget();
     }
 
+    private bool TryOpenOrbitWithDraft(string addition)
+    {
+        var slot = Array.FindIndex(AssistantPersonas.All, persona => persona.Id == "casual");
+        var chat = assistantConversations[slot];
+        var draft = string.IsNullOrWhiteSpace(chat.Draft) ? addition : chat.Draft + "\n\n" + addition;
+        if (draft.Length > AssistantMessageLimit)
+            return false;
+        chat.Draft = draft;
+        OpenAssistantConversation(slot);
+        return true;
+    }
+
     internal void ShowAssistantWidget()
     {
         var slot = assistantRole;
@@ -502,6 +514,7 @@ public partial class DashboardWindow
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             { status.Text = "Could not open the chat storage folder."; }
         };
+        prompt.TextChanged += (_, _) => chat.Draft = prompt.Text;
         prompt.PreviewKeyDown += async (_, args) =>
         {
             if (args.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control && !busy && !changingFiles && PasteScreenshot())
@@ -516,7 +529,6 @@ public partial class DashboardWindow
         window.Closed += (_, _) =>
         {
             modelMenu.IsOpen = false;
-            chat.Draft = prompt.Text;
             key.Clear();
             cooldownTimer.Stop();
         };
@@ -896,15 +908,6 @@ public partial class DashboardWindow
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
             { status.Text = error.Message; }
-        }
-
-        StackPanel Labeled(string label, Control control)
-        {
-            var group = new StackPanel();
-            group.Children.Add(Text(label, 11, AssistantSecondary));
-            control.Margin = new Thickness(0, 3, 0, 0);
-            group.Children.Add(control);
-            return group;
         }
 
         void SetProvider()
@@ -1685,6 +1688,15 @@ public partial class DashboardWindow
             }
             fallback.Visibility = Visibility.Visible;
         }
+    }
+
+    private StackPanel Labeled(string label, Control control)
+    {
+        var group = new StackPanel();
+        group.Children.Add(Text(label, 11, AssistantSecondary));
+        control.Margin = new Thickness(0, 3, 0, 0);
+        group.Children.Add(control);
+        return group;
     }
 
     private string? AssistantKey(int index)

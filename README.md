@@ -52,10 +52,12 @@ Choose **Chat storage folder** in the sidebar to put the chat library under a fo
 
 Choose **Widgets** from the dashboard or the compact Coding chats panel. Pick one live widget from the **Pinned** menu, then star up to four other widgets for compact shortcuts below it and on Overview. If you pin a favorite, the previous pinned widget takes its shortcut slot. Press **Ctrl+K** in any dock panel to search open windows, chats, widgets, apps, workspaces, and settings. Type `window:` to limit the search to open windows on your current desktop. Use **↑** and **↓** to select a result, **Enter** to open it, and **Esc** to close the popup.
 
+Right-click a favorite and select **Move earlier** or **Move later** to change its position in Widgets and Today. Use the two icons beside **Favorites** to export or import the pinned widget and favorite order as a JSON profile.
+
 - **Audio switchboard** changes the default output and offers per-app volume and output routing across connected devices. Each mixer row shows the device hosting the audio session. If the app keeps an open stream on an older device, the mixer shows the saved route and prompts you to resume playback or reload the player. Windows routes at the app level.
 - **Audio presets** saves the default output, master volume, and available per-app levels and mute states. Reapply a preset after an absent app opens an audio session.
 - **Activity inbox** keeps the last three days of observed chat replies, approval requests, and limits. Open it from **Activity** in Coding chats or from Widgets. Mark all read saves your position.
-- **Meetings** reads a local `.ics` export and offers Join and Copy link for supported meeting providers.
+- **Meetings** reads a local `.ics` export and offers Join and Copy link for supported meeting providers. Create, edit, delete, and export events in the local calendar. Local events appear on Today and in Fern’s planner lookup.
 - **Clipboard and files** shows Windows clipboard history when it is enabled. Pin text, images, or files and drag them into other apps.
 - **GitHub checks** reads your PRs, review requests, and recent Actions runs through the signed-in GitHub CLI. Enter a repository as `owner/repo`.
 - **Workspace shortcuts** group a folder, websites, and local app shortcuts into a single action.
@@ -64,12 +66,16 @@ Choose **Widgets** from the dashboard or the compact Coding chats panel. Pick on
 - **Notifications** reads recent Windows alerts when access is allowed. Select alerts and review the draft before sending it to any of the four summary providers.
 - **Assistant** opens the four-character picker. Choose **ChatGPT plan** and continue in your browser to authorize eligible plan usage. **Claude API** uses a Claude Console key. Gemini, Grok, and Groq use their own API keys. Configure them in the panel or with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or `GROQ_API_KEY`. On a usage error, you can switch to Gemini or Grok and resend the draft. Each send shares the current character's recent conversation with the selected provider.
 - **Assistant jobs** shows running tasks and saved results. Open a job to cancel it, copy its result, or save it as Markdown.
+- **Voice memos** records and imports WAV files, plays them back, and searches saved transcripts. An optional transcription request sends the selected memo to Groq after you confirm. You can review the transcript and use it as an Orbit draft.
+- **File search** indexes the folders you select on demand. It searches inside supported text, Markdown, code, and Word files. PDF, spreadsheet, and media results are searchable by filename. The index and excerpts stay on your PC.
 
 ### Assistant actions and background jobs
 
 Any of the four dock assistants can look up dock state, change volume or output, manage reminders and focus timers, switch radios, change startup settings, and arrange widgets. Review the exact proposed changes in chat and select **Apply changes**. The chat can use its enabled role-specific MCP connections when a lookup is useful. Codex CLI and Claude Code CLI are also available as chat providers with their local sign-in.
 
 Ask Orbit to hand off substantial work. Lark handles research, Scribe drafts and edits, Fern plans, and Bolt codes. Confirm the brief to start it, then open **Jobs** to check its progress after closing the chat. Bolt asks for a local Git workspace and uses the signed-in Codex CLI. A standalone CLI can run workspace commands. When the Windows command runner cannot start, Bolt can still read and edit project text files through the dock's workspace editor. The job result identifies shell checks that remain. Up to two jobs can run at once. A job that loses its dock process is marked interrupted the next time you open Jobs.
+
+**Retry job** can start a new coding run in its original project after confirmation. For the other specialists it puts the brief in Orbit’s draft for review.
 
 External coding agents can connect over stdio. Replace the executable path with your installed path.
 

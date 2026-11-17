@@ -43,7 +43,15 @@ public partial class DashboardWindow
             PanningMode = PanningMode.VerticalOnly };
         content.Children.Add(new Border { Child = pinned, Background = SystemParameters.HighContrast ? null : assistantInset,
             CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 10, 12, 10), Margin = new Thickness(0, 0, 0, 14) });
-        content.Children.Add(Text("Favorites", 13, AssistantInk, true));
+        var favoritesHeader = new DockPanel();
+        var saveLayout = IconButton(0xE74E, "Export widget layout");
+        var loadLayout = IconButton(0xE8E5, "Import widget layout");
+        DockPanel.SetDock(saveLayout, Dock.Right);
+        DockPanel.SetDock(loadLayout, Dock.Right);
+        favoritesHeader.Children.Add(saveLayout);
+        favoritesHeader.Children.Add(loadLayout);
+        favoritesHeader.Children.Add(Text("Favorites", 13, AssistantInk, true));
+        content.Children.Add(favoritesHeader);
         var favorites = new ContentControl { Margin = new Thickness(0, 6, 0, 12), HorizontalContentAlignment = HorizontalAlignment.Stretch };
         content.Children.Add(favorites);
         var status = Text("", 11, AssistantSecondary);
@@ -56,6 +64,8 @@ public partial class DashboardWindow
         content.Children.Add(catalog);
 
         CancellationTokenSource? mounted = null;
+        saveLayout.Click += (_, _) => ExportLayout();
+        loadLayout.Click += (_, _) => ImportLayout();
         content.Loaded += (_, _) => UpdateMount();
         content.Unloaded += (_, _) => ReleasePinned();
         content.IsVisibleChanged += (_, _) => UpdateMount();
@@ -115,6 +125,36 @@ public partial class DashboardWindow
             status.Visibility = message.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        void ExportLayout()
+        {
+            var picker = new SaveFileDialog { Filter = "Widget layout|*.json", FileName = "Windows Dock widgets.json" };
+            if (picker.ShowDialog(this) != true)
+                return;
+            try { File.WriteAllText(picker.FileName, DockWidgetLayout.Export()); ShowStatus("Widget layout exported."); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { ShowStatus("Could not export the widget layout."); }
+        }
+
+        void ImportLayout()
+        {
+            var picker = new OpenFileDialog { Filter = "Widget layout|*.json", CheckFileExists = true };
+            if (picker.ShowDialog(this) != true)
+                return;
+            try
+            {
+                layout = DockWidgetLayout.Import(picker.FileName);
+                pinPicker.SelectedItem = widgets.First(item => item.Id == layout.Pinned);
+                ReleasePinned();
+                UpdateMount();
+                RenderShortcuts();
+                RenderHomeFavorites();
+                ShowStatus("Widget layout imported.");
+            }
+            catch (ArgumentException error) { ShowStatus(error.Message); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            { ShowStatus("Could not read the widget layout."); }
+        }
+
         void RenderShortcuts(string? focused = null)
         {
             favorites.Content = layout.Favorites.Length == 0
@@ -163,6 +203,17 @@ public partial class DashboardWindow
                     var row = new Grid();
                     row.Children.Add(button);
                     row.Children.Add(star);
+                    if (favorite && layout.Favorites.Length > 1)
+                    {
+                        var menu = new ContextMenu();
+                        var earlier = new MenuItem { Header = "Move earlier", IsEnabled = index > 0 };
+                        var later = new MenuItem { Header = "Move later", IsEnabled = index < layout.Favorites.Length - 1 };
+                        earlier.Click += (_, _) => MoveFavorite(item.Id, -1);
+                        later.Click += (_, _) => MoveFavorite(item.Id, 1);
+                        menu.Items.Add(earlier);
+                        menu.Items.Add(later);
+                        row.ContextMenu = menu;
+                    }
                     if (item.Id == focused)
                         Dispatcher.BeginInvoke(() => star.Focus(), System.Windows.Threading.DispatcherPriority.Input);
                     Put(items, row, index / columnCount, index % columnCount);
@@ -170,6 +221,19 @@ public partial class DashboardWindow
                 }
                 return items;
             }
+        }
+
+        void MoveFavorite(string id, int direction)
+        {
+            try
+            {
+                layout = DockWidgetLayout.MoveFavorite(id, direction);
+                RenderShortcuts(id);
+                RenderHomeFavorites();
+                ShowStatus("");
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { ShowStatus("Could not reorder the favorites."); }
         }
     }
 
@@ -192,6 +256,8 @@ public partial class DashboardWindow
             case "wifi": BuildWireless(content, Windows.Devices.Radios.RadioKind.WiFi, cancellation); break;
             case "bluetooth": BuildWireless(content, Windows.Devices.Radios.RadioKind.Bluetooth, cancellation); break;
             case "favorites": BuildPinnedFavorites(content); break;
+            case "voice": BuildVoiceMemos(window, content, cancellation); break;
+            case "file-search": BuildFileSearch(window, content, cancellation); break;
             case "assistant":
                 var grid = Columns(1, 1);
                 for (var index = 0; index < AssistantPersonas.All.Length; index++)
@@ -216,7 +282,8 @@ public partial class DashboardWindow
             return;
         var favorites = FavoriteWidgets();
         homeFavorites.Children.Clear();
-        foreach (var widget in WidgetActions().Where(item => favorites.Contains(item.Id)))
+        var widgets = WidgetActions();
+        foreach (var widget in favorites.Select(id => widgets.First(item => item.Id == id)))
         {
             var button = AccentButton(widget.Label, widget.Icon, widget.Color, widget.Action);
             button.Margin = new Thickness(0, 0, 5, 4);
@@ -230,7 +297,7 @@ public partial class DashboardWindow
         new("Audio switchboard", "Outputs, app volumes and playback", "music media volume speakers headphones",
             0xE767, purple, ShowAudioWidget, "audio", Wide: true),
         new("Audio presets", "Save and recall mixes", "headphones speaker mixer audio output", 0xE9E9, purple, ShowAudioPresets, "audio-presets"),
-        new("Meetings", "Upcoming calls", "calendar schedule join", 0xE787, accent, ShowMeetingWidget, "meetings"),
+        new("Meetings", "Calendar events and calls", "calendar schedule join events", 0xE787, accent, ShowMeetingWidget, "meetings"),
         new("Clipboard and files", "Pinned and recent items", "shelf snippets paste screenshots", 0xE77F, green, ShowClipboardWidget, "clipboard"),
         new("GitHub checks", "Builds and reviews", "CI pull requests review build", 0xE73E, purple, ShowGitHubWidget, "github"),
         new("Workspace shortcuts", "Open a project setup", "projects launch folder editor", 0xE8B7, amber, ShowWorkspaceWidget, "workspaces"),
@@ -243,7 +310,9 @@ public partial class DashboardWindow
         new("Calculator", "Calculate, convert, and save results", "calc math percentages units history favorites", 0xE8EF, accent, ShowCalculator, "calculator"),
         new("Wi-Fi networks", "Signal, saved networks, and connection", "wifi wireless connections", 0xE701, accent, ShowWifiWidget, "wifi"),
         new("Bluetooth devices", "Paired devices and radio controls", "bluetooth pairing headphones", 0xE702, accent, ShowBluetoothWidget, "bluetooth"),
-        new("Favorites", "Files, links, workspaces, and shortcuts", "favorites bookmarks pin", 0xE734, accent, ShowFavoritesWidget, "favorites")
+        new("Favorites", "Files, links, workspaces, and shortcuts", "favorites bookmarks pin", 0xE734, accent, ShowFavoritesWidget, "favorites"),
+        new("Voice memos", "Record, play, and transcribe", "microphone audio speech dictation recording", 0xE720, accent, ShowVoiceMemos, "voice"),
+        new("File search", "Find words in folders you choose", "files search folders index documents", 0xE721, accent, ShowFileSearch, "file-search")
     ];
 
     private Button WidgetTile(WidgetAction widget, bool showArrow = true)

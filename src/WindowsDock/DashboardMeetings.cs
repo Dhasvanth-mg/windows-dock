@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,6 +32,7 @@ public partial class DashboardWindow
         var refresh = ActionButton("Refresh");
         actions.Children.Add(refresh);
         content.Children.Add(actions);
+        BuildLocalCalendar(window, content);
         var path = ReadJson<string>("calendar-source.json");
         select.Click += (_, _) => Choose();
         refresh.Click += (_, _) => _ = LoadAsync();
@@ -93,6 +95,132 @@ public partial class DashboardWindow
                 status.Text = "The calendar could not be read. Check the file or select another export.";
             }
             finally { refresh.IsEnabled = select.IsEnabled = true; }
+        }
+    }
+
+    private void BuildLocalCalendar(Window window, StackPanel content)
+    {
+        var local = new StackPanel();
+        var buttons = new WrapPanel { Margin = new Thickness(0, 5, 0, 5) };
+        var add = ActionButton("New local event");
+        add.Margin = new Thickness(0, 0, 5, 4);
+        var export = ActionButton("Export local calendar");
+        buttons.Children.Add(add);
+        buttons.Children.Add(export);
+        var date = Field("Event date", 10);
+        var title = Field("Event title", 140);
+        var start = Field("Start time", 5);
+        var end = Field("End time", 5);
+        var save = ActionButton("Save event");
+        var remove = ActionButton("Delete event");
+        var cancel = ActionButton("Cancel event edit");
+        var editorButtons = new WrapPanel { Margin = new Thickness(0, 7, 0, 0), Children = { save, remove, cancel } };
+        var times = Columns(1, 1);
+        Put(times, Labeled("Start · HH:mm", start), 0);
+        Put(times, Labeled("End · HH:mm", end), 1);
+        var editor = new StackPanel
+        {
+            Children = { Labeled("Title", title), Labeled("Date · YYYY-MM-DD", date), times, editorButtons },
+            Visibility = Visibility.Collapsed
+        };
+        var editId = Guid.Empty;
+        var feedback = Text("", 11, AssistantSecondary);
+        feedback.TextWrapping = TextWrapping.Wrap;
+        var overview = new StackPanel();
+        var range = new DatePicker { SelectedDate = DateTime.Today };
+        System.Windows.Automation.AutomationProperties.SetName(range, "Show local events for date");
+        local.Children.Add(CardHeading("Local calendar", 0xE787, accent));
+        local.Children.Add(buttons);
+        local.Children.Add(editor);
+        local.Children.Add(feedback);
+        local.Children.Add(range);
+        local.Children.Add(overview);
+        content.Children.Add(Card(local));
+
+        add.Click += (_, _) => Edit(null);
+        cancel.Click += (_, _) => editor.Visibility = Visibility.Collapsed;
+        range.SelectedDateChanged += (_, _) => Render();
+        remove.Click += (_, _) =>
+        {
+            if (editId == Guid.Empty || MessageBox.Show(window, "Delete this local event?", "Calendar",
+                MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+            try
+            {
+                DockEvents.Remove(editId);
+                feedback.Text = "Event deleted.";
+                editor.Visibility = Visibility.Collapsed;
+                Render();
+                RefreshCalendarPage();
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { feedback.Text = "Could not delete this event."; }
+        };
+        save.Click += (_, _) =>
+        {
+            try
+            {
+                var id = editId == Guid.Empty ? Guid.NewGuid() : editId;
+                var schedule = DockEvents.Save(id, title.Text, date.Text, start.Text, end.Text);
+                var saved = schedule.First(item => item.Id == id);
+                feedback.Text = DockEvents.Overlaps(saved, schedule) ? "Saved. This overlaps another local event." : "Event saved.";
+                editor.Visibility = Visibility.Collapsed;
+                range.SelectedDate = saved.Start.LocalDateTime.Date;
+                Render();
+                RefreshCalendarPage();
+            }
+            catch (ArgumentException error) { feedback.Text = error.Message; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { feedback.Text = "Could not save this event."; }
+        };
+        export.Click += (_, _) =>
+        {
+            var picker = new SaveFileDialog { Filter = "Calendar file|*.ics", FileName = "Windows Dock.ics" };
+            if (picker.ShowDialog(window) != true)
+                return;
+            try
+            {
+                File.WriteAllText(picker.FileName, DockEvents.Export());
+                feedback.Text = "Local calendar exported.";
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { feedback.Text = "Could not export this calendar."; }
+        };
+        Render();
+
+        void Edit(DockEvent? item)
+        {
+            editId = item?.Id ?? Guid.Empty;
+            title.Text = item?.Title ?? "";
+            date.Text = (item?.Start.LocalDateTime.Date ?? range.SelectedDate ?? DateTime.Today)
+                .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            start.Text = item?.Start.LocalDateTime.ToString("HH:mm", CultureInfo.InvariantCulture) ?? "09:00";
+            end.Text = item?.End.LocalDateTime.ToString("HH:mm", CultureInfo.InvariantCulture) ?? "10:00";
+            editor.Visibility = Visibility.Visible;
+            remove.Visibility = item == null ? Visibility.Collapsed : Visibility.Visible;
+            title.Focus();
+        }
+
+        void Render()
+        {
+            overview.Children.Clear();
+            var day = range.SelectedDate ?? DateTime.Today;
+            foreach (var item in DockEvents.Load().Where(item => item.Start.LocalDateTime.Date == day.Date))
+            {
+                var label = $"{item.Start.LocalDateTime:t}  {item.Title}";
+                var edit = ActionButton(label, () => Edit(item));
+                edit.HorizontalContentAlignment = HorizontalAlignment.Left;
+                edit.Margin = new Thickness(0, 4, 0, 0);
+                overview.Children.Add(edit);
+            }
+            if (overview.Children.Count == 0)
+                overview.Children.Add(Text("No local events for this day.", 11, AssistantSecondary));
+        }
+
+        void RefreshCalendarPage()
+        {
+            if (!ReferenceEquals(window, this) && currentPage == DashboardPage.Home)
+                ShowPage(DashboardPage.Home);
         }
     }
 
