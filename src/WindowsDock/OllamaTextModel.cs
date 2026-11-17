@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -34,21 +35,43 @@ internal sealed class OllamaTextModel(HttpClient http)
     }
 
     internal async Task<string> ChatAsync(string model, string instructions,
-        IReadOnlyList<(bool User, string Text)> turns, CancellationToken cancellation)
+        IReadOnlyList<(bool User, string Text)> turns, CancellationToken cancellation, Action<string>? preview = null)
     {
         var installed = await ModelsAsync(cancellation).ConfigureAwait(false);
         if (!installed.Contains(model, StringComparer.Ordinal))
             throw new ArgumentException("Choose an installed local Ollama model and refresh the list if it changed.");
         var messages = turns.Select(turn => new { role = turn.User ? "user" : "assistant", content = turn.Text });
-        using var response = await http.PostAsJsonAsync("api/chat", new
+        using var request = new HttpRequestMessage(HttpMethod.Post, "api/chat");
+        request.Content = JsonContent.Create(new
         {
             model,
             messages = messages.Prepend(new { role = "system", content = instructions }),
-            stream = false,
+            stream = preview != null,
             keep_alive = "30s",
             options = new { num_predict = 1024 }
-        }, cancellation).ConfigureAwait(false);
+        });
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        using var response = await http.SendAsync(request,
+            preview == null ? HttpCompletionOption.ResponseContentRead : HttpCompletionOption.ResponseHeadersRead,
+            timeout.Token).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
+        if (preview != null)
+        {
+            using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false));
+            var text = new ChatStream(preview);
+            while (await reader.ReadLineAsync(timeout.Token).ConfigureAwait(false) is { } line)
+            {
+                using var item = JsonDocument.Parse(line);
+                var data = item.RootElement;
+                if (IsRemote(data) || AgentSessions.String(data, "error") != null)
+                    throw new IOException("Ollama did not return a local reply.");
+                text.Append(AgentSessions.String(AgentSessions.Property(data, "message"), "content"));
+                if (AgentSessions.Property(data, "done").ValueKind == JsonValueKind.True)
+                    return text.Complete();
+            }
+            throw new IOException("Ollama disconnected before the reply finished.");
+        }
         using var json = await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: cancellation).ConfigureAwait(false);
         if (json == null || IsRemote(json.RootElement))
             throw new InvalidOperationException("Ollama did not return a local reply.");

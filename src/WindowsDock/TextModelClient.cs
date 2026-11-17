@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,12 +37,12 @@ internal static class TextModelClient
 
     internal static async Task<string> SendChat(AssistantProvider provider, string model, string key,
         (bool User, string Text)[] turns, CancellationToken cancellation, string? systemInstruction = null,
-        IReadOnlyDictionary<int, ChatMedia[]>? media = null)
+        IReadOnlyDictionary<int, ChatMedia[]>? media = null, Action<string>? preview = null)
     {
         var gemini = provider == AssistantProvider.Gemini;
         var url = provider switch
         {
-            AssistantProvider.Gemini => $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model.StartsWith("models/", StringComparison.Ordinal) ? model[7..] : model)}:generateContent",
+            AssistantProvider.Gemini => $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model.StartsWith("models/", StringComparison.Ordinal) ? model[7..] : model)}:{(preview == null ? "generateContent" : "streamGenerateContent?alt=sse")}",
             AssistantProvider.Groq => "https://api.groq.com/openai/v1/chat/completions",
             AssistantProvider.Grok => "https://api.x.ai/v1/chat/completions",
             AssistantProvider.ClaudeApi => "https://api.anthropic.com/v1/messages",
@@ -71,7 +72,8 @@ internal static class TextModelClient
                 system = systemInstruction ?? "",
                 messages = turns.Select((turn, index) => new { role = turn.User ? "user" : "assistant",
                     content = ChatMediaRequest.Content(provider, turn.Text, media?.GetValueOrDefault(index)) }),
-                max_tokens = 1024
+                max_tokens = 1024,
+                stream = preview != null
             });
         }
         else
@@ -86,10 +88,21 @@ internal static class TextModelClient
             };
             if (provider == AssistantProvider.Groq && systemInstruction != null && model == GroqSummaryModel)
                 body["reasoning_effort"] = "none";
+            if (preview != null)
+                body["stream"] = true;
             request.Content = JsonContent.Create(body);
         }
-        using var response = await ChatClient.SendAsync(request, cancellation);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        timeout.CancelAfter(preview == null ? TimeSpan.FromSeconds(45) : TimeSpan.FromMinutes(2));
+        using var response = await ChatClient.SendAsync(request,
+            preview == null ? HttpCompletionOption.ResponseContentRead : HttpCompletionOption.ResponseHeadersRead,
+            timeout.Token);
         response.EnsureSuccessStatusCode();
+        if (preview != null)
+        {
+            using var stream = new StreamReader(await response.Content.ReadAsStreamAsync(timeout.Token));
+            return await ChatStream.ReadEventsAsync(stream, provider, preview, timeout.Token);
+        }
         using var result = await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: cancellation);
         return result == null ? "" : provider == AssistantProvider.ClaudeApi
             ? ReadClaudeResponse(result.RootElement) : ReadResponse(gemini, result.RootElement);
@@ -108,7 +121,12 @@ internal static class TextModelClient
             return "";
         if (!gemini)
             return AgentSessions.String(AgentSessions.Property(choices[0], "message"), "content") ?? "";
-        var parts = AgentSessions.Property(AgentSessions.Property(choices[0], "content"), "parts");
+        return ReadGeminiCandidate(choices[0]);
+    }
+
+    internal static string ReadGeminiCandidate(JsonElement candidate)
+    {
+        var parts = AgentSessions.Property(AgentSessions.Property(candidate, "content"), "parts");
         return parts.ValueKind == JsonValueKind.Array
             ? string.Concat(parts.EnumerateArray().Where(part => AgentSessions.Property(part, "thought").ValueKind != JsonValueKind.True)
                 .Select(part => AgentSessions.String(part, "text")))

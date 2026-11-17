@@ -60,6 +60,33 @@ public sealed class DockChatsTests : IDisposable
         Assert.Equal(id, Assert.Single(DockChats.Load()).Id);
     }
 
+    [Fact]
+    public void OrganizingAndBranchingKeepTheOriginalConversationAndAttachment()
+    {
+        var id = Guid.NewGuid();
+        var original = new SavedChat(id, "research", "Before", DateTimeOffset.UtcNow,
+            [new(true, "first"), new(false, "answer"), new(true, "follow up")], AssistantProvider.Ollama, "model");
+        var attachment = new PickedChatFile(new(Guid.NewGuid(), "note.txt", null, "data"), "data"u8.ToArray());
+        original.Turns[0] = original.Turns[0] with { Files = [attachment.File] };
+        DockChats.Save(original, [attachment]);
+        var organized = DockChats.Organize(id, "Renamed", " Course  work ", true);
+        Assert.Equal("Course work", organized.Folder);
+        Assert.True(organized.Pinned);
+
+        var branch = DockChats.Branch(id, 1);
+        var library = DockChats.Load();
+        Assert.Equal(id, library[0].Id);
+        Assert.Equal("Renamed", library[0].Title);
+        Assert.Equal(3, library[0].Turns.Length);
+        Assert.Equal(branch.Id, library[1].Id);
+        Assert.Equal("Course work", branch.Folder);
+        Assert.Equal("model", branch.Model);
+        Assert.False(branch.Pinned);
+        Assert.Equal(attachment.Bytes, DockChats.ReadAttachment(branch.Id, Assert.Single(Assert.Single(branch.Turns).Files!)).Bytes);
+        Assert.Empty(DockChats.Branch(id, 0).Turns);
+        Assert.Equal(2, DockChats.Load().Length);
+    }
+
     [Theory]
     [InlineData("ChatGptPlan", "input_image", "input_file")]
     [InlineData("ClaudeApi", "image", "document")]

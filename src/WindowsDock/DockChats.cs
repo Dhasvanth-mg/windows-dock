@@ -11,9 +11,9 @@ using System.Xml.Linq;
 namespace WindowsDock;
 
 internal sealed record SavedTurn(bool User, string Text, ChatFile[]? Files = null, AssistantContext? Context = null,
-    string[]? OutputFiles = null);
+    string[]? OutputFiles = null, string? ReplyProvider = null);
 internal sealed record SavedChat(Guid Id, string Persona, string Title, DateTimeOffset Updated, SavedTurn[] Turns,
-    AssistantProvider? Provider = null, string? Model = null);
+    AssistantProvider? Provider = null, string? Model = null, bool Pinned = false, string? Folder = null);
 internal sealed record ChatFile(Guid Id, string Name, string? MediaType, string? Text);
 internal sealed record PickedChatFile(ChatFile File, byte[] Bytes);
 internal sealed record ChatMedia(string Name, string MediaType, byte[] Bytes)
@@ -39,7 +39,8 @@ internal static class DockChats
             return [];
         CheckLink(root);
         return Directory.EnumerateDirectories(root).Where(path => Guid.TryParseExact(Path.GetFileName(path), "N", out _))
-            .Select(ReadChat).OfType<SavedChat>().OrderByDescending(chat => chat.Updated).ToArray();
+            .Select(ReadChat).OfType<SavedChat>().OrderByDescending(chat => chat.Pinned)
+            .ThenByDescending(chat => chat.Updated).ToArray();
     }
 
     private static SavedChat? ReadChat(string directory)
@@ -70,6 +71,70 @@ internal static class DockChats
         }
     }
 
+    internal static SavedChat Organize(Guid id, string title, string folder, bool pinned)
+    {
+        lock (LibraryLock)
+        {
+            var root = Root;
+            CheckLink(root);
+            var chat = ReadChat(Path.Combine(root, id.ToString("N"))) ??
+                throw new IOException("The conversation could not be read.");
+            var updated = chat with
+            {
+                Title = string.IsNullOrWhiteSpace(title) ? Title(chat.Turns) : CleanLabel(title, 100),
+                Folder = string.IsNullOrWhiteSpace(folder) ? null : CleanLabel(folder, 48),
+                Pinned = pinned
+            };
+            Save(updated);
+            return updated;
+        }
+    }
+
+    internal static SavedChat Branch(Guid id, int through)
+    {
+        lock (LibraryLock)
+        {
+            var root = Root;
+            CheckLink(root);
+            var original = ReadChat(Path.Combine(root, id.ToString("N"))) ??
+                throw new IOException("The conversation could not be read.");
+            if (through < 0 || through > original.Turns.Length)
+                throw new ArgumentException("Choose a saved message to branch from.");
+            var turns = original.Turns.Take(through).Select(turn => turn with { OutputFiles = null }).ToArray();
+            var branch = new SavedChat(Guid.NewGuid(), original.Persona, CleanLabel($"Branch of {original.Title}", 100),
+                DateTimeOffset.UtcNow, turns, original.Provider, original.Model, Folder: original.Folder);
+            if (turns.Length == 0)
+                return branch;
+            var stage = EnsureDirectory(Path.Combine(root, $".branch-{branch.Id:N}"));
+            try
+            {
+                foreach (var file in turns.SelectMany(turn => turn.Files ?? []).DistinctBy(file => file.Id))
+                    SaveAttachments(stage, [ReadAttachment(id, file)]);
+                AtomicWrite(Path.Combine(stage, Transcript), stream => JsonSerializer.Serialize(stream, branch), replace: false);
+                Directory.Move(stage, Path.Combine(root, branch.Id.ToString("N")));
+                return branch;
+            }
+            finally
+            {
+                if (Directory.Exists(stage))
+                    Directory.Delete(stage, recursive: true);
+            }
+        }
+    }
+
+    internal static PickedChatFile ReadAttachment(Guid chat, ChatFile file)
+    {
+        var root = Root;
+        var directory = Path.Combine(root, chat.ToString("N"));
+        var attachments = Path.Combine(directory, "attachments");
+        CheckLink(root);
+        CheckLink(directory);
+        CheckLink(attachments);
+        var path = Path.Combine(attachments, AttachmentName(file));
+        CheckLink(path);
+        return new(file, ChatAttachments.ReadBounded(path));
+    }
+
     private static void SaveAttachments(string chatDirectory, IReadOnlyList<PickedChatFile> picked)
     {
         var directory = EnsureDirectory(Path.Combine(chatDirectory, "attachments"));
@@ -85,15 +150,7 @@ internal static class DockChats
 
     internal static ChatMedia ReadMedia(Guid chat, ChatFile file)
     {
-        var root = Root;
-        var directory = Path.Combine(root, chat.ToString("N"));
-        var attachments = Path.Combine(directory, "attachments");
-        CheckLink(root);
-        CheckLink(directory);
-        CheckLink(attachments);
-        var path = Path.Combine(attachments, AttachmentName(file));
-        CheckLink(path);
-        var bytes = ChatAttachments.ReadBounded(path);
+        var bytes = ReadAttachment(chat, file).Bytes;
         if (file.MediaType == null || ChatAttachments.MediaType(bytes) != file.MediaType)
             throw new IOException($"The stored attachment {file.Name} has changed.");
         return new(file.Name, file.MediaType, bytes);
@@ -256,6 +313,12 @@ internal static class DockChats
         var first = turns.FirstOrDefault(turn => turn.User && !string.IsNullOrWhiteSpace(turn.Text))?.Text ?? "";
         var line = Regex.Replace(first.Trim(), @"\s+", " ");
         return line.Length == 0 ? "New chat" : line.Length > 46 ? line[..46].TrimEnd() + "…" : line;
+    }
+
+    private static string CleanLabel(string text, int length)
+    {
+        var line = Regex.Replace(text.Trim(), @"\s+", " ");
+        return line[..Math.Min(line.Length, length)];
     }
 }
 

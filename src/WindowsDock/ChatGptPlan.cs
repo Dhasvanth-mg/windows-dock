@@ -21,9 +21,10 @@ internal sealed record PlanAccount(string ClientId, string Subject, string Email
 
 internal sealed record PlanModel(string Id, string Name);
 
-internal sealed class PlanException(string message, bool canFallback = false) : Exception(message)
+internal sealed class PlanException(string message, bool canFallback = false, bool quotaExceeded = false) : Exception(message)
 {
     internal bool CanFallback { get; } = canFallback;
+    internal bool QuotaExceeded { get; } = quotaExceeded;
 }
 
 internal sealed class PlanSignIn
@@ -192,7 +193,8 @@ internal static class ChatGptPlan
     }
 
     internal static async Task<string> SendAsync(PlanAccount account, string model, string instructions,
-        (bool User, string Text)[] turns, CancellationToken cancellation, IReadOnlyDictionary<int, ChatMedia[]>? media = null)
+        (bool User, string Text)[] turns, CancellationToken cancellation, IReadOnlyDictionary<int, ChatMedia[]>? media = null,
+        Action<string>? preview = null)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         timeout.CancelAfter(TimeSpan.FromSeconds(90));
@@ -208,12 +210,12 @@ internal static class ChatGptPlan
         using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
         await EnsureResponseAsync(response, token);
         using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(token));
-        return await ReadStreamAsync(reader, token);
+        return await ReadStreamAsync(reader, token, preview);
     }
 
-    private static async Task<string> ReadStreamAsync(TextReader reader, CancellationToken token)
+    private static async Task<string> ReadStreamAsync(TextReader reader, CancellationToken token, Action<string>? preview)
     {
-        var text = new StringBuilder();
+        var text = new ChatStream(preview);
         while (await reader.ReadLineAsync(token) is { } line)
         {
             if (!line.StartsWith("data: ", StringComparison.Ordinal) || line == "data: [DONE]")
@@ -223,10 +225,9 @@ internal static class ChatGptPlan
             switch (String(root, "type"))
             {
                 case "response.output_text.delta":
-                    if (text.Length < 40_000)
-                        text.Append(String(root, "delta"));
+                    text.Append(String(root, "delta"));
                     break;
-                case "response.completed": return text.ToString();
+                case "response.completed": return text.Complete();
                 case "response.incomplete": throw new PlanException("ChatGPT returned an incomplete response.");
                 case "response.failed": throw ResponseError(String(Property(Property(root, "response"), "error"), "code"));
                 case "error": throw ResponseError(String(root, "code") ?? String(Property(root, "error"), "code"));
@@ -313,10 +314,11 @@ internal static class ChatGptPlan
 
     private static PlanException ResponseError(string? code, HttpStatusCode? status = null) => code switch
     {
-        "subscription_sharing_usage_limit_exceeded" => new("ChatGPT reached the plan or app usage limit. Check Manage usage.", true),
+        "subscription_sharing_usage_limit_exceeded" => new("ChatGPT reached the plan or app usage limit. Check Manage usage.", true, true),
         "subscription_sharing_usage_unavailable" => new("ChatGPT could not check plan usage. Try again later.", true),
         "subscription_sharing_user_not_eligible" => new("ChatGPT plan usage is unavailable for this account or workspace.", true),
-        _ when status == HttpStatusCode.TooManyRequests => new("ChatGPT is rate limited. Check Manage usage.", true),
+        _ when status is HttpStatusCode.TooManyRequests or HttpStatusCode.PaymentRequired =>
+            new("ChatGPT reached a usage limit. Check Manage usage.", true, true),
         _ when status == HttpStatusCode.Unauthorized => new("Reconnect your ChatGPT account."),
         _ when status == HttpStatusCode.ServiceUnavailable => new("ChatGPT plan access is temporarily unavailable.", true),
         _ => new("ChatGPT could not complete the request. Check the account and model.")

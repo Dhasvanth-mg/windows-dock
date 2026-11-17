@@ -1,5 +1,14 @@
 # Feature tracker
 
+## Complete the remaining Windows Dock features
+
+- Status: In progress.
+- Scope: Build the outstanding assistant chat, coding session, agent, Windows control, native customization, workspace, calendar, document, voice, search, knowledge graph, vault, and release features from the inventory below.
+- Acceptance criteria: Each feature has a working entry point, persistent state where applicable, and verification appropriate to its provider or device. Check taskbar attachment and recovery without interrupting the owner's current Explorer session. Record account and hardware checks separately.
+- Conversation milestone: Added chat renaming, pinning, groups, branching, editing in a branch, and regenerating in a branch. Assistant memory is opt-in content editable per role and protected under the Windows account. Supported HTTP providers and Ollama progressively show reply text. The optional usage-limit fallback can reuse the same request with the configured Gemini or Grok API key when compatible.
+- Conversation verification: 92 tests passed. The isolated Windows fixture confirmed chat organization, a branch retaining the original draft attachment, saved memory in a request, progressive Ollama text before completion, attachment retry, and automatic file export. Cloud streaming and fallback still need a live account test. CLI providers return text after their process completes.
+- Remaining work: Continue the remaining inventory. Native Explorer attachment still fails in the current session. Account and device checks remain open.
+
 ## Remaining features inventory
 
 - Status: Inventory reviewed against the current source, the expansion specification, and the original roadmap.

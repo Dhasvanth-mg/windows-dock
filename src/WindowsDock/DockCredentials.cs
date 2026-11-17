@@ -8,11 +8,13 @@ internal static class DockCredentials
 {
     private static string FileName(AssistantProvider provider) => $"provider-{provider}.dat";
 
-    internal static string? Read(AssistantProvider provider)
+    internal static string? Read(AssistantProvider provider) => ReadPrivateText(FileName(provider));
+
+    internal static string? ReadPrivateText(string name)
     {
         try
         {
-            var data = File.ReadAllBytes(DockData.FilePath(FileName(provider)));
+            var data = File.ReadAllBytes(DockData.FilePath(name));
             var clear = ProtectedData.Unprotect(data, null, DataProtectionScope.CurrentUser);
             try { return Encoding.UTF8.GetString(clear); }
             finally { CryptographicOperations.ZeroMemory(clear); }
@@ -20,13 +22,15 @@ internal static class DockCredentials
         catch (Exception error) when (error is CryptographicException or IOException or UnauthorizedAccessException) { return null; }
     }
 
-    internal static void Save(AssistantProvider provider, string key)
+    internal static void Save(AssistantProvider provider, string key) => WritePrivateText(FileName(provider), key);
+
+    internal static void WritePrivateText(string name, string text)
     {
-        var clear = Encoding.UTF8.GetBytes(key);
+        var clear = Encoding.UTF8.GetBytes(text);
         try
         {
             var protectedKey = ProtectedData.Protect(clear, null, DataProtectionScope.CurrentUser);
-            DockData.Write(FileName(provider), path => File.WriteAllBytes(path, protectedKey));
+            DockData.Write(name, path => File.WriteAllBytes(path, protectedKey));
         }
         finally { CryptographicOperations.ZeroMemory(clear); }
     }
