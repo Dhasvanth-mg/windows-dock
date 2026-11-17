@@ -59,17 +59,21 @@ public partial class DashboardWindow
         return false;
     }
 
-    private void ShowCalculator()
+    private void ShowCalculator() => ShowCalculator(null);
+
+    private void ShowCalculator(string? expression)
     {
         var (window, content, _) = CreateDockPanel("Calculator", "", 472, 0xE8EF, accent, widget: true);
-        BuildCalculator(content);
+        var input = BuildCalculator(content, expression);
+        window.Loaded += (_, _) => Keyboard.Focus(input);
         window.Show();
     }
 
-    private void BuildCalculator(StackPanel content)
+    private TextBox BuildCalculator(StackPanel content, string? expression = null)
     {
         var input = Field("Calculation", 405);
-        input.Tag = "Try 20% of 150 or 5 km to miles";
+        input.Tag = "Try 56 KB to MB or 60 mph to m/s";
+        input.Text = expression ?? "";
         var output = Text("", 17, AssistantInk, true);
         output.TextWrapping = TextWrapping.Wrap;
         output.Margin = new Thickness(0, 7, 0, 3);
@@ -120,6 +124,7 @@ public partial class DashboardWindow
         };
         Evaluate();
         RefreshHistory();
+        return input;
 
         void Evaluate()
         {

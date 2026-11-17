@@ -1,5 +1,23 @@
 # Feature tracker
 
+## Universal calculator conversions
+
+- Status: Implemented, verified, and installed.
+- Scope: Expand the calculator shown in the screenshot and continue the installed taskbar verification. Give Calculator and global Search the same general unit conversion engine, including data sizes, transfer rates, and common compound units.
+- Acceptance criteria: The exact expression in the screenshot returns a result. Decimal and binary units are distinguishable. Arithmetic, dates, history, and favorites keep working. Calculations are available from the taskbar and Search.
+- Implementation: Calculator and global Search use the same offline conversion engine. It supports decimal and binary data sizes, transfer rates, mixed quantities, fractions, temperatures, customary and SI units, and compound units. Search can open the expression directly in Calculator. History and favorites use the existing storage.
+- Verification: All 151 tests passed. A Windows dashboard fixture checked `56 kb to mb` in Calculator, saved a favorite, converted a compound unit in Search, and reopened that expression in Calculator. All five managed files in the startup installation match the published build. The installed monitor started and the controller reattached to the same Explorer process.
+- Limits: Conversion works offline with built-in units. Live exchange rates are outside this scope.
+
+## Restore native taskbar attachment
+
+- Status: Native launcher and chat row restored, installed, and verified. Full centered taskbar appearance remains pending in the current Explorer session.
+- Scope: Recover the running Explorer taskbar and the dock launcher in the current Windows session. Diagnose the repeated XAML diagnostics failure and fix the relevant controller or Explorer integration.
+- Acceptance criteria: The native taskbar shows the dock styling, launcher, and coding chat row. The launcher opens Dashboard. The update preserves the active Explorer session and the native startup path.
+- Implementation: If the visual-tree subscription is rejected before any elements arrive, the controller embeds the existing launcher and four chat slots in free space inside Explorer's taskbar. The embedded section follows taskbar layout and DPI. The full appearance path still runs when Explorer provides its visual tree.
+- Verification: The x64 native build passed. In the current Explorer session, the embedded child was visible and hit-testable, the launcher event opened and dismissed Dashboard, and a controller-only restart removed and remounted the child. The startup registration and Explorer process stayed in place through the managed update.
+- Remaining work: Explorer still rejects the visual-tree subscription in this session. The embedded section uses the current taskbar arrangement for the app icons and system tray. The full appearance path needs a live check in a session where the visual tree is available.
+
 ## Remove Life Simulator and focus Play on poker
 
 - Status: Implemented, verified in an isolated Windows dashboard, and installed.
@@ -7,7 +25,7 @@
 - Acceptance criteria: The dock no longer exposes or loads Life Simulator. Existing personal save files stay on disk. Poker has a direct entry point. Practice leaves the casino wallet and tournament untouched. Review plays through saved poker hands and keeps previous transcripts readable.
 - Implementation: Removed the Life Simulator, town schedule, relationship graph, and their application routes. Existing local save files stay on disk. Play now has a Poker hub for cash-table Hold’em, tournaments, practice, and hand review. Practice uses separate chips and calculates equity from public information. New cash, tournament, and practice hands save visible boards, actions, and pot amounts for replay. Historical cash records remain readable as transcripts or summaries.
 - Verification: All 120 tests passed. The isolated Windows dashboard opened Poker from Play, used its cash and tournament routes, dealt a practice hand, calculated equity, and opened both a legacy transcript and a visual replay. The fixture confirmed an existing Life Simulator save stayed untouched. Engine tests checked mode isolation, hidden cards on folds, showdown steps, and exact river ties. All five managed startup files matched the published build.
-- Remaining work: Live taskbar attachment still returns 0x8000FFFF from Explorer in this session.
+- Remaining work: See [Restore native taskbar attachment](#restore-native-taskbar-attachment) for the current taskbar status.
 
 ## Poker tournaments and the living town
 

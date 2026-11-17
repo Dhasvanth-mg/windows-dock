@@ -308,7 +308,7 @@ public partial class DashboardWindow
         new("Assistant", "Lark, Fern, Bolt or Orbit", "AI model provider message research planning coding casual", 0xEAB7, purple, ShowAssistantPicker, "assistant"),
         new("Activity inbox", "Replies, approvals, and limits", "unread status finished quota", 0xEA8F, pink, ShowActivityInbox, "activity"),
         new("Assistant jobs", "Running tasks and saved results", "background delegate coding writing Scribe research", 0xE823, amber, ShowAssistantJobs, "jobs"),
-        new("Calculator", "Calculate, convert, and save results", "calc math percentages units history favorites", 0xE8EF, accent, ShowCalculator, "calculator"),
+        new("Calculator", "Calculate, convert, and save results", "calc math percentages units data bytes bandwidth history favorites", 0xE8EF, accent, ShowCalculator, "calculator"),
         new("Wi-Fi networks", "Signal, saved networks, and connection", "wifi wireless connections", 0xE701, accent, ShowWifiWidget, "wifi"),
         new("Bluetooth devices", "Paired devices and radio controls", "bluetooth pairing headphones", 0xE702, accent, ShowBluetoothWidget, "bluetooth"),
         new("Favorites", "Files, links, workspaces, and shortcuts", "favorites bookmarks pin", 0xE734, accent, ShowFavoritesWidget, "favorites"),
@@ -500,7 +500,7 @@ public partial class DashboardWindow
                 [
                     new(result.Result, result.Detail + " · Enter to copy", "", 0xE8EF, accent, () => CopyCalculation(result, hint)),
                     new("Save calculation", "Add this result to calculator favorites", "", 0xE734, accent, () => SaveCalculation(result, true, hint)),
-                    new("Calculator", "History and favorites", "", 0xE8EF, accent, ShowCalculator)
+                    new("Open in Calculator", "Edit this expression and view history", "", 0xE8EF, accent, () => ShowCalculator(result.Input))
                 ];
             }
             else if (calculationError != null)

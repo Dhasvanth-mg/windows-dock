@@ -11,8 +11,6 @@ internal static class DockCalculator
     private const string Number = @"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?";
     private const RegexOptions Pattern = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
-    private sealed record Unit(string Dimension, string Label, decimal Scale, decimal Offset);
-    private static readonly Dictionary<string, Unit> Units = BuildUnits();
 
     internal static bool IsExplicit(string input) =>
         input.StartsWith('=') || input.Equals("calc", StringComparison.OrdinalIgnoreCase) ||
@@ -32,7 +30,7 @@ internal static class DockCalculator
             return false;
         }
         if (!explicitCalculation && !char.IsDigit(expression[0]) &&
-            !"+-.(".Contains(expression[0]) && !Regex.IsMatch(expression, @"^(solve\b|increase\b|decrease\b|today\b|days between\b|what percentage\b|[a-z][a-z0-9]*\s*\()", Pattern))
+            !"+-−.(".Contains(expression[0]) && !Regex.IsMatch(expression, @"^(convert\b|solve\b|increase\b|decrease\b|today\b|days between\b|what percentage\b|[a-z][a-z0-9]*\s*\()", Pattern))
             return false;
         try
         {
@@ -56,19 +54,12 @@ internal static class DockCalculator
 
     private static (string Result, string Detail) Evaluate(string input, DateOnly today)
     {
-        var conversion = Regex.Match(input, $@"^({Number})\s*([a-z°][a-z° ]*)\s+(?:to|in)\s+([a-z°][a-z° ]*)$", Pattern);
-        if (conversion.Success)
+        if (DockUnits.Convert(input, amount =>
         {
-            var fromName = conversion.Groups[2].Value.Trim();
-            var toName = conversion.Groups[3].Value.Trim();
-            if (!Units.TryGetValue(fromName, out var from) || !Units.TryGetValue(toName, out var to))
-                throw new FormatException("Choose supported units, such as km and mi, °F and °C, or hours and minutes.");
-            if (from.Dimension != to.Dimension)
-                throw new FormatException("These units measure different quantities.");
-            var amount = Decimal(conversion.Groups[1].Value);
-            var value = (amount - from.Offset) * from.Scale / to.Scale + to.Offset;
-            return ($"{Display(value, 12)} {to.Label}", $"{from.Label} to {to.Label}");
-        }
+            var term = new Parser(amount).Read();
+            return term.X == 0 ? term.Value : throw new FormatException("Enter a constant amount to convert.");
+        }) is { } conversion)
+            return conversion;
 
         var comparison = Regex.Match(input, $@"^(?:what percentage is )?({Number})\s+(?:as a percentage of|of)\s+({Number})\??$", Pattern);
         if (comparison.Success)
@@ -352,40 +343,4 @@ internal static class DockCalculator
     private static decimal Finite(double value) => double.IsFinite(value)
         ? Decimal(value.ToString("G15", Invariant)) : throw new FormatException("The result is undefined for these inputs.");
 
-    private static Dictionary<string, Unit> BuildUnits()
-    {
-        var units = new Dictionary<string, Unit>(StringComparer.OrdinalIgnoreCase);
-        Add("length", "mm", .001m, 0, "millimeter millimeters");
-        Add("length", "cm", .01m, 0, "centimeter centimeters");
-        Add("length", "m", 1, 0, "meter meters metre metres");
-        Add("length", "km", 1000, 0, "kilometer kilometers kilometre kilometres");
-        Add("length", "in", .0254m, 0, "inch inches");
-        Add("length", "ft", .3048m, 0, "foot feet");
-        Add("length", "yd", .9144m, 0, "yard yards");
-        Add("length", "mi", 1609.344m, 0, "mile miles");
-        Add("volume", "mL", .001m, 0, "milliliter milliliters");
-        Add("volume", "L", 1, 0, "liter liters litre litres");
-        Add("volume", "US cups", .2365882365m, 0, "cup cups");
-        Add("volume", "US gal", 3.785411784m, 0, "gal gallon gallons");
-        Add("mass", "g", 1, 0, "gram grams");
-        Add("mass", "kg", 1000, 0, "kilogram kilograms");
-        Add("mass", "lb", 453.59237m, 0, "lbs pound pounds");
-        Add("mass", "oz", 28.349523125m, 0, "ounce ounces");
-        Add("time", "s", 1, 0, "sec second seconds");
-        Add("time", "min", 60, 0, "minute minutes");
-        Add("time", "h", 3600, 0, "hr hrs hour hours");
-        Add("time", "days", 86400, 0, "d day");
-        Add("temperature", "°C", 1, 0, "c celsius");
-        Add("temperature", "°F", 5m / 9, 32, "f fahrenheit");
-        Add("temperature", "K", 1, 273.15m, "kelvin");
-        return units;
-
-        void Add(string dimension, string label, decimal scale, decimal offset, string aliases)
-        {
-            var unit = new Unit(dimension, label, scale, offset);
-            units[label] = unit;
-            foreach (var alias in aliases.Split(' '))
-                units[alias] = unit;
-        }
-    }
 }
