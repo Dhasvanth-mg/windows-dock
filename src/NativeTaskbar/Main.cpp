@@ -65,9 +65,10 @@ namespace
             : ready(CreateEventW(nullptr, TRUE, FALSE, AppearanceName(pid, attempt, L"Ready").c_str())),
               restored(CreateEventW(nullptr, TRUE, FALSE, AppearanceName(pid, attempt, L"Restored").c_str())),
               blocked(CreateEventW(nullptr, TRUE, FALSE, AppearanceName(pid, attempt, L"Blocked").c_str())),
+              embedded(CreateEventW(nullptr, TRUE, FALSE, AppearanceName(pid, attempt, L"Embedded").c_str())),
               stop(CreateEventW(nullptr, TRUE, FALSE, AppearanceName(pid, attempt, L"Stop").c_str()))
         {
-            if (!ready || !restored || !blocked || !stop)
+            if (!ready || !restored || !blocked || !embedded || !stop)
                 winrt::throw_last_error();
         }
 
@@ -80,7 +81,7 @@ namespace
             return WaitForMultipleObjects(ARRAYSIZE(signals), signals, FALSE, 3000) < WAIT_OBJECT_0 + ARRAYSIZE(signals);
         }
 
-        winrt::handle ready, restored, blocked, stop;
+        winrt::handle ready, restored, blocked, embedded, stop;
     };
 
     bool SupportsAppearance(std::filesystem::path const& module)
@@ -300,6 +301,8 @@ namespace
         tray.Watch(grid.get());
         if (trayMode)
             std::wprintf(L"Windows Dock tray mode active. Controller PID: %lu.\n", controllerPid);
+        else if (appearance && WaitForSingleObject(appearance->embedded.get(), 0) == WAIT_OBJECT_0)
+            std::wprintf(L"Native taskbar controls active in Explorer %lu. Controller PID: %lu.\n", explorerPid, controllerPid);
         else
             std::wprintf(L"Native dock active in Explorer %lu. Controller PID: %lu.\n", explorerPid, controllerPid);
         tray.Explain();

@@ -6,8 +6,10 @@
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 #include <winrt/base.h>
 #undef GetCurrentTime
+#include "EmbeddedTaskbar.h"
 #include "TaskbarStyle.h"
 #include <winrt/Windows.System.h>
+#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 
 #include <atomic>
@@ -43,10 +45,11 @@ namespace
             ready(OpenEventW(EVENT_MODIFY_STATE, FALSE, AppearanceName(controllerPid, attempt, L"Ready").c_str())),
             restored(OpenEventW(EVENT_MODIFY_STATE, FALSE, AppearanceName(controllerPid, attempt, L"Restored").c_str())),
             blocked(OpenEventW(EVENT_MODIFY_STATE, FALSE, AppearanceName(controllerPid, attempt, L"Blocked").c_str())),
+            embeddedReady(OpenEventW(EVENT_MODIFY_STATE, FALSE, AppearanceName(controllerPid, attempt, L"Embedded").c_str())),
             stop(OpenEventW(SYNCHRONIZE, FALSE, AppearanceName(controllerPid, attempt, L"Stop").c_str())),
             dashboard(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Dashboard").c_str()))
         {
-            if (!controller || !ready || !restored || !blocked || !stop || !dashboard)
+            if (!controller || !ready || !restored || !blocked || !embeddedReady || !stop || !dashboard)
                 winrt::throw_hresult(E_ACCESSDENIED);
         }
 
@@ -63,6 +66,8 @@ namespace
                     std::to_wstring(initialElements.load()) + L" element callbacks.";
                 DockLog(L"explorer", message.c_str(), static_cast<unsigned long>(result));
             }
+            if (result == E_UNEXPECTED && initialElements == 0)
+                QueueEmbeddedControls();
 
             const HANDLE signals[] = {stop.get(), controller.get()};
             WaitForMultipleObjects(ARRAYSIZE(signals), signals, FALSE, INFINITE);
@@ -79,6 +84,7 @@ namespace
             if (!queue || !queue.TryEnqueue([self = get_strong()]
                 {
                     self->style.reset();
+                    self->embedded.reset();
                     SetEvent(self->restored.get());
                 }))
                 SetEvent(restored.get());
@@ -127,6 +133,56 @@ namespace
             winrt::check_hresult(diagnostics->GetIInspectableFromHandle(handle,
                 reinterpret_cast<::IInspectable**>(winrt::put_abi(object))));
             return object.try_as<T>();
+        }
+
+        void QueueEmbeddedControls() noexcept
+        {
+            try
+            {
+                winrt::Windows::Foundation::IInspectable raw{nullptr};
+                winrt::check_hresult(diagnostics->GetDispatcher(
+                    reinterpret_cast<::IInspectable**>(winrt::put_abi(raw))));
+                using winrt::Windows::UI::Core::CoreDispatcher;
+                using winrt::Windows::UI::Core::CoreDispatcherPriority;
+                const auto dispatcher = raw.try_as<CoreDispatcher>();
+                if (!dispatcher)
+                    return;
+                dispatcher.RunAsync(CoreDispatcherPriority::Normal, [self = get_strong()]
+                {
+                    if (self->IsStopping() || self->style || self->embedded)
+                        return;
+                    try
+                    {
+                        const auto taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+                        const auto queue = DispatcherQueue::GetForCurrentThread();
+                        if (!taskbar || !queue || GetWindowThreadProcessId(taskbar, nullptr) != GetCurrentThreadId())
+                            return;
+                        {
+                            std::scoped_lock guard(self->taskbarLock);
+                            if (self->IsStopping())
+                                return;
+                            self->taskbarQueue = queue;
+                        }
+                        auto controls = std::make_unique<EmbeddedTaskbar>();
+                        if (!controls->Attach(taskbar, self->dashboard, self->controllerPid) || self->IsStopping())
+                            return;
+                        self->embedded = std::move(controls);
+                        SetEvent(self->embeddedReady.get());
+                        SetEvent(self->ready.get());
+                        DockLog(L"explorer", L"Dock controls attached directly to the native taskbar.");
+                    }
+                    catch (...)
+                    {
+                        DockLog(L"explorer", L"Could not attach the dock controls to the native taskbar.",
+                            static_cast<unsigned long>(winrt::to_hresult().value));
+                    }
+                });
+            }
+            catch (...)
+            {
+                DockLog(L"explorer", L"The native taskbar dispatcher was unavailable.",
+                    static_cast<unsigned long>(winrt::to_hresult().value));
+            }
         }
 
         void QueueStyle(InstanceHandle handle)
@@ -190,6 +246,8 @@ namespace
                     next->Apply(apps, tray);
                     if (self->IsStopping())
                         return;
+                    self->embedded.reset();
+                    ResetEvent(self->embeddedReady.get());
                     self->style = std::move(next);
                     self->styledRoot = winrt::make_weak(grid);
                     SetEvent(self->ready.get());
@@ -270,7 +328,7 @@ namespace
 
         winrt::com_ptr<IXamlDiagnostics> diagnostics;
         DWORD controllerPid;
-        winrt::handle controller, ready, restored, blocked, stop, dashboard;
+        winrt::handle controller, ready, restored, blocked, embeddedReady, stop, dashboard;
         std::atomic<bool> stopping{};
         std::atomic<bool> countInitialElements{true};
         std::atomic<unsigned> initialElements{};
@@ -279,6 +337,7 @@ namespace
         std::map<DWORD, winrt::weak_ref<DesktopWindowXamlSource>> primarySources;
         winrt::weak_ref<controls::Grid> styledRoot;
         std::unique_ptr<TaskbarStyle> style;
+        std::unique_ptr<EmbeddedTaskbar> embedded;
     };
 
     class Site : public winrt::implements<Site, IObjectWithSite>

@@ -116,7 +116,22 @@ void TaskbarStyle::Apply(FrameworkElement const& apps, FrameworkElement const& t
     }
 }
 
-void TaskbarStyle::AddChrome()
+void TaskbarStyle::ApplyEmbeddedControls()
+{
+    root.RequestedTheme(xaml::ElementTheme::Dark);
+    AddGlass(0, 1);
+    AddDashboardButton();
+    Grid::SetColumn(dockControls, 0);
+    AddAgentGrid();
+}
+
+void TaskbarStyle::ShowEmbeddedAgents(bool visible)
+{
+    if (agentTray)
+        agentTray.Visibility(visible ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
+}
+
+void TaskbarStyle::AddGlass(int column, int span)
 {
     chrome = controls::Border();
     chrome.Name(L"WindowsDockGlass");
@@ -139,11 +154,15 @@ void TaskbarStyle::AddChrome()
     shade.CornerRadius({14, 14, 14, 14});
     chrome.Child(shade);
 
-    Grid::SetColumn(chrome, 1);
-    Grid::SetColumnSpan(chrome, 3);
+    Grid::SetColumn(chrome, column);
+    Grid::SetColumnSpan(chrome, span);
     controls::Canvas::SetZIndex(chrome, -1);
     root.Children().InsertAt(0, chrome);
+}
 
+void TaskbarStyle::AddChrome()
+{
+    AddGlass(1, 3);
     divider = controls::Border();
     divider.Width(1);
     divider.Height(20);

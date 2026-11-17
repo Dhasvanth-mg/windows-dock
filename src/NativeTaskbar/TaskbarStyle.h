@@ -22,6 +22,8 @@ public:
     ~TaskbarStyle();
 
     void Apply(xaml::FrameworkElement const& apps, xaml::FrameworkElement const& tray);
+    void ApplyEmbeddedControls();
+    void ShowEmbeddedAgents(bool visible);
     void StyleIndicator(xaml::FrameworkElement const& indicator);
     void Restore() noexcept;
 
@@ -48,6 +50,7 @@ private:
     void Remember(xaml::DependencyObject const& object, xaml::DependencyProperty const& property);
     void FitApps();
     void AddChrome();
+    void AddGlass(int column, int span);
     void AddDashboardButton();
     void SetDashboardIcon();
     void AddAgentGrid();
