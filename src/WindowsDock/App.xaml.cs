@@ -31,6 +31,7 @@ public partial class App : Application
                     Shutdown();
                     return;
                 }
+                dashboardSession.OnHide(controller, () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.PutAway()));
                 ShutdownMode = ShutdownMode.OnExplicitShutdown;
             }
             var trayMode = e.Args.Length == 3 && e.Args[2] == "--tray";

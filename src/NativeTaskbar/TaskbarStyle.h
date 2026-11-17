@@ -61,7 +61,7 @@ private:
 
     controls::Grid root;
     HANDLE dashboard;
-    winrt::handle launcherEvent, warmEvent;
+    winrt::handle launcherEvent, warmEvent, hideEvent, panelVisibleEvent;
     winrt::handle agentEvent, completionEvent, agentMapping;
     std::unique_ptr<AgentGridState, UnmapAgentGrid> agentState;
     AgentGridTile visibleTiles[4]{};

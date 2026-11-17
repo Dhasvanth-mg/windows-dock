@@ -288,7 +288,7 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <StackPanel x:Name="DashboardHeader" Margin="0,0,0,16">
+            <StackPanel x:Name="DashboardHeader" Margin="0,0,0,16" Background="Transparent">
                 <DockPanel MinHeight="38">
                     <StackPanel x:Name="HeaderActions" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"/>
                     <WrapPanel x:Name="DashboardTabs" VerticalAlignment="Center" Margin="-9,0,0,0"

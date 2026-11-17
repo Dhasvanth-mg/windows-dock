@@ -83,6 +83,7 @@ public partial class DashboardWindow : Window
         HeaderActions.Children.Add(IconButton(0xE711, "Close dashboard", Dismiss));
 
         Shell.RenderTransform = revealOffset;
+        AttachHeaderSwipe();
         ConfigureWidth();
         SourceInitialized += (_, _) =>
         {
@@ -99,6 +100,7 @@ public partial class DashboardWindow : Window
             if (!IsVisible)
             {
                 codingWorkspace?.Suspend();
+                SaveViewState();
                 ReportDockVisibility(false);
                 ticker.Stop();
                 agentTicker.Stop();
@@ -223,6 +225,13 @@ public partial class DashboardWindow : Window
     }
 
     private void Dismiss() => CloseDockSurface();
+
+    /// <summary>A pull down on the taskbar button: put away whatever of the dock is showing.</summary>
+    internal void PutAway()
+    {
+        if (IsVisible || agentPanel != null)
+            Dismiss();
+    }
 
     internal void ShowDockPanelHost()
     {
@@ -441,9 +450,11 @@ public partial class DashboardWindow : Window
                 RenderHomeFavorites();
             return;
         }
+        var scroll = RestoreViewState();
         compactAgents = false;
         ConfigureWidth();
         ShowPage(lastDashboardPage);
+        RestoreScroll(scroll);
     }
 
     private static Forms.Screen TaskbarScreen()

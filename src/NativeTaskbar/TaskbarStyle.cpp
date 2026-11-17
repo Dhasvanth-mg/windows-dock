@@ -32,6 +32,8 @@ TaskbarStyle::TaskbarStyle(Grid const& root, winrt::handle const& dashboard, DWO
     : root(root), dashboard(dashboard.get()),
       launcherEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"OpenLauncher").c_str())),
       warmEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"WarmDashboard").c_str())),
+      hideEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"HidePanel").c_str())),
+      panelVisibleEvent(OpenEventW(SYNCHRONIZE, FALSE, SessionName(controllerPid, L"PanelVisible").c_str())),
       agentEvent(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(controllerPid, L"Agent").c_str())),
       completionEvent(OpenEventW(SYNCHRONIZE, FALSE, SessionName(controllerPid, L"AgentCompletion").c_str())),
       agentMapping(OpenFileMappingW(FILE_MAP_WRITE, FALSE, SessionName(controllerPid, L"AgentGrid").c_str())),
@@ -220,7 +222,7 @@ void TaskbarStyle::AddDashboardButton()
     dashboardButton.VerticalAlignment(xaml::VerticalAlignment::Center);
     dashboardButton.RequestedTheme(xaml::ElementTheme::Dark);
     xaml::Automation::AutomationProperties::SetName(dashboardButton, L"Open Windows Dock");
-    xaml::Automation::AutomationProperties::SetHelpText(dashboardButton, L"Click or pull up to show Dashboard");
+    xaml::Automation::AutomationProperties::SetHelpText(dashboardButton, L"Click or pull up to show Dashboard. Pull down to put it away.");
     SetDashboardIcon();
     dashboardButton.Click([event = dashboard](auto&&, auto&&) { SetEvent(event); });
     if (launcherEvent)
@@ -232,10 +234,12 @@ void TaskbarStyle::AddDashboardButton()
         {
             winrt::handle signal;
             winrt::handle warm;
+            winrt::handle hide;
+            winrt::handle visible;
             uint32_t pointer{};
             winrt::Windows::Foundation::Point start{};
         };
-        const auto pullState = std::make_shared<PullState>(PullState{std::move(launcherEvent), std::move(warmEvent)});
+        const auto pullState = std::make_shared<PullState>(PullState{std::move(launcherEvent), std::move(warmEvent), std::move(hideEvent), std::move(panelVisibleEvent)});
         dashboardButton.AddHandler(xaml::UIElement::PointerPressedEvent(), winrt::box_value(PointerEventHandler(
             [pullState](auto const& sender, PointerRoutedEventArgs const& args)
             {
@@ -260,12 +264,17 @@ void TaskbarStyle::AddDashboardButton()
                     return;
                 const auto position = point.Position();
                 const auto pull = pullState->start.Y - position.Y;
-                if (pull < 16 || pull < std::abs(position.X - pullState->start.X) * 1.35)
+                const auto sideways = std::abs(position.X - pullState->start.X) * 1.35;
+                // The button sits at the bottom of the screen, so a pull down has only a few pixels before the edge.
+                // It puts the dashboard away, and only does anything while the dashboard is showing.
+                const bool showing = pullState->visible && WaitForSingleObject(pullState->visible.get(), 0) == WAIT_OBJECT_0;
+                const bool down = pullState->hide && showing && -pull >= 8 && -pull >= sideways;
+                if (!down && (pull < 16 || pull < sideways))
                     return;
                 pullState->pointer = 0;
                 args.Handled(true);
                 button.ReleasePointerCapture(pointer);
-                SetEvent(pullState->signal.get());
+                SetEvent(down ? pullState->hide.get() : pullState->signal.get());
             })), true);
         const auto reset = winrt::box_value(PointerEventHandler([pullState](auto&&, PointerRoutedEventArgs const& args)
         {

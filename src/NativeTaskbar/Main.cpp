@@ -43,6 +43,7 @@ namespace
               showCommand(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"ShowCommand").c_str())),
               panelVisible(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"PanelVisible").c_str())),
               visibilityChanged(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"PanelVisibilityChanged").c_str())),
+              hidePanel(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"HidePanel").c_str())),
               completion(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"AgentCompletion").c_str())),
               agentGrid(CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(AgentGridState),
                   SessionName(pid, L"AgentGrid").c_str()))
@@ -50,13 +51,13 @@ namespace
             if (!stop || !warmDashboard ||
                 !dashboard || !showDashboard || !agent || !showAgent ||
                 !assistant || !showAssistant || !openLauncher || !showLauncher || !command || !showCommand ||
-                !panelVisible || !visibilityChanged || !completion || !agentGrid)
+                !panelVisible || !visibilityChanged || !hidePanel || !completion || !agentGrid)
                 winrt::throw_last_error();
         }
 
         winrt::handle stop, warmDashboard;
         winrt::handle dashboard, showDashboard, agent, showAgent, assistant, showAssistant;
-        winrt::handle openLauncher, showLauncher, command, showCommand, panelVisible, visibilityChanged, completion, agentGrid;
+        winrt::handle openLauncher, showLauncher, command, showCommand, panelVisible, visibilityChanged, hidePanel, completion, agentGrid;
     };
 
     struct Appearance

@@ -341,4 +341,34 @@ public partial class DashboardWindow
         transform.BeginAnimation(property, new DoubleAnimation(direction == 0 ? vertical : 26 * direction, 0,
             TimeSpan.FromMilliseconds(165)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
     }
+
+    // Pulling the header down puts the dashboard away, the same as pulling down on the taskbar button. It works from
+    // anywhere on the header, tabs included; a press that moves less than a short pull is still an ordinary click.
+    private void AttachHeaderSwipe()
+    {
+        Point? origin = null;
+        DashboardHeader.PreviewMouseLeftButtonDown += (_, e) => origin = e.GetPosition(this);
+        DashboardHeader.PreviewMouseLeftButtonUp += (_, _) => origin = null;
+        DashboardHeader.MouseLeave += (_, _) =>
+        {
+            if (Mouse.LeftButton != MouseButtonState.Pressed)
+                origin = null;
+        };
+        PreviewMouseMove += (_, e) =>
+        {
+            if (origin is not { } start || e.LeftButton != MouseButtonState.Pressed)
+            {
+                origin = null;
+                return;
+            }
+            var position = e.GetPosition(this);
+            var down = position.Y - start.Y;
+            if (down < 36 || down < Math.Abs(position.X - start.X) * 1.35)
+                return;
+            origin = null;
+            Mouse.Capture(null);
+            if (DashboardReceivesGestures)
+                Dismiss();
+        };
+    }
 }

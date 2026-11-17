@@ -15,6 +15,8 @@ internal sealed class NativeDashboardSession : IDisposable
     private readonly RegisteredWaitHandle? assistantSubscription;
     private readonly RegisteredWaitHandle? launcherSubscription;
     private readonly RegisteredWaitHandle? commandSubscription;
+    private EventWaitHandle? hideSignal;
+    private RegisteredWaitHandle? hideSubscription;
     private readonly Process controller;
     private readonly Action exit;
 
@@ -81,10 +83,26 @@ internal sealed class NativeDashboardSession : IDisposable
         }
     }
 
+    /// <summary>
+    /// Listens for a pull down on the taskbar button. The taskbar only signals while the panel is showing, and any
+    /// signal left over from before this dashboard started is cleared first.
+    /// </summary>
+    internal void OnHide(int pid, Action hide)
+    {
+        if (hideSignal != null || !EventWaitHandle.TryOpenExisting(AgentGrid.SessionObject(pid, "HidePanel"), out var opened))
+            return;
+        hideSignal = opened;
+        hideSignal.Reset();
+        hideSubscription = ThreadPool.RegisterWaitForSingleObject(hideSignal, (_, _) => hide(),
+            null, Timeout.Infinite, executeOnlyOnce: false);
+    }
+
     private void ControllerExited(object? sender, EventArgs e) => exit();
 
     public void Dispose()
     {
+        hideSubscription?.Unregister(null);
+        hideSignal?.Dispose();
         subscription.Unregister(null);
         agentSubscription?.Unregister(null);
         assistantSubscription?.Unregister(null);
