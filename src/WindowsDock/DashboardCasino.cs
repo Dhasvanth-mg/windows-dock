@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Shapes;
 
 namespace WindowsDock;
 
@@ -23,13 +24,14 @@ public partial class DashboardWindow
         (CasinoGame.Keno, "Four-spot keno", "Choose four numbers from 1 to 80. Match at least two in a 20-number draw.", []),
         (CasinoGame.VideoPoker, "Video poker", "9/6 Jacks or Better. Hold any cards, then draw once.", []),
         (CasinoGame.ThreeCardPoker, "Three-card poker", "Ante only. Playing requires a matching wager. Dealer qualifies with queen high.", []),
-        (CasinoGame.Holdem, "Texas Hold’em", "Heads-up fixed stake against the house. Reveal the flop, turn and river, then compare best five-card hands.", [])
+        (CasinoGame.Holdem, "Texas Hold’em", "Heads-up no-limit with alternating blinds and four betting streets. Both seats start each hand with the same effective stack, up to 100 big blinds.", [])
     ];
 
     private void ShowCasino()
     {
         var (window, content, _) = CreateDockPanel("Casino", "Offline · fictional chips", 690, 0xE7FC, accent,
             height: 615, expandable: true);
+        var sectionStyle = (Style)window.FindResource("AppletSection");
         var wallet = DockCasino.Load();
         var table = new ComboBox { ItemsSource = CasinoTables.Select(item => item.Name), SelectedIndex = 0 };
         AutomationProperties.SetName(table, "Casino game");
@@ -48,20 +50,38 @@ public partial class DashboardWindow
         var choices = new WrapPanel();
         var setup = new StackPanel();
         var ledger = new StackPanel();
-        var surface = Card(new StackPanel { Children = { balance, outcome, choices, status } });
+        var hand = new StackPanel();
+        var statistics = new StackPanel();
+        var statsSection = new Expander { Header = "Statistics and milestones", Content = statistics, Style = sectionStyle };
+        var historySection = new Expander { Header = "Play history and hand replays", Content = ledger, Style = sectionStyle };
+        var surface = Card(new StackPanel { Children = { balance, outcome, hand, choices, status } });
         surface.Margin = new Thickness(0, 0, 0, 10);
         var theme = Field("Casino theme", 80);
         theme.Text = wallet.Theme;
         var instant = new CheckBox { Content = "Reveal results instantly", IsChecked = wallet.Instant };
         var start = ActionButton("Place bet");
         var rapid = QuietButton("Play 5 spins");
+        var rival = new ComboBox { ItemsSource = DockCasino.Opponents, DisplayMemberPath = nameof(HoldemOpponent.Name),
+            SelectedItem = DockCasino.Opponent(wallet.Opponent) };
+        AutomationProperties.SetName(rival, "Poker opponent");
+        var rivalNote = Text("", 12, AssistantSecondary);
+        rivalNote.TextWrapping = TextWrapping.Wrap;
+        var match = new StackPanel { Children = { Labeled("Opponent", rival), rivalNote } };
+        var stakeLabel = Text("Stake", 12, AssistantSecondary);
+        setup.Children.Add(match);
         content.Children.Add(surface);
         content.Children.Add(Labeled("Table", table));
         setup.Children.Add(rules);
-        setup.Children.Add(Labeled("Stake", stake));
-        var amounts = new WrapPanel();
+        setup.Children.Add(stakeLabel);
+        setup.Children.Add(stake);
+        var amounts = new WrapPanel { Margin = new Thickness(0, 5, 0, 5) };
         foreach (var chips in new[] { "5", "10", "25", "50", "100" })
-            amounts.Children.Add(QuietButton(chips, () => stake.Text = chips));
+        {
+            var chip = ActionButton(chips, () => stake.Text = chips);
+            chip.Margin = new Thickness(0, 0, 5, 3);
+            chip.Padding = new Thickness(8, 3, 8, 3);
+            amounts.Children.Add(chip);
+        }
         setup.Children.Add(amounts);
         var bet = Labeled("Bet", option);
         var numbers = Labeled("Number · four comma-separated for keno", number);
@@ -83,7 +103,7 @@ public partial class DashboardWindow
         setup.Children.Add(numbers);
         setup.Children.Add(new WrapPanel { Children = { start, rapid } });
         content.Children.Add(setup);
-        var configuration = new Expander { Header = "Table settings and daily chips" };
+        var configuration = new Expander { Header = "Table settings and daily chips", Style = sectionStyle };
         var startingChips = Field("Starting chips", 6);
         startingChips.Text = "1000";
         var themes = new WrapPanel();
@@ -95,15 +115,23 @@ public partial class DashboardWindow
             QuietButton("Claim daily 100 chips", () => Commit(current => DockCasino.Claim(current, DateOnly.FromDateTime(DateTime.Now)))),
             Labeled("New starting balance", startingChips), QuietButton("Reset fictional wallet", () =>
             {
-                if (MessageBox.Show(window, "Reset the balance and clear your play history?", "Casino",
+                if (MessageBox.Show(window, "Reset the balance and clear your play history and statistics?", "Casino",
                         MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) == MessageBoxResult.Yes)
                     Commit(current => DockCasino.Reset(current, ParseChips(startingChips.Text)));
             })
         } };
         content.Children.Add(configuration);
-        content.Children.Add(new Expander { Header = "Play history", Content = ledger });
+        content.Children.Add(statsSection);
+        content.Children.Add(historySection);
+        statsSection.Expanded += (_, args) => { if (ReferenceEquals(args.OriginalSource, statsSection)) RenderStatistics(); };
+        historySection.Expanded += (_, args) => { if (ReferenceEquals(args.OriginalSource, historySection)) RenderHistory(); };
         table.SelectionChanged += (_, _) => Configure();
         option.SelectionChanged += (_, _) => ShowNumbers();
+        rival.SelectionChanged += (_, _) =>
+        {
+            if (rival.SelectedItem is HoldemOpponent selected && selected.Id != wallet.Opponent)
+                Commit(current => current with { Opponent = selected.Id });
+        };
         instant.Checked += (_, _) => SaveSpeed(true);
         instant.Unchecked += (_, _) => SaveSpeed(false);
         Render();
@@ -139,6 +167,12 @@ public partial class DashboardWindow
             option.SelectedItem = current.Bets.FirstOrDefault(item => item == savedBet) ?? current.Bets.FirstOrDefault();
             bet.Visibility = current.Bets.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             rapid.Visibility = current.Game == CasinoGame.Slots ? Visibility.Visible : Visibility.Collapsed;
+            match.Visibility = current.Game == CasinoGame.Holdem ? Visibility.Visible : Visibility.Collapsed;
+            stakeLabel.Text = current.Game == CasinoGame.Holdem ? "Big blind" : "Stake";
+            start.Content = current.Game == CasinoGame.Holdem ? "Deal hand" : "Place bet";
+            AutomationProperties.SetName(start, (string)start.Content);
+            if (rival.SelectedItem is HoldemOpponent selected)
+                rivalNote.Text = $"{selected.Style} · {selected.Profile}";
             ShowNumbers();
         }
 
@@ -151,9 +185,10 @@ public partial class DashboardWindow
             if (!SystemParameters.HighContrast)
                 surface.Background = new SolidColorBrush(CasinoFelt(wallet.Theme));
             choices.Children.Clear();
+            hand.Children.Clear();
             var round = wallet.Round;
             table.IsEnabled = round == null;
-            setup.IsEnabled = round == null;
+            setup.Visibility = round == null ? Visibility.Visible : Visibility.Collapsed;
             if (round != null)
             {
                 table.SelectedIndex = Array.FindIndex(CasinoTables, item => item.Game == round.Game);
@@ -177,6 +212,7 @@ public partial class DashboardWindow
                     CasinoGame.Blackjack => new[] { "Hit", "Stand" },
                     CasinoGame.Craps => ["Roll"],
                     CasinoGame.VideoPoker => ["Draw"],
+                    CasinoGame.Holdem when round.Poker != null => [],
                     CasinoGame.Holdem => [round.Point switch { 0 => "Flop", 3 => "Turn", 4 => "River", _ => "Showdown" }, "Fold"],
                     _ => ["Play", "Fold"]
                 };
@@ -184,21 +220,146 @@ public partial class DashboardWindow
                     choices.Children.Add(ActionButton(action, () => Commit(current =>
                         DockCasino.Continue(current, action, holds.Select((hold, index) => (hold, index))
                             .Where(item => item.hold.IsChecked == true).Select(item => item.index).ToHashSet()))));
+                if (round.Poker is { } poker)
+                    RenderPoker(round, poker);
             }
             else
-                outcome.Text = wallet.History.FirstOrDefault()?.Detail ?? "Choose a table and place a bet.";
+                outcome.Text = wallet.History.FirstOrDefault() is { } result
+                    ? $"{result.Detail} · {result.Returned - result.Stake:+#,0.##;-#,0.##;0} chips"
+                    : "Choose a table and place a bet.";
             Configure();
+            if (statsSection.IsExpanded)
+                RenderStatistics();
+            if (historySection.IsExpanded)
+                RenderHistory();
+        }
+
+        void RenderPoker(CasinoRound round, HoldemHand poker)
+        {
+            var opponent = DockCasino.Opponent(poker.Rival).Name;
+            var limits = DockCasino.HoldemLimits(poker);
+            outcome.Text = $"{DockCasino.HoldemStreet(round.Point)} · {poker.Pot:#,0} chips in pot";
+            var details = Text($"{opponent} · {poker.Stack - poker.PlayerTotal:#,0} behind · " +
+                (poker.PlayerOnButton ? "You have the button" : $"{opponent} has the button"), 11, AssistantSecondary);
+            hand.Children.Add(details);
+            var cards = new WrapPanel { Margin = new Thickness(0, 8, 0, 5) };
+            foreach (var card in round.Cards)
+                cards.Children.Add(PokerCard(card));
+            for (var index = 0; index < 5; index++)
+                cards.Children.Add(PokerCard(index < round.Point ? round.Deck[index] : null, index == 0));
+            hand.Children.Add(cards);
+            foreach (var move in poker.Moves.TakeLast(2))
+                hand.Children.Add(Text(move, 12, AssistantSecondary));
+            var call = limits.Call == 0 ? "Check" : $"Call {limits.Call:#,0}";
+            AddMove(ActionButton(call, () => Move(limits.Call == 0 ? HoldemMove.Check : HoldemMove.Call)));
+            if (limits.CanRaise)
+            {
+                var raise = Field("Poker bet or raise total", 9);
+                raise.Width = 80;
+                raise.Text = limits.MinimumTo.ToString(CultureInfo.CurrentCulture);
+                AddMove(raise);
+                AddMove(ActionButton(poker.RivalStreet == 0 ? "Bet" : "Raise to", () =>
+                    Commit(current => DockCasino.ContinueHoldem(current, poker.Id, poker.Turn, HoldemMove.Raise, ParseChips(raise.Text)))));
+                AddMove(QuietButton("All in", () => Move(HoldemMove.Raise, limits.MaximumTo)));
+            }
+            AddMove(QuietButton("Fold", () => Move(HoldemMove.Fold)));
+
+            void AddMove(FrameworkElement control)
+            {
+                control.Margin = new Thickness(0, 5, 9, 4);
+                choices.Children.Add(control);
+            }
+
+            void Move(HoldemMove move, decimal amount = 0) =>
+                Commit(current => DockCasino.ContinueHoldem(current, poker.Id, poker.Turn, move, amount));
+        }
+
+        void RenderStatistics()
+        {
+            statistics.Children.Clear();
+            var stats = CasinoStats.For(wallet);
+            var overall = stats.Overall;
+            statistics.Children.Add(Text($"{overall.Rounds} rounds · {overall.Wins} wins · {overall.Losses} losses · {overall.Pushes} pushes", 13, AssistantInk, true));
+            statistics.Children.Add(Text($"{overall.Net:+#,0.##;-#,0.##;0} chips net · {stats.BestWin:#,0.##} best win · {stats.LongestStreak} longest win streak",
+                12, AssistantSecondary));
+            var recent = wallet.History.Where(entry => entry.Game != null).Take(120).Reverse().ToArray();
+            if (recent.Length > 0)
+            {
+                statistics.Children.Add(Text($"Net chips over the last {recent.Length} rounds", 11, AssistantSecondary));
+                statistics.Children.Add(CasinoProgressPlot(recent));
+            }
+            var milestones = stats.Milestones();
+            if (milestones.Length > 0)
+                statistics.Children.Add(Text(string.Join(" · ", milestones), 12, AssistantInk));
+            foreach (var game in CasinoTables.Where(item => stats.Tables.ContainsKey(item.Game)))
+            {
+                var record = stats.Tables[game.Game];
+                statistics.Children.Add(Text($"{game.Name} · {record.Wins}W {record.Losses}L {record.Pushes}P · {record.Net:+#,0.##;-#,0.##;0} chips",
+                    12, AssistantSecondary));
+            }
+            foreach (var opponent in DockCasino.Opponents)
+                if (stats.Rivals.TryGetValue(opponent.Id, out var record))
+                    statistics.Children.Add(Text($"vs {opponent.Name} · {record.Wins}W {record.Losses}L {record.Pushes}P", 12, AssistantSecondary));
+        }
+
+        void RenderHistory()
+        {
             ledger.Children.Clear();
-            var rounds = wallet.History.Where(entry => entry.Game != null).ToArray();
-            ledger.Children.Add(Text($"Last {rounds.Length} rounds · {rounds.Count(entry => entry.Returned > entry.Stake)} wins · " +
-                $"{rounds.Sum(entry => entry.Returned - entry.Stake):+#,0.##;-#,0.##;0} chips net", 12, AssistantSecondary));
-            foreach (var entry in wallet.History.Take(20))
+            foreach (var entry in wallet.History.Take(30))
             {
                 var row = Text($"{entry.Detail}   {entry.Returned - entry.Stake:+#,0.##;-#,0.##;0}", 12, AssistantInk);
                 row.TextWrapping = TextWrapping.Wrap;
-                ledger.Children.Add(row);
+                if (entry.Moves is not { Length: > 0 } moves)
+                {
+                    ledger.Children.Add(row);
+                    continue;
+                }
+                var replay = new Expander { Header = row, Style = sectionStyle };
+                replay.Expanded += (_, _) =>
+                {
+                    if (replay.Content != null)
+                        return;
+                    var transcript = new StackPanel();
+                    foreach (var move in moves)
+                        transcript.Children.Add(new TextBlock { Text = move, FontSize = 12, Foreground = AssistantSecondary, TextWrapping = TextWrapping.Wrap });
+                    replay.Content = transcript;
+                };
+                ledger.Children.Add(replay);
             }
         }
+    }
+
+    private Border PokerCard(int? card, bool firstBoardCard = false)
+    {
+        var shown = card != null;
+        var red = card is { } value && value / 13 is 1 or 3;
+        var ink = SystemParameters.HighContrast ? SystemColors.WindowTextBrush :
+            shown ? new SolidColorBrush(red ? Color.FromRgb(142, 36, 46) : Color.FromRgb(30, 27, 25)) : AssistantSecondary;
+        var mark = Text(card is { } rank ? DockCasino.Card(rank) : "·", 16, ink, true);
+        mark.HorizontalAlignment = HorizontalAlignment.Center;
+        mark.VerticalAlignment = VerticalAlignment.Center;
+        return new Border { Width = 39, Height = 50, CornerRadius = new CornerRadius(4),
+            Margin = new Thickness(firstBoardCard ? 13 : 0, 0, 4, 0), Child = mark, BorderThickness = new Thickness(1),
+            BorderBrush = AssistantRule, Background = SystemParameters.HighContrast ? SystemColors.WindowBrush :
+                shown ? new SolidColorBrush(Color.FromRgb(248, 242, 228)) : assistantInset };
+    }
+
+    private FrameworkElement CasinoProgressPlot(CasinoEntry[] rounds)
+    {
+        const double width = 560;
+        const double height = 81;
+        var values = new decimal[rounds.Length + 1];
+        for (var index = 0; index < rounds.Length; index++)
+            values[index + 1] = values[index] + rounds[index].Returned - rounds[index].Stake;
+        var ceiling = values.Max();
+        var range = Math.Max(1, ceiling - values.Min());
+        double Y(decimal net) => 6 + (height - 12) * (double)((ceiling - net) / range);
+        var graph = new Canvas { Width = width, Height = height, Background = assistantInset };
+        graph.Children.Add(new Line { X1 = 8, X2 = width - 8, Y1 = Y(0), Y2 = Y(0), Stroke = AssistantRule });
+        graph.Children.Add(new Polyline { Stroke = AccentFill, StrokeThickness = 2,
+            Points = new PointCollection(values.Select((total, index) => new Point(8 + (width - 16) * index / rounds.Length, Y(total)))) });
+        return new Viewbox { Child = graph, Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly,
+            HorizontalAlignment = HorizontalAlignment.Left };
     }
 
     private static decimal ParseChips(string text) => decimal.TryParse(text, NumberStyles.Integer, CultureInfo.CurrentCulture, out var chips)

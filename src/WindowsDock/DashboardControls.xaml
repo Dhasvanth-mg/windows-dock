@@ -16,6 +16,55 @@
     <SolidColorBrush x:Key="SegmentSelected" Color="#34312E"/>
     <SolidColorBrush x:Key="TextSecondary" Color="#A69F95"/>
 
+    <Style x:Key="AppletSection" TargetType="Expander">
+        <Setter Property="Foreground" Value="{DynamicResource InputText}"/>
+        <Setter Property="Margin" Value="0,5,0,1"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <StackPanel>
+                        <ToggleButton x:Name="HeaderSite" Content="{TemplateBinding Header}"
+                                      ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                      Foreground="{TemplateBinding Foreground}"
+                                      IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="HeaderFrame" Background="{DynamicResource InputSurface}"
+                                            BorderBrush="{DynamicResource InputStroke}" BorderThickness="1"
+                                            CornerRadius="6" Padding="9,6">
+                                        <DockPanel>
+                                            <Path x:Name="Chevron" DockPanel.Dock="Right" Data="M 1,1 L 5,5 L 9,1"
+                                                  Stroke="{DynamicResource InputMark}" StrokeThickness="1.25"
+                                                  Margin="10,0,1,0" VerticalAlignment="Center"/>
+                                            <ContentPresenter VerticalAlignment="Center"/>
+                                        </DockPanel>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="Chevron" Property="Data" Value="M 1,5 L 5,1 L 9,5"/>
+                                        </Trigger>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="HeaderFrame" Property="BorderBrush" Value="{DynamicResource TextSecondary}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <Setter TargetName="HeaderFrame" Property="BorderBrush" Value="{DynamicResource InputFocus}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <ContentPresenter x:Name="Body" ContentSource="Content" Margin="0,6,0,1" Visibility="Collapsed"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="True">
+                            <Setter TargetName="Body" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="DockScrollThumb" TargetType="Thumb">
         <Setter Property="Background" Value="#4DF2EEE7"/>
         <Setter Property="Template">

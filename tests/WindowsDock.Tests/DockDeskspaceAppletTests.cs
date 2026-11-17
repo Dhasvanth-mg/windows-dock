@@ -56,7 +56,9 @@ public sealed class DockDeskspaceAppletTests : IDisposable
     [Fact]
     public void CasinoResumesARoundAndSettlesOnce()
     {
-        DockCasino.Update(wallet => DockCasino.Begin(wallet, CasinoGame.Holdem, 40, "", ""));
+        // A hand saved before betting was added keeps the original entry and reveal flow.
+        DockCasino.Update(wallet => wallet with { Balance = 960,
+            Round = new(CasinoGame.Holdem, 40, [11, 25], [1, 17], [2, 20, 32, 47, 38]) });
         Assert.Equal(960, DockCasino.Load().Balance);
         Assert.Throws<ArgumentException>(() => DockCasino.Update(wallet => DockCasino.Continue(wallet, "Showdown", new HashSet<int>())));
         foreach (var action in new[] { "Flop", "Turn", "River", "Showdown" })

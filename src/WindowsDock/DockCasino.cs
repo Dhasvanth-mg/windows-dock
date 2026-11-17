@@ -4,12 +4,15 @@ using System.Security.Cryptography;
 namespace WindowsDock;
 
 internal enum CasinoGame { Blackjack, EuropeanRoulette, AmericanRoulette, Baccarat, Slots, Craps, SicBo, Keno, VideoPoker, ThreeCardPoker, Holdem }
-internal sealed record CasinoRound(CasinoGame Game, decimal Stake, int[] Cards, int[] Dealer, int[] Deck, int Point = 0);
-internal sealed record CasinoEntry(CasinoGame? Game, decimal Stake, decimal Returned, decimal Balance, string Detail, DateTimeOffset At);
+internal sealed record CasinoRound(CasinoGame Game, decimal Stake, int[] Cards, int[] Dealer, int[] Deck, int Point = 0,
+    HoldemHand? Poker = null);
+internal sealed record CasinoEntry(CasinoGame? Game, decimal Stake, decimal Returned, decimal Balance, string Detail, DateTimeOffset At,
+    HoldemRival? Rival = null, string[]? Moves = null);
 internal sealed record CasinoWallet(decimal Balance, decimal Initial, DateOnly? Bonus, CasinoEntry[] History,
-    CasinoRound? Round = null, string Theme = "Midnight", bool Instant = false);
+    CasinoRound? Round = null, string Theme = "Midnight", bool Instant = false, bool NextPokerButton = true,
+    CasinoStats? Statistics = null, HoldemRival Opponent = HoldemRival.Mara);
 
-internal static class DockCasino
+internal static partial class DockCasino
 {
     private const string Store = "casino.json";
     private static CasinoWallet Default => new(1000, 1000, null, []);
@@ -24,14 +27,15 @@ internal static class DockCasino
             throw new ArgumentException("Finish the active round first.");
         if (stake < 1 || stake > 1000 || stake != decimal.Truncate(stake) || stake > wallet.Balance)
             throw new ArgumentException("Choose a whole-chip stake from 1 to 1,000 within your balance.");
+        if (game == CasinoGame.Holdem)
+            return BeginHoldem(wallet, stake, Shuffle(52));
         wallet = wallet with { Balance = wallet.Balance - stake };
-        var deck = game is CasinoGame.Blackjack or CasinoGame.VideoPoker or CasinoGame.ThreeCardPoker or CasinoGame.Holdem ? Shuffle(52) : [];
+        var deck = game is CasinoGame.Blackjack or CasinoGame.VideoPoker or CasinoGame.ThreeCardPoker ? Shuffle(52) : [];
         return game switch
         {
             CasinoGame.Blackjack => Blackjack(wallet, new(game, stake, [deck[0], deck[2]], [deck[1], deck[3]], deck[4..])),
             CasinoGame.VideoPoker => wallet with { Round = new(game, stake, deck[..5], [], deck[5..]) },
             CasinoGame.ThreeCardPoker => wallet with { Round = new(game, stake, deck[..3], deck[3..6], []) },
-            CasinoGame.Holdem => wallet with { Round = new(game, stake, [deck[0], deck[2]], [deck[1], deck[3]], [deck[5], deck[6], deck[7], deck[9], deck[11]]) },
             CasinoGame.Craps => RollCraps(wallet, new(game, stake, [], [], [])),
             CasinoGame.EuropeanRoulette or CasinoGame.AmericanRoulette => Spin(wallet, game, stake, option, number),
             CasinoGame.Baccarat => RunBaccarat(wallet, stake, option),
@@ -53,11 +57,11 @@ internal static class DockCasino
             (CasinoGame.ThreeCardPoker, "Fold") => Settle(wallet, round.Game, round.Stake, 0, "Folded · " + Hand(round.Cards)),
             (CasinoGame.ThreeCardPoker, "Play") => PlayThreeCard(wallet, round),
             (CasinoGame.Craps, "Roll") => RollCraps(wallet, round),
-            (CasinoGame.Holdem, "Flop") when round.Point == 0 => wallet with { Round = round with { Point = 3 } },
-            (CasinoGame.Holdem, "Turn") when round.Point == 3 => wallet with { Round = round with { Point = 4 } },
-            (CasinoGame.Holdem, "River") when round.Point == 4 => wallet with { Round = round with { Point = 5 } },
-            (CasinoGame.Holdem, "Showdown") when round.Point == 5 => Showdown(wallet, round),
-            (CasinoGame.Holdem, "Fold") => Settle(wallet, round.Game, round.Stake, 0, "Folded · " + Hand(round.Cards)),
+            (CasinoGame.Holdem, "Flop") when round.Poker == null && round.Point == 0 => wallet with { Round = round with { Point = 3 } },
+            (CasinoGame.Holdem, "Turn") when round.Poker == null && round.Point == 3 => wallet with { Round = round with { Point = 4 } },
+            (CasinoGame.Holdem, "River") when round.Poker == null && round.Point == 4 => wallet with { Round = round with { Point = 5 } },
+            (CasinoGame.Holdem, "Showdown") when round.Poker == null && round.Point == 5 => Showdown(wallet, round),
+            (CasinoGame.Holdem, "Fold") when round.Poker == null => Settle(wallet, round.Game, round.Stake, 0, "Folded · " + Hand(round.Cards)),
             _ => throw new ArgumentException("That action is unavailable for this round.")
         };
     }
@@ -73,14 +77,16 @@ internal static class DockCasino
     {
         if (wallet.Round != null || amount < 100 || amount > 100_000 || decimal.Truncate(amount) != amount)
             throw new ArgumentException("Finish any open round and enter a starting balance from 100 to 100,000 chips.");
-        return wallet with { Initial = amount, Balance = amount, History = [] };
+        return wallet with { Initial = amount, Balance = amount, History = [], Statistics = null };
     }
 
-    private static CasinoWallet Settle(CasinoWallet wallet, CasinoGame? game, decimal stake, decimal payout, string result)
+    private static CasinoWallet Settle(CasinoWallet wallet, CasinoGame? game, decimal stake, decimal payout, string result,
+        HoldemRival? rival = null, string[]? moves = null)
     {
         var balance = wallet.Balance + payout;
-        var entry = new CasinoEntry(game, stake, payout, balance, result, DateTimeOffset.Now);
-        return wallet with { Balance = balance, Round = null, History = [entry, .. wallet.History.Take(499)] };
+        var entry = new CasinoEntry(game, stake, payout, balance, result, DateTimeOffset.Now, rival, moves);
+        return wallet with { Balance = balance, Round = null, History = [entry, .. wallet.History.Take(499)],
+            Statistics = CasinoStats.For(wallet).Record(entry) };
     }
 
     internal static int BlackjackValue(IEnumerable<int> cards)
