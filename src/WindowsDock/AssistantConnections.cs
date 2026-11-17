@@ -20,7 +20,9 @@ internal sealed record AssistantContext(string Source, string Text)
 
 internal static partial class AssistantConnections
 {
-    private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false });
+    private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+    private static readonly HttpClient LoopbackHttp = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, UseProxy = false });
+    private static readonly McpClientOptions ClientInfo = new() { ClientInfo = new Implementation { Name = "Windows Dock", Version = "1.0" } };
     private static readonly AssistantConnection Exa = new("exa", "Exa web search", "Sends the search terms to Exa.",
         new("https://mcp.exa.ai/mcp?tools=web_search_exa"), "web_search_exa");
     private static readonly AssistantConnection Planner = new("planner", "Dock Planner", "Reads your dock reminders and imported calendar on this PC.",
@@ -45,7 +47,10 @@ internal static partial class AssistantConnections
     internal static AssistantConnection[] Active(string personaId)
     {
         var enabled = Enabled();
-        return For(personaId).Where(connection => enabled.Contains(connection.Id) && IsAvailable(connection)).ToArray();
+        return For(personaId).Where(connection => enabled.Contains(connection.Id) && IsAvailable(connection))
+            .Concat(CustomMcpConnections.For(personaId).Where(connection => connection.Automatic)
+                .Select(connection => new AssistantConnection(connection.Id, connection.Label, "Custom lookup", null, connection.Tool)))
+            .ToArray();
     }
 
     internal static HashSet<string> Enabled() =>
@@ -77,6 +82,8 @@ internal static partial class AssistantConnections
     internal static async Task<AssistantContext> FetchAsync(string personaId, string connectionId, string query,
         CancellationToken cancellation)
     {
+        if (connectionId.StartsWith("mcp-", StringComparison.Ordinal))
+            return await CustomMcpConnections.LookupAsync(personaId, connectionId, query, cancellation).ConfigureAwait(false);
         var connection = For(personaId).FirstOrDefault(item => item.Id == connectionId) ??
             throw new ArgumentException("This connection is not assigned to this assistant.");
         if (!Enabled().Contains(connection.Id))
@@ -85,21 +92,30 @@ internal static partial class AssistantConnections
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         timeout.CancelAfter(TimeSpan.FromSeconds(18));
         var token = timeout.Token;
-        await using var client = await McpClient.CreateAsync(Transport(connection),
-            new McpClientOptions { ClientInfo = new Implementation { Name = "Windows Dock", Version = "1.0" } },
-            cancellationToken: token).ConfigureAwait(false);
+        await using var client = await CreateAsync(Transport(connection), token).ConfigureAwait(false);
         var catalog = await client.ListToolsAsync(cancellationToken: token).ConfigureAwait(false);
         if (catalog.All(tool => tool.Name != connection.Tool))
             throw new McpException($"{connection.Label} does not expose the expected read tool.");
-        var result = await client.CallToolAsync(connection.Tool, arguments, cancellationToken: token).ConfigureAwait(false);
+        return await ReadResultAsync(client, connection.Tool, arguments, connection.Label, token).ConfigureAwait(false);
+    }
+
+    internal static Task<McpClient> CreateAsync(IClientTransport transport, CancellationToken token) =>
+        McpClient.CreateAsync(transport, ClientInfo, cancellationToken: token);
+
+    internal static async Task<AssistantContext> ReadResultAsync(McpClient client, string tool,
+        IReadOnlyDictionary<string, object?> arguments, string label, CancellationToken token, string? bearer = null)
+    {
+        var result = await client.CallToolAsync(tool, arguments, cancellationToken: token).ConfigureAwait(false);
         if (result.IsError == true)
-            throw new McpException($"{connection.Label} could not complete this request.");
+            throw new McpException($"{label} could not complete this request.");
         var text = string.Join("\n\n", result.Content.OfType<TextContentBlock>().Select(item => item.Text));
         if (string.IsNullOrWhiteSpace(text) && result.StructuredContent is { } structured)
             text = structured.GetRawText();
         if (string.IsNullOrWhiteSpace(text))
-            throw new McpException($"{connection.Label} returned no readable text.");
-        return new(connection.Label, Limit(text));
+            throw new McpException($"{label} returned no readable text.");
+        if (!string.IsNullOrEmpty(bearer))
+            text = text.Replace(bearer, "[Token removed]", StringComparison.Ordinal);
+        return new(label, Limit(text));
     }
 
     private static IClientTransport Transport(AssistantConnection connection)
@@ -113,21 +129,28 @@ internal static partial class AssistantConnections
                 InheritEnvironmentVariables = false
             });
 
-        var headers = new Dictionary<string, string>();
+        string? token = null;
         if (connection.TokenVariable is { } variable)
         {
-            var token = ReadToken(variable);
+            token = ReadToken(variable);
             if (string.IsNullOrWhiteSpace(token) || token.Any(char.IsWhiteSpace))
                 throw new ArgumentException($"Set {variable} to connect {connection.Label}.");
-            headers["Authorization"] = "Bearer " + token;
         }
+        return HttpTransport(connection.Endpoint, token);
+    }
+
+    internal static IClientTransport HttpTransport(Uri endpoint, string? bearer)
+    {
+        var headers = new Dictionary<string, string>();
+        if (!string.IsNullOrEmpty(bearer))
+            headers["Authorization"] = "Bearer " + bearer;
         return new HttpClientTransport(new HttpClientTransportOptions
         {
-            Endpoint = connection.Endpoint,
+            Endpoint = endpoint,
             TransportMode = HttpTransportMode.StreamableHttp,
             AdditionalHeaders = headers,
             ConnectionTimeout = TimeSpan.FromSeconds(10)
-        }, Http);
+        }, endpoint.IsLoopback ? LoopbackHttp : Http);
     }
 
     private static string? ReadToken(string name)

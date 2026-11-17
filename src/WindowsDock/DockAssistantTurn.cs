@@ -97,7 +97,7 @@ internal static class DockAssistantTurn
                         }
                         else if (tool == "mcp_lookup")
                         {
-                            var id = DockActions.String(root, "source", 32);
+                            var id = DockActions.String(root, "source", 48);
                             var connection = allowed.FirstOrDefault(item => item.Id == id) ??
                                 throw new ArgumentException("That MCP connection is unavailable for this assistant.");
                             progress($"Looking up {connection.Label}…");

@@ -23,6 +23,8 @@ public partial class DashboardWindow
         choices.ItemsSource = connections;
         choices.SelectedIndex = 0;
         content.Children.Add(choices);
+        if (!quick)
+            content.Children.Add(ActionButton("Custom connections", () => ShowCustomMcpConnections(persona)));
         var description = Text("", 11, AssistantSecondary);
         description.Margin = new Thickness(0, 6, 0, 4);
         description.TextWrapping = TextWrapping.Wrap;

@@ -14,10 +14,7 @@ internal static class DockCredentials
     {
         try
         {
-            var data = File.ReadAllBytes(DockData.FilePath(name));
-            var clear = ProtectedData.Unprotect(data, null, DataProtectionScope.CurrentUser);
-            try { return Encoding.UTF8.GetString(clear); }
-            finally { CryptographicOperations.ZeroMemory(clear); }
+            return UnprotectText(File.ReadAllBytes(DockData.FilePath(name)));
         }
         catch (Exception error) when (error is CryptographicException or IOException or UnauthorizedAccessException) { return null; }
     }
@@ -26,12 +23,21 @@ internal static class DockCredentials
 
     internal static void WritePrivateText(string name, string text)
     {
+        var encrypted = ProtectText(text);
+        DockData.Write(name, path => File.WriteAllBytes(path, encrypted));
+    }
+
+    internal static byte[] ProtectText(string text)
+    {
         var clear = Encoding.UTF8.GetBytes(text);
-        try
-        {
-            var protectedKey = ProtectedData.Protect(clear, null, DataProtectionScope.CurrentUser);
-            DockData.Write(name, path => File.WriteAllBytes(path, protectedKey));
-        }
+        try { return ProtectedData.Protect(clear, null, DataProtectionScope.CurrentUser); }
+        finally { CryptographicOperations.ZeroMemory(clear); }
+    }
+
+    internal static string UnprotectText(byte[] encrypted)
+    {
+        var clear = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
+        try { return Encoding.UTF8.GetString(clear); }
         finally { CryptographicOperations.ZeroMemory(clear); }
     }
 

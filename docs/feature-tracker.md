@@ -2,12 +2,14 @@
 
 ## Continue with custom MCP and document retrieval
 
-- Status: In progress.
+- Status: Implemented, tested, and installed.
 - Scope: Add configurable MCP connections for assistant roles, and extend local file search and excerpt sharing.
 - Acceptance criteria: Discover tools from a user-chosen endpoint, save and remove connections, limit availability to the assigned role, and keep credentials local. Extract and search text from indexed PDFs and spreadsheets, and let users review an excerpt before sharing it with an assistant. Verify with isolated fixtures.
 - Retrieval implementation: Index text-based PDFs and cached Excel .xlsx values in the folders the user selected. Updating an existing index detects the extraction upgrade. Search results can be selected, reviewed, redacted, and attached to an assistant's draft.
 - Retrieval verification: Automated tests passed for both document extractors, an upgraded index, and including filenames without absolute paths. An isolated Windows fixture selected an excerpt and attached the edited text to an assistant draft.
-- Remaining work: Complete the final custom MCP fixture and publish the managed update. Native attachment still returns `0x8000FFFF` in the current Explorer session.
+- MCP implementation: Added per-assistant Streamable HTTP connections with encrypted endpoint settings and bearer tokens. Discovery lists tools the server marks read-only. The user can save one tool per connection, provide JSON arguments, preview a result, and attach it to a draft. Automatic lookup is opt-in for tools with one string parameter. The external coding MCP server lists enabled lookup sources and still asks before forwarding an external query.
+- Verification: All 108 tests passed. A local MCP server fixture verified bearer authentication, discovery filtering, role assignment, manual preview and attachment, removal of an echoed credential, automatic lookup, and refusal to call a tool whose read-only flag changed. The x64 publish succeeded and all 11 updated installed files matched the release build.
+- Limitations and remaining work: Custom connections support Streamable HTTP over HTTPS or loopback HTTP with an optional bearer token. OAuth and custom stdio connections remain open. Live third-party accounts and existing external client registrations were not changed or tested. Document extraction is bounded and supports text-based PDFs and cached .xlsx values. OCR and other spreadsheet formats remain open. Native attachment still returns `0x8000FFFF` in the current Explorer session.
 
 ## Continue with workspace restore and installation
 

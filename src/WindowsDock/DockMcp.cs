@@ -33,7 +33,13 @@ internal static class DockMcp
                 McpServerTool.Create(LookupAsync, new McpServerToolCreateOptions
                 {
                     Name = "dock_lookup",
-                    Description = "Read context through the coding role's enabled MCP connections. Sources: learn for Microsoft Learn, github for a PR referenced as owner/repository#123.",
+                    Description = "Read context through an enabled coding-role MCP connection. Use dock_lookup_sources to find its source ID. The user approves each external lookup.",
+                    ReadOnly = true
+                }),
+                McpServerTool.Create(LookupSources, new McpServerToolCreateOptions
+                {
+                    Name = "dock_lookup_sources",
+                    Description = "List enabled lookup source IDs, labels, and tool names for the coding role.",
                     ReadOnly = true
                 })
             ]
@@ -63,13 +69,18 @@ internal static class DockMcp
         }
     }
 
+    private static string LookupSources() => JsonSerializer.Serialize(AssistantConnections.Active("coding")
+        .Select(connection => new { id = connection.Id, label = connection.Label, tool = connection.Tool }));
+
     private static async Task<string> LookupAsync(string source, string query, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        var connection = AssistantConnections.Active("coding").FirstOrDefault(item => item.Id == source) ??
+            throw new McpException("This lookup is unavailable for external coding agents.");
         // A lookup sends text to an outside service and can use the user's GitHub token, so it needs the same
         // desktop approval as a change.
         var shown = query.Length > 200 ? query[..200] + "…" : query;
-        if (!Confirm($"Look up “{shown}” through the {source} connection?\n\nThe text is sent to that service" +
+        if (!Confirm($"Look up “{shown}” through {connection.Label}?\n\nThe text is sent to that service" +
             (source == "github" ? " using your GitHub token." : ".") + "\n\nAllow this lookup?"))
             throw new McpException("The user did not approve the lookup.");
         try { return (await AssistantConnections.FetchAsync("coding", source, query, token)).Text; }

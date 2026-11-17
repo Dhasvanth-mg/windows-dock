@@ -67,7 +67,7 @@ Right-click a favorite and select **Move earlier** or **Move later** to change i
 - **Assistant** opens the four-character picker. Choose **ChatGPT plan** and continue in your browser to authorize eligible plan usage. **Claude API** uses a Claude Console key. Gemini, Grok, and Groq use their own API keys. Configure them in the panel or with `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or `GROQ_API_KEY`. On a usage error, you can switch to Gemini or Grok and resend the draft. Each send shares the current character's recent conversation with the selected provider.
 - **Assistant jobs** shows running tasks and saved results. Open a job to cancel it, copy its result, or save it as Markdown.
 - **Voice memos** records and imports WAV files, plays them back, and searches saved transcripts. An optional transcription request sends the selected memo to Groq after you confirm. You can review the transcript and use it as an Orbit draft.
-- **File search** indexes the folders you select on demand. It searches inside supported text, Markdown, code, and Word files. PDF, spreadsheet, and media results are searchable by filename. The index and excerpts stay on your PC.
+- **File search** indexes the folders you select on demand. It searches inside supported text, code, Word, text-based PDF, and Excel .xlsx files. Older spreadsheets and media are searchable by filename. Use **Update index** to add PDF and Excel contents for already indexed folders. To share excerpts, select up to five results, review or redact the text, and choose an assistant. The excerpts are attached to its draft and leave the PC when you send to a hosted provider.
 
 ### Assistant actions and background jobs
 
@@ -95,7 +95,9 @@ The MCP connection exposes dock status, supported edits, and the coding role's e
 
 In the picker, **Search the web** previews Exa results, **Preview schedule** reads today or seven days from the local planner, **Attach logs** accepts an editable excerpt, and **Idea jar** adds a conversation starter to Orbit’s draft. Search results, schedules, and logs have an attachment preview before you send a message. Use **Copy reply** to put any assistant reply on the clipboard.
 
-Open **MCP connections** inside a character's chat. **Fetch context** runs the selected read and shows a preview. **Attach to draft** adds the selected result to your next explicit send. The dock manages these connections and the model receives only the result you attach. Close the panel to cancel an in-progress read.
+Open **MCP connections** inside a character's chat. **Fetch context** runs the selected read and shows a preview. **Attach to draft** adds that manually fetched result to your next explicit send. Close the panel to cancel an in-progress read.
+
+**Custom connections** adds a Streamable HTTP endpoint to the selected assistant. Enter an HTTPS URL or a local HTTP address and an optional bearer token. Discover tools the server marks read-only, choose one, and save it. Fetch with JSON arguments and preview the result before attaching it. If a tool takes one text argument, you can explicitly allow the assistant to use it during a chat. The app protects the endpoint and token with Windows account encryption. External coding clients can discover enabled coding lookups through the dock's MCP server.
 
 In **Weather**, choose **Use my location** for automatic forecasts, or search for a city. The automatic option requests Windows location access and sends rounded coordinates to Open-Meteo when refreshing the forecast.
 
