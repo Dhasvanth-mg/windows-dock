@@ -1,14 +1,23 @@
 # Feature tracker
 
-## Poker tournaments and the living town
+## Remove Life Simulator and focus Play on poker
 
 - Status: Implemented, verified in an isolated Windows dashboard, and installed.
+- Scope: Remove the Life Simulator applet and its entry points. Give poker a direct home in Play, with cash Hold’em, tournaments, isolated practice, and hand review.
+- Acceptance criteria: The dock no longer exposes or loads Life Simulator. Existing personal save files stay on disk. Poker has a direct entry point. Practice leaves the casino wallet and tournament untouched. Review plays through saved poker hands and keeps previous transcripts readable.
+- Implementation: Removed the Life Simulator, town schedule, relationship graph, and their application routes. Existing local save files stay on disk. Play now has a Poker hub for cash-table Hold’em, tournaments, practice, and hand review. Practice uses separate chips and calculates equity from public information. New cash, tournament, and practice hands save visible boards, actions, and pot amounts for replay. Historical cash records remain readable as transcripts or summaries.
+- Verification: All 120 tests passed. The isolated Windows dashboard opened Poker from Play, used its cash and tournament routes, dealt a practice hand, calculated equity, and opened both a legacy transcript and a visual replay. The fixture confirmed an existing Life Simulator save stayed untouched. Engine tests checked mode isolation, hidden cards on folds, showdown steps, and exact river ties. All five managed startup files matched the published build.
+- Remaining work: Live taskbar attachment still returns 0x8000FFFF from Explorer in this session.
+
+## Poker tournaments and the living town
+
+- Status: Historical release. The tournament remains available. Life Simulator was retired in the update above.
 - Scope: Add a saveable offline Hold’em tournament with a bracket and rising blinds. Give residents individual places to go during the day, business opening hours, and social events that progress when time is skipped.
 - Acceptance criteria: Bracket matches, chip stacks, and open hands survive a restart. Tournament chips stay separate from the casino wallet. Residents have usable schedules, form friendships independently, and attend gatherings. Time skips produce the same events as incremental advances. Older casino wallets and life saves remain readable.
 - Casino implementation: The new Hold’em tournament has a four-player bracket, Quick and Standard structures, automated rival matches, rising blinds, short-stack all-ins, and a persistent record of recent finishes. The player plays two heads-up rounds with fresh stacks at the final. Tournament chips and outcomes live in a separate save.
 - Life Simulator implementation: Residents have individual work shifts, school attendance, and locations during the day. Businesses list opening hours, and groceries follow market hours. Residents form friendships at Saturday gatherings without player input. The player can attend and gain rapport. The schedule viewer shows businesses and resident routines by date. Older saves carry forward the shift already credited on the day of the upgrade.
 - Verification: All 122 tests passed. Engine tests covered bracket advancement, short-stack elimination, wallet isolation, shift timing, legacy saves, and identical town outcomes across split and continuous time skips. The isolated Windows dashboard opened the tournament from Casino, reopened an unfinished hand, and verified the blind and wallet state. It also navigated the town schedule and attended a gathering. All five managed startup files matched the published build.
-- Remaining work: Dealer profiles, additional casino betting variants and artwork, deeper life decisions and schedules, and optional AI dialogue and world generation. Live native taskbar access remains blocked by Explorer error 0x8000FFFF in this session.
+- Remaining work: Dealer profiles, additional casino betting variants, and artwork. Live native taskbar access remains blocked by Explorer error 0x8000FFFF in this session.
 
 ## Continue the Casino and Life Simulator applets
 
@@ -18,7 +27,7 @@
 - Casino implementation: Heads-up Hold’em supports alternating blinds, selectable rivals, four betting streets, minimum raises, all-in runouts, split pots, and uncalled refunds. The original reveal flow remains available for hands saved by the previous version. Hand transcripts, a recent profit chart, milestones, and table and rival totals are available in the panel. Totals survive ledger truncation and recover whatever results an older wallet still has in its ledger.
 - Life Simulator implementation: Character profiles have stable local portraits and recent memories. Contextual choices support helping, meals, dating, partnership, marriage, adoption, and separation. Career applications build on study. Relationship cards open a family and social graph for the selected resident. NPC households can marry independently and newly created children retain both parents.
 - Verification: All 117 automated tests passed. The isolated Windows dashboard checked opponent selection, call and check controls, invalid raise handling, wallet state, the profit chart and replay disclosure, family creation, a career application, and relationship navigation. Engine tests covered old hands, all-in ties, refunds, stale actions, and simulations split across different time skips. All five managed files in the startup installation matched the published release by hash.
-- Remaining work: The tournament and town schedule are recorded above. Persistent dealer profiles, additional wagers and artwork, broader life decisions, and optional AI dialogue and world generation remain open. Explorer still returns 0x8000FFFF, so access through the live taskbar remains unverified.
+- Remaining work: Persistent dealer profiles, additional wagers, and artwork remain open. Life Simulator work was retired with the applet. Explorer still returns 0x8000FFFF, so access through the live taskbar remains unverified.
 
 ## Deskspace, mind maps, and game applets
 

@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 using Xunit;
 
 namespace WindowsDock.Tests;
@@ -92,26 +91,4 @@ public sealed class DockDeskspaceAppletTests : IDisposable
             DockCasino.HoldemScore([0, 1, 2, 3, 4, 20, 50]));
     }
 
-    [Fact]
-    public void TownEvolvesEvenWhenPlayerDoesNothing()
-    {
-        var real = new DateTimeOffset(2026, 11, 17, 0, 0, 0, TimeSpan.Zero);
-        var world = DockLife.Create("Sam", "Riverside", real, fixedSeed: 41);
-        var later = world.At.AddYears(3);
-        var skipped = DockLife.Advance(world, later);
-        var inSteps = DockLife.Advance(DockLife.Advance(world, world.At.AddYears(1).AddHours(4)), later);
-        Assert.Equal(JsonSerializer.Serialize(skipped), JsonSerializer.Serialize(inSteps));
-        Assert.Contains(skipped.People, person => person.Worked >= 500);
-        Assert.Contains(skipped.History, item => item.Text.Contains("changed careers", StringComparison.Ordinal) ||
-            item.Text.Contains("became partners", StringComparison.Ordinal));
-        Assert.Equal(world.Cash, skipped.Cash);
-        var fast = DockLife.SetSpeed(world, 10, real);
-        Assert.Equal(fast.At.AddMinutes(10), DockLife.Tick(fast, real.AddMinutes(1)).At);
-        var study = DockLife.Act(skipped, "study", null);
-        var shift = DockLife.Act(study, "work", null);
-        Assert.Equal(skipped.At.AddHours(11), shift.At);
-        Assert.Equal(skipped.Cash + 57, shift.Cash);
-        DockLife.SaveNew(shift);
-        Assert.Equal(shift.Cash, Assert.Single(DockLife.Load()).Cash);
-    }
 }

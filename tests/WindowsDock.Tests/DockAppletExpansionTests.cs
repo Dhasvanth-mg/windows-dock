@@ -88,35 +88,6 @@ public sealed class DockAppletExpansionTests : IDisposable
         Assert.Contains("Table regular", statistics.Milestones());
     }
 
-    [Fact]
-    public void LifeChoicesCreatePersistentFamilyLinksAndMemories()
-    {
-        var real = new DateTimeOffset(2026, 11, 17, 0, 0, 0, TimeSpan.Zero);
-        var world = DockLife.Create("Sam", "Riverside", real, fixedSeed: 41);
-        var guest = world.People[0];
-        world = world with { People = [guest] };
-        Assert.DoesNotContain(DockLife.SocialChoices(world, guest), item => item.Command == "date");
-        Assert.Throws<ArgumentException>(() => DockLife.Act(world with { Location = "Market District" }, "talk", guest.Id));
-        foreach (var action in new[] { "help", "help", "date", "date", "become partners", "date", "marry", "adopt" })
-            world = DockLife.Act(world, action, guest.Id);
-        Assert.True(world.Married);
-        Assert.Equal(64, world.Cash);
-        Assert.Equal(2, world.At.Hour);
-        var child = world.People.Single(person => person.Id != guest.Id);
-        Assert.Contains(DockLife.Relationships(world, world.Id), item => item.Id == guest.Id && item.Kind == "Spouse");
-        Assert.Contains(DockLife.Relationships(world, guest.Id), item => item.Id == child.Id && item.Kind == "Child");
-        Assert.Equal(2, DockLife.Relationships(world, child.Id).Count(item => item.Kind == "Parent"));
-        Assert.Contains(world.People.Single(person => person.Id == guest.Id).Memories!, item => item.Text.Contains("got married"));
-        DockLife.SaveNew(world);
-        var saved = Assert.Single(DockLife.Load());
-        Assert.Equal(child.Id, saved.People.Single(person => person.Id != guest.Id).Id);
-        Assert.Equal(guest.Id, saved.Partner);
-        var broken = DockLife.Act(saved, "break up", guest.Id);
-        Assert.Null(broken.Partner);
-        Assert.False(broken.Married);
-        Assert.Contains(DockLife.Relationships(broken, broken.Id), item => item.Id == child.Id && item.Kind == "Child");
-    }
-
     private static CasinoWallet Play(HoldemMove move)
     {
         var state = DockCasino.Load().Round!.Poker!;

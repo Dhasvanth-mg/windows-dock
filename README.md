@@ -84,11 +84,9 @@ Open **Desk → Deskspace** or find it in Widgets. Each named space keeps select
 
 Choose **Hold’em tournament** in Casino for a four-player bracket with two heads-up rounds. Quick and Standard formats use different starting stacks and blind intervals. The other semifinal runs locally using the same poker engine. Each new round starts with fresh stacks. The tournament resumes from the saved hand, tracks finishes, and uses its own tournament chips.
 
-**Play → Life simulator** keeps separate local worlds. Adjust the clock speed or jump ahead and read the timeline to see changes in residents’ jobs, families, and lives. Study to qualify for a career. Select a resident and visit their district to talk, help, share a meal, or pursue a relationship as rapport grows. Profiles keep recent memories and show a persistent portrait. Open **My relationships** or **Selected person's relationships** and select a portrait to trace family and social connections. A running save catches up to elapsed time when reopened.
+Open **Play → Poker** to jump to cash Hold’em, Tournament, Practice, or Hand review. Practice uses a separate bankroll. Its equity calculator uses your hole cards and the visible board against random opposing cards. It samples runouts before the river and checks every opposing combination on the river. Hand review steps through the pot, board, and actions of newly completed hands from all three modes. Older hands remain readable as transcripts or summaries.
 
-Open **Town schedule** to look up a resident’s shift or school day and check when businesses open. Profiles show where residents are during the current hour. Saturday gatherings let residents build friendships independently, and you can join once per gathering if you’re in the right district. Groceries are available during market hours.
-
-Use the fullscreen button or **F11** in either game, People network, or project canvas to expand and return to the popup.
+Use the fullscreen button or **F11** in a game panel, Hand review, the People network, or a project canvas to expand and return to the popup.
 
 ### Assistant actions and background jobs
 
