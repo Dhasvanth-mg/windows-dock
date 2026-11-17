@@ -10,8 +10,6 @@ using System.Windows.Threading;
 
 namespace WindowsDock;
 
-// Play: two small games for the minute a build takes. A timer only exists while a round is actually running, and it
-// stops the moment the page is left or the dock is hidden.
 public partial class DashboardWindow
 {
     private const string ScoresFile = "games.json";
@@ -26,6 +24,9 @@ public partial class DashboardWindow
         best.VerticalAlignment = VerticalAlignment.Center;
         DockPanel.SetDock(best, Dock.Right);
         bar.Children.Add(best);
+        var applets = new WrapPanel { Children = { QuietButton("Casino", ShowCasino), QuietButton("Life simulator", ShowLifeSimulator) } };
+        DockPanel.SetDock(applets, Dock.Right);
+        bar.Children.Add(applets);
         var stage = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch,
             VerticalContentAlignment = VerticalAlignment.Stretch, Focusable = false };
         bar.Children.Add(Segmented("Game", ["Token snake", "Copycat"], playGame, index =>

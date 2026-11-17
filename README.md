@@ -71,6 +71,21 @@ Right-click a favorite and select **Move earlier** or **Move later** to change i
 
 File Library accepts uploads up to 32 MB each. Document extraction indexes up to 300 PDF pages, 24 worksheets, or 250,000 extracted characters. Images use the Windows OCR languages installed on the device and a bundled model for common object tags. The database encrypts filenames, contents, and analysis at rest and stores keyed hashes for search terms. Windows protects the key under the signed-in account. Software running as that account has access to the Windows decryption API.
 
+### Deskspace
+
+Open **Desk → Deskspace** or find it in Widgets. Each named space keeps selected Windows windows, HTTPS links, sticky notes, and voice memos together. Restore reopens saved links and places matching windows. Sticky notes and voice memos are linked to their existing entries.
+
+- **People networks** link contacts with named relationships. Use the directory to save an email address, phone number, website, notes, and a chosen or pasted photo. Each network can also keep its own notes about a contact.
+- **Project canvases** hold sketch strokes, sticky notes, text boxes, shapes, stickers, images, charts, tables, and connectors. Paste a copied image, plain text, or spreadsheet cells. Select an item to recolor it, resize it from its corner, or connect it to another item. Scroll to zoom and right-drag to pan.
+
+### Play
+
+**Play → Casino** keeps a local fictional chip wallet and round history. Play blackjack, both roulette wheels, baccarat, slots, pass-line craps, sic bo, four-spot keno, video poker, three-card poker, or fixed-stake heads-up Texas Hold’em. The game panel lists each table’s rules and supported wagers. Use the settings to set starting chips, apply a table palette, or skip the result animation.
+
+**Play → Life simulator** keeps separate local worlds. Adjust the clock speed or jump ahead and read the timeline to see changes in residents’ jobs, families, and lives. Work, study, shop, travel, or talk to a resident from the directory. When a running save is reopened, the town catches up to the elapsed time. Pause a save to keep it at its current date.
+
+Use the fullscreen button or **F11** in either game, People network, or project canvas to expand and return to the popup.
+
 ### Assistant actions and background jobs
 
 Any of the four dock assistants can look up dock state, change volume or output, manage reminders and focus timers, switch radios, change startup settings, and arrange widgets. Review the exact proposed changes in chat and select **Apply changes**. The chat can use its enabled role-specific MCP connections when a lookup is useful. Codex CLI and Claude Code CLI are also available as chat providers with their local sign-in.

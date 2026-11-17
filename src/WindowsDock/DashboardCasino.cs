@@ -1,0 +1,219 @@
+using System.Globalization;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls;
+using System.Windows.Media;
+
+namespace WindowsDock;
+
+public partial class DashboardWindow
+{
+    private static readonly (CasinoGame Game, string Name, string Rules, string[] Bets)[] CasinoTables =
+    [
+        (CasinoGame.Blackjack, "Blackjack", "Hit or stand. Dealer stands on soft 17. Blackjack pays 3:2.", []),
+        (CasinoGame.EuropeanRoulette, "European roulette", "Single zero. A straight number pays 35:1.", ["Red", "Black", "Even", "Odd", "Number"]),
+        (CasinoGame.AmericanRoulette, "American roulette", "Double zero. A straight number pays 35:1.", ["Red", "Black", "Even", "Odd", "Number"]),
+        (CasinoGame.Baccarat, "Baccarat", "Eight decks. Banker wins have a 5% commission. Tie pays 8:1.", ["Player", "Banker", "Tie"]),
+        (CasinoGame.Slots, "Three-reel slots", "Match all three symbols to win. Different symbols carry different prizes.", []),
+        (CasinoGame.Craps, "Craps", "Pass line only. Roll again to make your point before a seven.", []),
+        (CasinoGame.SicBo, "Sic bo", "Big or small pays 1:1 and loses on a triple. Any triple pays 24:1.", ["Small", "Big", "Any triple"]),
+        (CasinoGame.Keno, "Four-spot keno", "Choose four numbers from 1 to 80. Match at least two in a 20-number draw.", []),
+        (CasinoGame.VideoPoker, "Video poker", "9/6 Jacks or Better. Hold any cards, then draw once.", []),
+        (CasinoGame.ThreeCardPoker, "Three-card poker", "Ante only. Playing requires a matching wager. Dealer qualifies with queen high.", []),
+        (CasinoGame.Holdem, "Texas Hold’em", "Heads-up fixed stake against the house. Reveal the flop, turn and river, then compare best five-card hands.", [])
+    ];
+
+    private void ShowCasino()
+    {
+        var (window, content, _) = CreateDockPanel("Casino", "Offline · fictional chips", 690, 0xE7FC, accent,
+            height: 615, expandable: true);
+        var wallet = DockCasino.Load();
+        var table = new ComboBox { ItemsSource = CasinoTables.Select(item => item.Name), SelectedIndex = 0 };
+        AutomationProperties.SetName(table, "Casino game");
+        var stake = Field("Chips to wager", 6);
+        stake.Text = "10";
+        var option = new ComboBox();
+        AutomationProperties.SetName(option, "Casino bet");
+        var number = Field("Bet numbers", 40);
+        var rules = Text("", 12, AssistantSecondary);
+        rules.TextWrapping = TextWrapping.Wrap;
+        var balance = Text("", 22, AssistantInk, strong: true);
+        var outcome = Text("", 15, AssistantInk, strong: true);
+        outcome.TextWrapping = TextWrapping.Wrap;
+        var status = Text("", 12, AssistantSecondary);
+        status.TextWrapping = TextWrapping.Wrap;
+        var choices = new WrapPanel();
+        var setup = new StackPanel();
+        var ledger = new StackPanel();
+        var surface = Card(new StackPanel { Children = { balance, outcome, choices, status } });
+        surface.Margin = new Thickness(0, 0, 0, 10);
+        var theme = Field("Casino theme", 80);
+        theme.Text = wallet.Theme;
+        var instant = new CheckBox { Content = "Reveal results instantly", IsChecked = wallet.Instant };
+        var start = ActionButton("Place bet");
+        var rapid = QuietButton("Play 5 spins");
+        content.Children.Add(surface);
+        content.Children.Add(Labeled("Table", table));
+        setup.Children.Add(rules);
+        setup.Children.Add(Labeled("Stake", stake));
+        var amounts = new WrapPanel();
+        foreach (var chips in new[] { "5", "10", "25", "50", "100" })
+            amounts.Children.Add(QuietButton(chips, () => stake.Text = chips));
+        setup.Children.Add(amounts);
+        var bet = Labeled("Bet", option);
+        var numbers = Labeled("Number · four comma-separated for keno", number);
+        start.Click += (_, _) =>
+        {
+            var selected = CasinoTables[table.SelectedIndex];
+            Commit(current => DockCasino.Begin(current, selected.Game, ParseChips(stake.Text), option.SelectedItem as string ?? "", number.Text));
+        };
+        rapid.Click += (_, _) => Commit(current =>
+        {
+            var amount = ParseChips(stake.Text);
+            if (amount < 1 || current.Balance < amount * 5)
+                throw new ArgumentException("Keep enough chips to cover all five spins.");
+            for (var spin = 0; spin < 5; spin++)
+                current = DockCasino.Begin(current, CasinoGame.Slots, amount, "", "");
+            return current;
+        });
+        setup.Children.Add(bet);
+        setup.Children.Add(numbers);
+        setup.Children.Add(new WrapPanel { Children = { start, rapid } });
+        content.Children.Add(setup);
+        var configuration = new Expander { Header = "Table settings and daily chips" };
+        var startingChips = Field("Starting chips", 6);
+        startingChips.Text = "1000";
+        var themes = new WrapPanel();
+        foreach (var preset in new[] { "Midnight", "Las Vegas", "Monte Carlo", "Neon", "Medieval" })
+            themes.Children.Add(QuietButton(preset, () => { theme.Text = preset; SaveTheme(); }));
+        configuration.Content = new StackPanel { Children =
+        {
+            themes, Labeled("Table theme name", theme), QuietButton("Apply theme", SaveTheme), instant,
+            QuietButton("Claim daily 100 chips", () => Commit(current => DockCasino.Claim(current, DateOnly.FromDateTime(DateTime.Now)))),
+            Labeled("New starting balance", startingChips), QuietButton("Reset fictional wallet", () =>
+            {
+                if (MessageBox.Show(window, "Reset the balance and clear your play history?", "Casino",
+                        MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) == MessageBoxResult.Yes)
+                    Commit(current => DockCasino.Reset(current, ParseChips(startingChips.Text)));
+            })
+        } };
+        content.Children.Add(configuration);
+        content.Children.Add(new Expander { Header = "Play history", Content = ledger });
+        table.SelectionChanged += (_, _) => Configure();
+        option.SelectionChanged += (_, _) => ShowNumbers();
+        instant.Checked += (_, _) => SaveSpeed(true);
+        instant.Unchecked += (_, _) => SaveSpeed(false);
+        Render();
+        window.Show();
+
+        void SaveTheme() => Commit(current => current with { Theme = DockDeskspaces.Label(theme.Text) });
+        void SaveSpeed(bool value) => Commit(current => current with { Instant = value });
+
+        void Commit(Func<CasinoWallet, CasinoWallet> change)
+        {
+            try
+            {
+                var previous = wallet.History.FirstOrDefault();
+                wallet = DockCasino.Update(change);
+                status.Text = "";
+                Render();
+                if (!wallet.Instant && !Equals(previous, wallet.History.FirstOrDefault()) && !SystemParameters.HighContrast)
+                    outcome.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(.25, 1,
+                        new Duration(TimeSpan.FromMilliseconds(220))));
+            }
+            catch (Exception error) when (error is ArgumentException or IOException or UnauthorizedAccessException)
+            {
+                status.Text = error.Message;
+            }
+        }
+
+        void Configure()
+        {
+            var current = CasinoTables[table.SelectedIndex];
+            var savedBet = option.SelectedItem as string;
+            rules.Text = current.Rules;
+            option.ItemsSource = current.Bets;
+            option.SelectedItem = current.Bets.FirstOrDefault(item => item == savedBet) ?? current.Bets.FirstOrDefault();
+            bet.Visibility = current.Bets.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            rapid.Visibility = current.Game == CasinoGame.Slots ? Visibility.Visible : Visibility.Collapsed;
+            ShowNumbers();
+        }
+
+        void ShowNumbers() => numbers.Visibility = CasinoTables[table.SelectedIndex].Game == CasinoGame.Keno ||
+            option.SelectedItem as string == "Number" ? Visibility.Visible : Visibility.Collapsed;
+
+        void Render()
+        {
+            balance.Text = $"{wallet.Balance:#,0.##} chips";
+            if (!SystemParameters.HighContrast)
+                surface.Background = new SolidColorBrush(CasinoFelt(wallet.Theme));
+            choices.Children.Clear();
+            var round = wallet.Round;
+            table.IsEnabled = round == null;
+            setup.IsEnabled = round == null;
+            if (round != null)
+            {
+                table.SelectedIndex = Array.FindIndex(CasinoTables, item => item.Game == round.Game);
+                outcome.Text = round.Game switch
+                {
+                    CasinoGame.Blackjack => $"You  {DockCasino.Hand(round.Cards)}  ({DockCasino.BlackjackValue(round.Cards)}) · Dealer  {DockCasino.Card(round.Dealer[0])} ▪",
+                    CasinoGame.Craps => $"Point is {round.Point} · {round.Stake:#,0} at stake",
+                    CasinoGame.Holdem => $"You  {DockCasino.Hand(round.Cards)} · Board  {DockCasino.Hand(round.Deck.Take(round.Point))}",
+                    _ => DockCasino.Hand(round.Cards)
+                };
+                var holds = new List<CheckBox>();
+                if (round.Game == CasinoGame.VideoPoker)
+                    foreach (var card in round.Cards)
+                    {
+                        var hold = new CheckBox { Content = "Hold " + DockCasino.Card(card), Margin = new Thickness(5) };
+                        holds.Add(hold);
+                        choices.Children.Add(hold);
+                    }
+                var actions = round.Game switch
+                {
+                    CasinoGame.Blackjack => new[] { "Hit", "Stand" },
+                    CasinoGame.Craps => ["Roll"],
+                    CasinoGame.VideoPoker => ["Draw"],
+                    CasinoGame.Holdem => [round.Point switch { 0 => "Flop", 3 => "Turn", 4 => "River", _ => "Showdown" }, "Fold"],
+                    _ => ["Play", "Fold"]
+                };
+                foreach (var action in actions)
+                    choices.Children.Add(ActionButton(action, () => Commit(current =>
+                        DockCasino.Continue(current, action, holds.Select((hold, index) => (hold, index))
+                            .Where(item => item.hold.IsChecked == true).Select(item => item.index).ToHashSet()))));
+            }
+            else
+                outcome.Text = wallet.History.FirstOrDefault()?.Detail ?? "Choose a table and place a bet.";
+            Configure();
+            ledger.Children.Clear();
+            var rounds = wallet.History.Where(entry => entry.Game != null).ToArray();
+            ledger.Children.Add(Text($"Last {rounds.Length} rounds · {rounds.Count(entry => entry.Returned > entry.Stake)} wins · " +
+                $"{rounds.Sum(entry => entry.Returned - entry.Stake):+#,0.##;-#,0.##;0} chips net", 12, AssistantSecondary));
+            foreach (var entry in wallet.History.Take(20))
+            {
+                var row = Text($"{entry.Detail}   {entry.Returned - entry.Stake:+#,0.##;-#,0.##;0}", 12, AssistantInk);
+                row.TextWrapping = TextWrapping.Wrap;
+                ledger.Children.Add(row);
+            }
+        }
+    }
+
+    private static decimal ParseChips(string text) => decimal.TryParse(text, NumberStyles.Integer, CultureInfo.CurrentCulture, out var chips)
+        ? chips : throw new ArgumentException("Enter a whole number of chips.");
+
+    private static Color CasinoFelt(string theme) => theme switch
+    {
+        "Midnight" => Color.FromRgb(22, 26, 34),
+        "Las Vegas" => Color.FromRgb(56, 30, 27),
+        "Monte Carlo" => Color.FromRgb(22, 47, 40),
+        "Neon" => Color.FromRgb(42, 27, 57),
+        "Medieval" => Color.FromRgb(43, 37, 23),
+        _ => CustomFelt(SHA256.HashData(Encoding.UTF8.GetBytes(theme)))
+    };
+
+    private static Color CustomFelt(byte[] hash) =>
+        Color.FromRgb((byte)(18 + hash[0] % 35), (byte)(18 + hash[1] % 35), (byte)(18 + hash[2] % 35));
+}

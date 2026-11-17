@@ -1,5 +1,22 @@
 # Feature tracker
 
+## Deskspace, mind maps, and game applets
+
+- Status: Deskspace and playable versions of both applets are implemented, tested in an isolated dashboard, and installed. The advanced game specification remains open.
+- Scope: Build named Deskspaces that save windows, web links, sticky notes, voice memos, and two kinds of boards. Build an offline casino and life simulator as separate applets.
+- Acceptance criteria: Deskspaces persist saved items and offer restore for chosen windows and pages. Both board types persist edits independently. Casino outcomes follow local rules and use fictional currency. The simulator persists characters and changes their lives when simulated time advances.
+- Implementation: Deskspace is available in Desk and Widgets. It saves selected windows, explicit HTTPS links, sticky note references, and voice memo references. Casino contains eleven table selections with described wagers, a chip wallet, daily bonuses, a round ledger, configurable starting chips, instant results, table palettes, and five-spin slots batches. Hold’em uses a fixed-stake heads-up showdown. Life Simulator saves worlds independently and advances NPC schedules, retirement, careers, moves, households, births, deaths, and prices. It provides clock multipliers, custom time skips, a resident directory, and text or button actions for work, study, rest, talking, travel, and shopping. Both applets have compact and fullscreen modes.
+- Verification: All 113 tests passed. The isolated Windows dashboard completed a Hold’em hand, advanced a world three years, performed a work shift, switched between two saves, and toggled fullscreen. Determinism tests compared the same simulation span with different time skips. The installed startup release matched the five published managed files by hash.
+- Remaining work: Confirm live native taskbar access and restore against the user's windows. Explorer continued returning 0x8000FFFF during native taskbar attachment. Casino still needs advanced betting and full poker betting, tournaments, richer per-game statistics and progression, persistent dealers and rivals, and themed game artwork and animations. Life Simulator still needs broader actions, deeper independent character schedules and social histories, illustrated portraits, a relationship graph, and optional AI dialogue and world generation.
+
+### Separate People networks and project canvases
+
+- Status: Implemented, verified in the Windows dashboard, and installed.
+- Scope: Give each Deskspace separate People networks and project canvases. People networks focus on contacts, photos, notes, and labeled relationships. Canvases are for sketching ideas and design projects.
+- Acceptance criteria: Save and reopen both board types independently. The People network displays named contacts and relationship links and lets the user edit contact details, notes, and a photo. The canvas supports movable sticky notes, text, shapes, stickers, line and arrow styles, colors, pasted images, charts, and tables.
+- Implementation: People networks share a directory with profile photos, email, phone, website, notes, and labeled relationships. Each network keeps its own notes and node positions. Project canvases support freehand ink, notes, text, three shapes, solid, dashed, and dotted connectors, adjustable line direction, colors, stickers, images, bar charts, and tables. Paste accepts pictures, text, and tab-separated spreadsheet cells. Both editors offer zoom, pan, fit, and undo.
+- Verification: The isolated Windows dashboard created both boards, linked contacts, changed contact fields, displayed a saved contact image, created ten canvas item types, edited a table, and displayed a saved canvas image after reopening. Automated tests verified board separation, state persistence, graph cleanup, and chart and table parsing. Pictures in the isolated UI fixture were seeded from a generated test image. Live native access remains blocked by the Explorer attachment failure above.
+
 ## Keep uploaded files in a dock-owned library
 
 - Status: Implemented, verified, and installed.
