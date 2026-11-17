@@ -922,7 +922,7 @@ public partial class DashboardWindow
             stack.Children.Add(note);
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
             var delete = ActionButton("Delete", () => _ = DeleteChatAsync(entry));
-            delete.Foreground = new SolidColorBrush(Color.FromRgb(0xD9, 0x5C, 0x4A));
+            delete.Foreground = bad;
             delete.Margin = new Thickness(0, 0, 6, 0);
             buttons.Children.Add(delete);
             buttons.Children.Add(QuietButton("Keep", () =>

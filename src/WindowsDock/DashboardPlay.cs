@@ -24,12 +24,13 @@ public partial class DashboardWindow
         best.VerticalAlignment = VerticalAlignment.Center;
         DockPanel.SetDock(best, Dock.Right);
         bar.Children.Add(best);
-        var applets = new WrapPanel { Children = { ActionButton("Poker", ShowPokerLobby), QuietButton("Casino", ShowCasino) } };
+        var applets = new WrapPanel { Children = { QuietButton("Poker rooms", ShowPokerLobby) }, Margin = new Thickness(0, 0, 18, 0),
+            VerticalAlignment = VerticalAlignment.Center };
         DockPanel.SetDock(applets, Dock.Right);
         bar.Children.Add(applets);
         var stage = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch,
             VerticalContentAlignment = VerticalAlignment.Stretch, Focusable = false };
-        bar.Children.Add(Segmented("Game", ["Token snake", "Copycat"], playGame, index =>
+        bar.Children.Add(Segmented("Game", ["Token snake", "Copycat", "Casino"], playGame, index =>
         {
             playGame = index;
             Mount();
@@ -42,8 +43,13 @@ public partial class DashboardWindow
 
         void Mount()
         {
-            best.Text = playGame == 0 ? BestLine(scores.Snake, "token", "tokens") : BestLine(scores.Copycat, "round", "rounds");
-            stage.Content = playGame == 0 ? SnakeStage(Record) : CopycatStage(Record);
+            best.Text = playGame switch
+            {
+                0 => BestLine(scores.Snake, "token", "tokens"),
+                1 => BestLine(scores.Copycat, "round", "rounds"),
+                _ => "Offline, fictional chips"
+            };
+            stage.Content = playGame switch { 0 => SnakeStage(Record), 1 => CopycatStage(Record), _ => CasinoStage() };
         }
 
         static string BestLine(int value, string one, string many) =>
