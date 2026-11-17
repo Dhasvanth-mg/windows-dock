@@ -24,14 +24,18 @@ internal sealed record WorkspaceWindow(string Path, string Title, string Monitor
     }
 }
 
+internal sealed record WorkspaceSelection(AppWindow Window, WorkspaceWindow Placement);
+
+internal enum WorkspaceTiling { SideBySide, Stacked, Grid }
+
 internal static class DockWorkspaces
 {
     private static readonly StringComparer Paths = StringComparer.OrdinalIgnoreCase;
     private static readonly string[] Hosts = ["explorer.exe", "applicationframehost.exe", "shellexperiencehost.exe", "startmenuexperiencehost.exe"];
 
-    internal static WorkspaceWindow[] Capture()
+    internal static WorkspaceSelection[] AvailableWindows()
     {
-        var items = new List<WorkspaceWindow>();
+        var items = new List<WorkspaceSelection>();
         foreach (var window in ShellIntegration.Windows())
         {
             if (items.Count >= 32)
@@ -43,18 +47,73 @@ internal static class DockWorkspaces
             var visible = Rectangle.Intersect(area, Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom));
             if (visible.Width < 80 || visible.Height < 60 || area.Width <= 0 || area.Height <= 0)
                 continue;
-            items.Add(new(window.Path, window.Title, screen.DeviceName,
+            var placement = new WorkspaceWindow(window.Path, window.Title, screen.DeviceName,
                 (visible.Left - area.Left) / (double)area.Width, (visible.Top - area.Top) / (double)area.Height,
-                visible.Width / (double)area.Width, visible.Height / (double)area.Height, IsZoomed(window.Handle)));
+                visible.Width / (double)area.Width, visible.Height / (double)area.Height, IsZoomed(window.Handle));
+            items.Add(new(window, placement));
         }
         return items.ToArray();
     }
 
-    internal static async Task<int> RestoreAsync(WorkspaceWindow[] layout, CancellationToken token)
+    internal static WorkspaceSelection[] Arrange(WorkspaceSelection[] windows, WorkspaceTiling mode)
+    {
+        var position = new List<WorkspaceSelection>();
+        foreach (var monitor in windows.GroupBy(item => item.Placement.Monitor, Paths))
+        {
+            var group = monitor.ToArray();
+            var columns = mode switch
+            {
+                WorkspaceTiling.SideBySide => group.Length,
+                WorkspaceTiling.Stacked => 1,
+                _ => (int)Math.Ceiling(Math.Sqrt(group.Length))
+            };
+            var rows = (int)Math.Ceiling((double)group.Length / columns);
+            for (var index = 0; index < group.Length; index++)
+            {
+                var row = index / columns;
+                var inRow = Math.Min(columns, group.Length - row * columns);
+                var saved = group[index];
+                var tile = saved.Placement with
+                {
+                    Left = (index % columns) / (double)inRow,
+                    Top = row / (double)rows,
+                    Width = 1d / inRow,
+                    Height = 1d / rows,
+                    Maximized = false
+                };
+                position.Add(saved with { Placement = tile });
+            }
+        }
+        return position.ToArray();
+    }
+
+    internal static bool FitsTiles(IEnumerable<WorkspaceSelection> windows)
+    {
+        var screens = Forms.Screen.AllScreens;
+        return windows.All(item =>
+        {
+            var screen = screens.FirstOrDefault(screen => Paths.Equals(screen.DeviceName, item.Placement.Monitor));
+            return screen != null && item.Placement.Width * screen.WorkingArea.Width >= 240 &&
+                item.Placement.Height * screen.WorkingArea.Height >= 160;
+        });
+    }
+
+    internal static int PlaceSelected(IEnumerable<WorkspaceSelection> windows)
+    {
+        var current = ShellIntegration.Windows().ToDictionary(WindowKey);
+        return windows.Count(item => !current.TryGetValue(WindowKey(item.Window), out var live) ||
+            !Paths.Equals(live.Path, item.Window.Path) || !Place(live, item.Placement));
+    }
+
+    internal static async Task<int> RestoreAsync(WorkspaceWindow[] layout, CancellationToken token,
+        IReadOnlyList<AppWindow> previousWindows, bool openedTargets)
     {
         var pending = layout.Take(32).Where(item => IsLaunchable(item.Path)).ToList();
         var failures = Math.Min(layout.Length, 32) - pending.Count;
-        var assigned = new HashSet<nint>();
+        var assigned = new HashSet<(nint Handle, uint ProcessId)>();
+        var beforeLaunch = previousWindows.Select(WindowKey).ToHashSet();
+        if (openedTargets && pending.Count > 0)
+            await Task.Delay(300, token);
         var windows = ShellIntegration.Windows();
         var started = false;
         foreach (var path in pending.Select(item => item.Path).Distinct(Paths))
@@ -65,7 +124,7 @@ internal static class DockWorkspaces
             try { ShellIntegration.Launch(path); started = true; }
             catch (Exception error) when (error is Win32Exception or InvalidOperationException) { }
         }
-        for (var round = 0; round <= (started ? 12 : 0) && pending.Count > 0; round++)
+        for (var round = 0; round <= (started || openedTargets ? 12 : 0) && pending.Count > 0; round++)
         {
             token.ThrowIfCancellationRequested();
             if (round > 0)
@@ -73,7 +132,7 @@ internal static class DockWorkspaces
                 await Task.Delay(250, token);
                 windows = ShellIntegration.Windows();
             }
-            // Reserve matching titles before assigning an extra window from the same application.
+            // Give the named windows first pick and only fall back to windows created during this restore.
             Match(exact: true);
             Match(exact: false);
         }
@@ -84,17 +143,23 @@ internal static class DockWorkspaces
             for (var index = pending.Count - 1; index >= 0; index--)
             {
                 var saved = pending[index];
-                var match = windows.FirstOrDefault(window => !assigned.Contains(window.Handle) && Paths.Equals(window.Path, saved.Path) &&
-                    (!exact || window.Title.Equals(saved.Title, StringComparison.OrdinalIgnoreCase)));
+                var match = FindWindow(windows, saved, assigned, beforeLaunch, exact);
                 if (match == null)
                     continue;
-                assigned.Add(match.Handle);
+                assigned.Add(WindowKey(match));
                 pending.RemoveAt(index);
                 if (!Place(match, saved))
                     failures++;
             }
         }
     }
+
+    internal static AppWindow? FindWindow(IEnumerable<AppWindow> candidates, WorkspaceWindow saved,
+        HashSet<(nint Handle, uint ProcessId)> assigned, HashSet<(nint Handle, uint ProcessId)> beforeLaunch, bool exact) =>
+        candidates.FirstOrDefault(window => !assigned.Contains(WindowKey(window)) && Paths.Equals(window.Path, saved.Path) &&
+            (exact ? window.Title.Equals(saved.Title, StringComparison.OrdinalIgnoreCase) : !beforeLaunch.Contains(WindowKey(window))));
+
+    private static (nint Handle, uint ProcessId) WindowKey(AppWindow window) => (window.Handle, window.ProcessId);
 
     private static bool IsLaunchable(string path) => Path.IsPathFullyQualified(path) &&
         !path.StartsWith(@"\\", StringComparison.Ordinal) && Path.GetExtension(path).Equals(".exe", StringComparison.OrdinalIgnoreCase) &&

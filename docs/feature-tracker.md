@@ -1,5 +1,14 @@
 # Feature tracker
 
+## Continue with workspace restore and installation
+
+- Status: In progress.
+- Scope: Improve manual workspace capture, restore, and window tiling. Add a packaged per-user install, update, rollback, and uninstall path. Check the current native attachment state.
+- Acceptance criteria: Workspace actions operate on selected windows only, retain saved documents and links, and continue to read existing workspace records. Verify the release lifecycle in isolation and preserve user data when removing the app. Record any native Explorer work that still requires a fresh session.
+- Workspace implementation: Pick which open windows to capture, tile selected windows side by side, stacked, or in a grid on their current displays, and undo the last tiling change. Add explicit files through a file picker. Restore uses saved titles for existing windows and limits title fallback to windows opened during restore.
+- Workspace verification: All 98 tests passed. The Windows fixture tiled two selected windows, left a third window in place, captured both tiles, undid the move, and reapplied the saved layout. Window geometry and placement were checked against synthetic windows.
+- Remaining work: Verify the release install and rollback paths, then stage the new managed build. Native Explorer attachment still needs a fresh session.
+
 ## Complete the remaining Windows Dock features
 
 - Status: In progress.

@@ -654,20 +654,37 @@ public partial class DashboardWindow
             browse.HorizontalAlignment = HorizontalAlignment.Left;
             browse.Margin = new Thickness(0, 4, 0, 0);
             editor.Children.Add(browse);
-            var targets = AddField("Websites or app paths, one per line", existing == null ? "" : string.Join("\n", existing.Targets), 4096);
+            var targets = AddField("Websites, files, or apps, one per line", existing == null ? "" : string.Join("\n", existing.Targets), 4096);
             targets.AcceptsReturn = true;
             targets.Height = 69;
             targets.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            var addFiles = ActionButton("Add files…", () =>
+            {
+                var picker = new OpenFileDialog { Multiselect = true, CheckFileExists = true, Filter = "All files|*.*" };
+                if (picker.ShowDialog(window) != true)
+                    return;
+                var paths = targets.Text.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                    .Concat(picker.FileNames).Distinct(StringComparer.Ordinal).ToArray();
+                var updated = string.Join("\n", paths);
+                if (paths.Length > 12 || updated.Length > targets.MaxLength)
+                {
+                    message.Text = "A workspace can hold up to 12 explicit files, websites, or apps.";
+                    return;
+                }
+                message.Text = "";
+                targets.Text = updated;
+            });
+            addFiles.HorizontalAlignment = HorizontalAlignment.Left;
+            addFiles.Margin = new Thickness(0, 4, 0, 6);
+            editor.Children.Add(addFiles);
             var windows = existing?.Windows ?? [];
             var captureStatus = Text("", 11, subdued);
             captureStatus.TextWrapping = TextWrapping.Wrap;
-            var capture = ActionButton("Capture open windows", () =>
+            editor.Children.Add(WorkspaceWindowPicker(windows, selected =>
             {
-                windows = DockWorkspaces.Capture();
+                windows = selected;
                 ShowCapture();
-            });
-            capture.HorizontalAlignment = HorizontalAlignment.Left;
-            editor.Children.Add(capture);
+            }));
             editor.Children.Add(captureStatus);
             editor.Children.Add(ActionButton("Clear captured windows", () => { windows = []; ShowCapture(); }));
             ShowCapture();
@@ -751,6 +768,8 @@ public partial class DashboardWindow
         restoringWorkspace = true;
         var failures = 0;
         var windows = shortcut.Windows ?? [];
+        var previousWindows = windows.Length > 0 ? ShellIntegration.Windows() : [];
+        var openedTargets = false;
         try
         {
             foreach (var target in new[] { shortcut.Folder }.Concat(shortcut.Targets).Where(target => target.Length > 0))
@@ -762,10 +781,11 @@ public partial class DashboardWindow
                     failures++;
                     continue;
                 }
-                try { ShellIntegration.Launch(target); }
+                try { ShellIntegration.Launch(target); openedTargets = true; }
                 catch (Exception error) when (error is Win32Exception or InvalidOperationException) { failures++; }
             }
-            return failures + await DockWorkspaces.RestoreAsync(windows, lifetime.Token);
+            return windows.Length == 0 ? failures :
+                failures + await DockWorkspaces.RestoreAsync(windows, lifetime.Token, previousWindows, openedTargets);
         }
         catch (OperationCanceledException) { return failures; }
         finally { restoringWorkspace = false; }
