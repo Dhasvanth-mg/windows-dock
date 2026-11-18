@@ -146,6 +146,7 @@ namespace
             if (!pid || *end != L'\0')
                 return 1;
             winrt::handle stop(OpenEventW(EVENT_MODIFY_STATE, FALSE, SessionName(pid, L"Stop").c_str()));
+            DockLog(L"controller", L"A stop was requested from the command line (--restore).", pid);
             if (!stop || !SetEvent(stop.get()))
             {
                 PrintFailure(L"No active native dock session with that process ID.\n");
@@ -321,7 +322,13 @@ namespace
                 waitFor[dashboardIndex] = dashboardProcess.get();
             const auto result = MsgWaitForMultipleObjects(count, waitFor, FALSE, monitor ? INFINITE : 6000, QS_ALLINPUT);
             if (result == WAIT_OBJECT_0 || result == WAIT_OBJECT_0 + 1 || result == WAIT_FAILED)
+            {
+                // Say why the dock is leaving, so a dock that vanished overnight can be explained from the log.
+                DockLog(L"controller", result == WAIT_OBJECT_0 ? L"Stopping: asked to stop." :
+                    result == WAIT_OBJECT_0 + 1 ? L"Stopping: Explorer exited." : L"Stopping: waiting failed.",
+                    result == WAIT_FAILED ? GetLastError() : 0);
                 break;
+            }
             if (result == monitorIndex)
             {
                 monitor.close();

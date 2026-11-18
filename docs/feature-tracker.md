@@ -1,5 +1,15 @@
 # Feature tracker
 
+## Relaunch the dock after it disappeared overnight
+
+- Status: Relaunched; the owner has not yet confirmed it is visible. Exit logging built, not yet in a running build.
+- Scope: Message received during the popup work: the dock was gone from the taskbar the next morning; launch it again.
+- Acceptance criteria: The dock runs and shows on the taskbar again. The reason a dock stops is recorded, so a repeat can be explained.
+- Findings: No Windows Dock process was running. No crash was reported to Windows, Explorer had not restarted, and the PC slept from 08:22 to 10:13. The native log ends at 15:42 the day before with no reason, because the controller did not log why it left its loop.
+- Implementation: Relaunched `artifacts/release-20261117-1600`; Explorer logged "Taskbar styled", as it did on the previous working launch. The controller now logs whether it stopped because it was asked to, because Explorer exited, or because waiting failed, and `--restore` logs that it requested a stop (`src/NativeTaskbar/Main.cpp`).
+- Verification: The native module compiles. The relaunched controller, monitor and dashboard processes are running. The taskbar could not be photographed from this session.
+- Remaining work: Owner to confirm the dock is visible. Ship the exit logging in the next build and read it if the dock disappears again.
+
 ## Chat delete, rename and hide, and the dashboard no longer moves the window behind it
 
 - Status: Built and tested, and running as `artifacts/release-20261117-1600` (built from a clean worktree at `8dfe02b`, which also carries the pull-down and casino work). Not yet checked by hand in the running app.
