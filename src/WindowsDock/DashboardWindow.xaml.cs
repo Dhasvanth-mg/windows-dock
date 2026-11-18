@@ -59,11 +59,8 @@ public partial class DashboardWindow : Window
         idleExit.Tick += (_, _) =>
         {
             idleExit.Stop();
-            if (!IsVisible && !HasActiveWork)
-                Application.Current.Shutdown();
+            ReleaseHiddenMemory();
         };
-        if (releaseWhenIdle && deferPage)
-            idleExit.Start();
         agentGrid = AgentGrid.Connect(controllerPid);
         ShowInTaskbar = controllerPid == 0;
 
@@ -97,10 +94,13 @@ public partial class DashboardWindow : Window
         };
         IsVisibleChanged += (_, _) =>
         {
+            if (preparing)
+                return;
             if (!IsVisible)
             {
                 codingWorkspace?.Suspend();
                 SaveViewState();
+                hiddenAt = Environment.TickCount64;
                 ReportDockVisibility(false);
                 ticker.Stop();
                 agentTicker.Stop();
@@ -457,8 +457,7 @@ public partial class DashboardWindow : Window
         UpdatePanelSwitchers();
         if (!compactAgents && pageInitialized)
         {
-            if (currentPage == DashboardPage.Home)
-                RenderHomeFavorites();
+            RefreshStalePage();
             return;
         }
         var scroll = RestoreViewState();

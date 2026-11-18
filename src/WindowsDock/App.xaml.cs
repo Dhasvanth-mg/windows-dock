@@ -20,18 +20,18 @@ public partial class App : Application
             if (controller > 0)
             {
                 dashboardSession = NativeDashboardSession.Connect(controller,
-                    () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.ToggleDockDashboard()),
-                    () => Dispatcher.BeginInvoke(() => ShowDashboard(true)),
-                    () => Dispatcher.BeginInvoke(() => ShowAssistant()),
-                    () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.ShowDockDashboard()),
-                    () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.ShowCommandPalette()),
+                    () => Ready(window => window.ToggleDockDashboard()),
+                    () => Ready(_ => ShowDashboard(true)),
+                    () => Ready(_ => ShowAssistant()),
+                    () => Ready(window => window.ShowDockDashboard()),
+                    () => Ready(window => window.ShowCommandPalette()),
                     () => Dispatcher.InvokeAsync(() => Shutdown()));
                 if (dashboardSession == null)
                 {
                     Shutdown();
                     return;
                 }
-                dashboardSession.OnHide(controller, () => Dispatcher.BeginInvoke(() => (MainWindow as DashboardWindow)?.PutAway()));
+                dashboardSession.OnHide(controller, () => Ready(window => window.PutAway()));
                 ShutdownMode = ShutdownMode.OnExplicitShutdown;
             }
             var trayMode = e.Args.Length == 3 && e.Args[2] == "--tray";
@@ -39,10 +39,24 @@ public partial class App : Application
             var hidden = onDemand || e.Args.Length == 3 && e.Args[2] == "--hidden";
             MainWindow = new DashboardWindow(controller, initialPage, hidden, onDemand, trayMode);
             if (onDemand)
+            {
                 MainWindow.Closed += (_, _) => Shutdown();
+                if (MainWindow is DashboardWindow ready)
+                    Dispatcher.BeginInvoke(ready.PrepareHidden, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }
             if (!hidden)
                 ShowDashboard(false);
             return;
+
+            // A request from the taskbar takes priority over preparing out of sight.
+            void Ready(Action<DashboardWindow> act) => Dispatcher.BeginInvoke(() =>
+            {
+                if (MainWindow is DashboardWindow window)
+                {
+                    window.EndPreparing();
+                    act(window);
+                }
+            });
 
             void ShowDashboard(bool agents)
             {

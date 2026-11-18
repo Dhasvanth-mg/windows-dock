@@ -1,5 +1,13 @@
 # Feature tracker
 
+## Make the dock open much faster
+
+- Status: In progress.
+- Scope: Owner asked to make it work much faster. Taken to mean the dock's own responsiveness: opening the dashboard and moving around it.
+- Acceptance criteria: Opening the dashboard no longer waits for an application start, including the first open after sign-in and after long idle. Data shown on reopening is current. The Controls page no longer freezes the interface. Hidden memory use is limited, and the before and after are measured on release builds.
+- Findings: Measured on the published build through a stand-in controller: a cold open took 3,403 to 4,658 ms to report visible and used about 4.9 s of CPU, while reopening a live dashboard took 43 to 200 ms. The hidden dashboard exited after 20 seconds, so most opens were cold. In a cold start, about 1.3 s went to loading WPF and the window, 0.55 s to first showing it, and up to 1.6 s to building the page. The audio mixer took 811 to 1,231 ms on the interface thread every time the Controls page was built; other pages took about 12 to 240 ms to build.
+- Remaining work: Everything.
+
 ## Canvas connectors, rotation, line types, fills, borders and a fuller palette
 
 - Status: Built, tested, photographed and running as `artifacts/release-20261118-1200` (from `ca114d2`, which also carries the hosted panels, inline confirmations and canvas restyle). Connection-point dragging and the rotation handle were not exercised with a real pointer.

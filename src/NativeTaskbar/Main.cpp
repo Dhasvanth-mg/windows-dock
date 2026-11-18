@@ -331,14 +331,19 @@ namespace
         auto monitor = launchProcess(panel, L"--monitor " + initialization);
         auto monitorRetry = GetTickCount64() + 6000;
         winrt::handle dashboardProcess;
+        ULONGLONG dashboardStarted{};
+        unsigned dashboardQuickExits{};
         const auto ensureDashboard = [&]
         {
             if (dashboardProcess && WaitForSingleObject(dashboardProcess.get(), 0) == WAIT_TIMEOUT)
                 return true;
             ResetEvent(session.panelVisible.get());
+            dashboardStarted = GetTickCount64();
             dashboardProcess = launchProcess(panel, L"--dashboard " + initialization + (trayMode ? L" --tray" : L" --on-demand"));
             return static_cast<bool>(dashboardProcess);
         };
+        // The dashboard takes seconds to start and milliseconds to show, so it starts now and waits out of sight.
+        ensureDashboard();
         if (openOnStart)
             SetEvent(session.openLauncher.get());
 
@@ -382,6 +387,12 @@ namespace
                 dashboardProcess.close();
                 ResetEvent(session.panelVisible.get());
                 visibility.Hold(false);
+                // Keep one ready, but do not keep restarting one that cannot stay up.
+                dashboardQuickExits = GetTickCount64() - dashboardStarted < 30000 ? dashboardQuickExits + 1 : 0;
+                if (dashboardQuickExits < 3)
+                    ensureDashboard();
+                else
+                    DockLog(L"controller", L"The dashboard keeps exiting; it will start again when opened.");
                 continue;
             }
             if (result == WAIT_OBJECT_0 + ARRAYSIZE(signals) - 1)
