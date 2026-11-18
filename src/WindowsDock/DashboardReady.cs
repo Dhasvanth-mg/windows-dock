@@ -36,6 +36,7 @@ public partial class DashboardWindow
         giveUp.Tick += (_, _) => EndPreparing();
         giveUp.Start();
         ContentRendered += Rendered;
+        DockWindowFrame.SetCloaked(this, true);
         Show();
         RestoreScroll(scroll);
 
@@ -55,6 +56,7 @@ public partial class DashboardWindow
         if (!preparing)
             return;
         Hide();
+        DockWindowFrame.SetCloaked(this, false);
         preparing = false;
         ShowActivated = true;
         hiddenAt = Environment.TickCount64;

@@ -14,6 +14,7 @@ internal static class DockWindowFrame
     private const int ExtendedStyle = -20;
     private const long Layered = 0x00080000;
     private const long ClickThrough = 0x00000020;
+    private const int Cloak = 13;
     private const int CornerPreference = 33;
     private const int BorderColor = 34;
 
@@ -56,6 +57,15 @@ internal static class DockWindowFrame
         }
         else if ((style & Layered) != 0)
             SetWindowLongPtrW(handle, ExtendedStyle, new nint(style & ~(Layered | ClickThrough)));
+    }
+
+    /// <summary>
+    /// Hides a window from the screen entirely while it keeps rendering, so it can be prepared with nothing appearing.
+    /// </summary>
+    internal static void SetCloaked(Window window, bool cloaked)
+    {
+        var value = cloaked ? 1 : 0;
+        DwmSetWindowAttribute(new WindowInteropHelper(window).EnsureHandle(), Cloak, ref value, sizeof(int));
     }
 
     [DllImport("dwmapi")]
