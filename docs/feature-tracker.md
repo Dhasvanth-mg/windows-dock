@@ -1,8 +1,18 @@
 # Feature tracker
 
+## Keep the taskbar up under the dashboard
+
+- Status: Built and running as `artifacts/release-20261118-1030`. Not yet confirmed on screen.
+- Scope: Message received during the popup work: "lock the taskbar to the dashboard". With auto-hide on, the taskbar slid away while the dashboard was open. The owner chose to try holding it up without switching auto-hide off, falling back to switching it off (which makes Windows shrink maximised windows) if that cannot work.
+- Acceptance criteria: While the dashboard shows, the auto-hide taskbar stays on screen under it, and maximised windows keep their size and position. When the dashboard closes, the taskbar hides as usual. If the hold cannot be set, the dock falls back to switching auto-hide off.
+- Implementation: `TaskbarHold` runs inside Explorer with the dock's taskbar controls. It watches the taskbar window and, while the dashboard is showing, holds back a bottom taskbar's move further down the screen (its slide away). Auto-hide stays on throughout, so the work area never changes. A quarter-second timer finishes the held-back hide once the dashboard closes. Explorer sets a new `TaskbarHeld` session event when the hold is in place; when it is not (the taskbar window belongs to another thread, or the hook fails), the controller switches auto-hide off as before.
+- Verification: The native module builds cleanly. After the swap, Explorer logged "Holding the auto-hide taskbar up while the dashboard shows", so the hold is in place and the fallback is not in use. Not seen on screen from this session.
+- Limitations: If this Windows build slides the taskbar away by some route other than moving its window, the hold will not catch it; the log will still say it is holding, so it has to be checked by eye. Only a bottom taskbar is handled.
+- Remaining work: Owner to open the dashboard with a maximised window behind it and confirm the taskbar stays up and the window does not move.
+
 ## Relaunch the dock after it disappeared overnight
 
-- Status: Relaunched; the owner has not yet confirmed it is visible. Exit logging built, not yet in a running build.
+- Status: Relaunched; the owner has not yet confirmed it is visible. Exit logging is in the running build `artifacts/release-20261118-1030`.
 - Scope: Message received during the popup work: the dock was gone from the taskbar the next morning; launch it again.
 - Acceptance criteria: The dock runs and shows on the taskbar again. The reason a dock stops is recorded, so a repeat can be explained.
 - Findings: No Windows Dock process was running. No crash was reported to Windows, Explorer had not restarted, and the PC slept from 08:22 to 10:13. The native log ends at 15:42 the day before with no reason, because the controller did not log why it left its loop.
