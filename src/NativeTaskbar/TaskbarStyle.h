@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AgentGridState.h"
+#include "TaskbarHold.h"
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -64,6 +65,7 @@ private:
     winrt::handle launcherEvent, warmEvent, hideEvent, panelVisibleEvent;
     winrt::handle agentEvent, completionEvent, agentMapping;
     std::unique_ptr<AgentGridState, UnmapAgentGrid> agentState;
+    std::unique_ptr<TaskbarHold> hold;
     AgentGridTile visibleTiles[4]{};
     LONG agentRevision = -1;
     ULONGLONG agentAppearanceChecked{};

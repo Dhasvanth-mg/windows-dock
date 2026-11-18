@@ -44,6 +44,7 @@ namespace
               panelVisible(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"PanelVisible").c_str())),
               visibilityChanged(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"PanelVisibilityChanged").c_str())),
               hidePanel(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"HidePanel").c_str())),
+              taskbarHeld(CreateEventW(nullptr, TRUE, FALSE, SessionName(pid, L"TaskbarHeld").c_str())),
               completion(CreateEventW(nullptr, FALSE, FALSE, SessionName(pid, L"AgentCompletion").c_str())),
               agentGrid(CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(AgentGridState),
                   SessionName(pid, L"AgentGrid").c_str()))
@@ -51,13 +52,14 @@ namespace
             if (!stop || !warmDashboard ||
                 !dashboard || !showDashboard || !agent || !showAgent ||
                 !assistant || !showAssistant || !openLauncher || !showLauncher || !command || !showCommand ||
-                !panelVisible || !visibilityChanged || !hidePanel || !completion || !agentGrid)
+                !panelVisible || !visibilityChanged || !hidePanel || !taskbarHeld || !completion || !agentGrid)
                 winrt::throw_last_error();
         }
 
         winrt::handle stop, warmDashboard;
         winrt::handle dashboard, showDashboard, agent, showAgent, assistant, showAssistant;
-        winrt::handle openLauncher, showLauncher, command, showCommand, panelVisible, visibilityChanged, hidePanel, completion, agentGrid;
+        winrt::handle openLauncher, showLauncher, command, showCommand, panelVisible, visibilityChanged, hidePanel, taskbarHeld,
+            completion, agentGrid;
     };
 
     struct Appearance
@@ -136,6 +138,41 @@ namespace
         }
         return nullptr;
     }
+
+    // The fallback for when the taskbar cannot be held up from inside Explorer: switch auto-hide off while the
+    // dashboard shows. Windows then resizes maximised windows to sit above the taskbar until it is switched back.
+    class TaskbarVisibility
+    {
+    public:
+        ~TaskbarVisibility() { Hold(false); }
+
+        void Hold(bool visible)
+        {
+            APPBARDATA bar{sizeof(APPBARDATA)};
+            bar.hWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+            if (!bar.hWnd)
+                return;
+            const auto state = SHAppBarMessage(ABM_GETSTATE, &bar);
+            if (visible && !held && (state & ABS_AUTOHIDE))
+            {
+                bar.lParam = state & ~ABS_AUTOHIDE;
+                SHAppBarMessage(ABM_SETSTATE, &bar);
+                held = !(SHAppBarMessage(ABM_GETSTATE, &bar) & ABS_AUTOHIDE);
+            }
+            else if (!visible && held)
+            {
+                held = false;
+                if (!(state & ABS_AUTOHIDE))
+                {
+                    bar.lParam = state | ABS_AUTOHIDE;
+                    SHAppBarMessage(ABM_SETSTATE, &bar);
+                }
+            }
+        }
+
+    private:
+        bool held{};
+    };
 
     int Run(int argc, wchar_t** argv)
     {
@@ -305,6 +342,7 @@ namespace
         if (openOnStart)
             SetEvent(session.openLauncher.get());
 
+        TaskbarVisibility visibility;
         const HANDLE signals[] = {session.stop.get(), explorer.get(), session.dashboard.get(), session.agent.get(),
             session.assistant.get(), session.openLauncher.get(), session.command.get(), session.visibilityChanged.get(), session.warmDashboard.get()};
         const HANDLE panels[] = {session.showDashboard.get(), session.showAgent.get(), session.showAssistant.get(),
@@ -343,6 +381,7 @@ namespace
             {
                 dashboardProcess.close();
                 ResetEvent(session.panelVisible.get());
+                visibility.Hold(false);
                 continue;
             }
             if (result == WAIT_OBJECT_0 + ARRAYSIZE(signals) - 1)
@@ -352,8 +391,11 @@ namespace
             }
             if (result == WAIT_OBJECT_0 + ARRAYSIZE(signals) - 2)
             {
-                // Auto-hide is left as the user set it. Switching it off while the panel shows changes the work area, and
-                // Windows then resizes every maximised window to sit above the taskbar.
+                // Explorer holds the taskbar up itself when it can (see TaskbarHold), which leaves the work area and
+                // maximised windows alone. Only when it could not does auto-hide get switched off instead.
+                const bool showing = dashboardProcess && WaitForSingleObject(session.panelVisible.get(), 0) == WAIT_OBJECT_0;
+                const bool heldInExplorer = WaitForSingleObject(session.taskbarHeld.get(), 0) == WAIT_OBJECT_0;
+                visibility.Hold(showing && !heldInExplorer);
                 continue;
             }
             if (result >= WAIT_OBJECT_0 + 2 && result < WAIT_OBJECT_0 + 2 + ARRAYSIZE(panels))

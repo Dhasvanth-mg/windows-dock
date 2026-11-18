@@ -40,10 +40,12 @@ TaskbarStyle::TaskbarStyle(Grid const& root, winrt::handle const& dashboard, DWO
       agentState(agentMapping ? static_cast<AgentGridState*>(MapViewOfFile(agentMapping.get(), FILE_MAP_WRITE,
           0, 0, sizeof(AgentGridState))) : nullptr)
 {
+    hold = std::make_unique<TaskbarHold>(controllerPid);
 }
 
 TaskbarStyle::~TaskbarStyle()
 {
+    hold.reset();
     Restore();
 }
 
