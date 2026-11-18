@@ -109,7 +109,7 @@ public partial class DashboardWindow
             Apply(saved => saved with { Pinned = !saved.Pinned });
         });
         footer.Children.Add(pin);
-        var remove = PaperButton(0xE74D, "Throw this note away", () =>
+        var remove = PaperButton(0xE74D, "Throw this note away", async () =>
         {
             if (text.Text.Trim().Length > 0)
             {
@@ -117,8 +117,7 @@ public partial class DashboardWindow
                 modalOpen = true;
                 try
                 {
-                    if (MessageBox.Show(this, "Throw this note away? It cannot be brought back.", "Windows Dock",
-                        MessageBoxButton.OKCancel, MessageBoxImage.None, MessageBoxResult.Cancel) != MessageBoxResult.OK)
+                    if (!await ConfirmAsync(this, "Throw this note away? It cannot be brought back.", "Throw away"))
                         return;
                 }
                 finally { modalOpen = wasModal; }
@@ -269,14 +268,13 @@ public partial class DashboardWindow
         }
 
         var footer = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
-        var remove = QuietButton("Delete this memo", () =>
+        var remove = QuietButton("Delete this memo", async () =>
         {
             var wasModal = modalOpen;
             modalOpen = true;
             try
             {
-                if (editor.Text.Trim().Length > 0 && MessageBox.Show(this, "Delete this memo? It cannot be brought back.", "Windows Dock",
-                    MessageBoxButton.OKCancel, MessageBoxImage.None, MessageBoxResult.Cancel) != MessageBoxResult.OK)
+                if (editor.Text.Trim().Length > 0 && !await ConfirmAsync(this, "Delete this memo? It cannot be brought back.", "Delete"))
                     return;
             }
             finally { modalOpen = wasModal; }

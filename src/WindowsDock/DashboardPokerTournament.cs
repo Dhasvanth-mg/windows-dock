@@ -139,10 +139,9 @@ public partial class DashboardWindow
                 grid.Children.Add(finals);
                 bracket.Children.Add(grid);
                 if (match.Active)
-                    bracket.Children.Add(QuietButton("Withdraw", () =>
+                    bracket.Children.Add(QuietButton("Withdraw", async () =>
                     {
-                        if (MessageBox.Show(DialogOwner(window), "Withdraw from this tournament and end the current run?", "Hold’em tournament",
-                            MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) == MessageBoxResult.Yes)
+                        if (await ConfirmAsync(window, "Withdraw from this tournament and end the current run?", "Withdraw"))
                             Change(current => DockPokerTournament.Withdraw(current, match.Id));
                     }));
             }

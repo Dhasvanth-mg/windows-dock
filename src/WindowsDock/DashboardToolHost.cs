@@ -66,6 +66,7 @@ public partial class DashboardWindow
     {
         if (hostedWindow != window)
             return;
+        CancelPendingConfirm();
         hostedWindow = null;
         ToolHost.Content = null;
         ToolHost.Visibility = Visibility.Collapsed;

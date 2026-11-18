@@ -250,12 +250,11 @@ public partial class DashboardWindow
         }
         else if (job.Status is DockJobStatus.Canceled or DockJobStatus.Failed or DockJobStatus.Interrupted)
         {
-            actions.Children.Add(ActionButton("Retry job", () =>
+            actions.Children.Add(ActionButton("Retry job", async () =>
             {
                 if (job.Role == "coding")
                 {
-                    if (MessageBox.Show(owner, "Start this coding brief again in its original project? Review any changes from the previous run first.",
-                        "Retry coding job", MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
+                    if (!await ConfirmAsync(owner, "Start this coding brief again in its original project? Review any changes from the previous run first.", "Start again", destructive: false))
                         return;
                     try
                     {

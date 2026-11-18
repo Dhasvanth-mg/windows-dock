@@ -130,10 +130,9 @@ public partial class DashboardWindow
             { status.Text = "Could not save this connection."; }
         };
 
-        remove.Click += (_, _) =>
+        remove.Click += async (_, _) =>
         {
-            if (editing == null || MessageBox.Show(DialogOwner(window), $"Remove {editing.Label} from {persona.Name}?",
-                "Remove connection", MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
+            if (editing == null || !await ConfirmAsync(window, $"Remove {editing.Label} from {persona.Name}?", "Remove"))
                 return;
             try
             {
@@ -157,14 +156,13 @@ public partial class DashboardWindow
             status.Text = "Review this result before attaching it to your next message.";
         });
 
-        attach.Click += (_, _) =>
+        attach.Click += async (_, _) =>
         {
             if (result == null)
                 return;
             var slot = Array.IndexOf(AssistantPersonas.All, persona);
             var chat = assistantConversations[slot];
-            if (chat.Context != null && MessageBox.Show(DialogOwner(window), "Replace the context already attached to this draft?",
-                "Attach MCP result", MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
+            if (chat.Context != null && !await ConfirmAsync(window, "Replace the context already attached to this draft?", "Replace", destructive: false))
                 return;
             chat.Context = result;
             OpenAssistantConversation(slot);

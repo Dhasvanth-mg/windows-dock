@@ -157,6 +157,8 @@ public partial class DashboardWindow : Window
             if (e.Key == Key.Escape && !e.Handled)
             {
                 e.Handled = true;
+                if (CancelPendingConfirm())
+                    return;
                 if (OpenComboBox(e.OriginalSource) is { } combo)
                     combo.IsDropDownOpen = false;
                 else if (agentPanel != null)
@@ -307,6 +309,7 @@ public partial class DashboardWindow : Window
     private void ShowPage(DashboardPage page)
     {
         // Choosing a tab while a panel is showing inside the dashboard puts the panel away first.
+        CancelPendingConfirm();
         if (hostedWindow != null)
             ParkToolPanel();
         if (currentPage != page)

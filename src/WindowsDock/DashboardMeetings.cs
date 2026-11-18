@@ -140,10 +140,9 @@ public partial class DashboardWindow
         add.Click += (_, _) => Edit(null);
         cancel.Click += (_, _) => editor.Visibility = Visibility.Collapsed;
         range.SelectedDateChanged += (_, _) => Render();
-        remove.Click += (_, _) =>
+        remove.Click += async (_, _) =>
         {
-            if (editId == Guid.Empty || MessageBox.Show(DialogOwner(window), "Delete this local event?", "Calendar",
-                MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
+            if (editId == Guid.Empty || !await ConfirmAsync(window, "Delete this local event?", "Delete"))
                 return;
             try
             {

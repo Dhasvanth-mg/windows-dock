@@ -69,10 +69,9 @@ public partial class DashboardWindow
                         status.Text = error.Message;
                 }
             }));
-            top.Children.Add(QuietButton("Delete deskspace", () =>
+            top.Children.Add(QuietButton("Delete deskspace", async () =>
             {
-                if (MessageBox.Show(DialogOwner(window), $"Remove {desk.Name}, its People networks, and its canvases?", "Deskspace",
-                    MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) == MessageBoxResult.Yes)
+                if (await ConfirmAsync(window, $"Remove {desk.Name}, its People networks, and its canvases?", "Remove"))
                     Run(() => { DockDeskspaces.Remove(desk.Id); Reload(null); });
             }));
             details.Children.Add(top);

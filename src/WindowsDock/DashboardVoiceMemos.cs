@@ -217,10 +217,9 @@ public partial class DashboardWindow
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                 { status.Text = "Could not export this memo."; }
             });
-            var remove = ActionButton("Delete memo", () =>
+            var remove = ActionButton("Delete memo", async () =>
             {
-                if (MessageBox.Show(DialogOwner(window), "Delete this recording and transcript?", "Voice memos",
-                    MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
+                if (!await ConfirmAsync(window, "Delete this recording and transcript?", "Delete"))
                     return;
                 try
                 {
@@ -246,8 +245,7 @@ public partial class DashboardWindow
                     status.Text = "Set a Groq API key in Assistants to transcribe this memo.";
                     return;
                 }
-                if (MessageBox.Show(DialogOwner(window), "Send this recording to Groq for transcription using your API account?",
-                    "Transcribe memo", MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
+                if (!await ConfirmAsync(window, "Send this recording to Groq for transcription using your API account?", "Send to Groq", destructive: false))
                     return;
                 editor.IsEnabled = false;
                 list.IsEnabled = false;
