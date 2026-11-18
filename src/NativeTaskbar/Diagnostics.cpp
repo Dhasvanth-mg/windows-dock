@@ -66,7 +66,9 @@ namespace
                     std::to_wstring(initialElements.load()) + L" element callbacks.";
                 DockLog(L"explorer", message.c_str(), static_cast<unsigned long>(result));
             }
-            if (result == E_UNEXPECTED && initialElements == 0)
+            // The element list can stop early for reasons outside the dock. Unless it already reached the taskbar,
+            // attach straight to the taskbar window so the dock is still there.
+            if (result == E_UNEXPECTED && !taskbarFrameSeen)
                 QueueEmbeddedControls();
 
             const HANDLE signals[] = {stop.get(), controller.get()};
@@ -106,7 +108,10 @@ namespace
                 if (type.View() == L"Windows.UI.Xaml.Hosting.DesktopWindowXamlSource")
                     RememberSource(element.Handle);
                 else if (type.View() == L"Taskbar.TaskbarFrame")
+                {
+                    taskbarFrameSeen = true;
                     QueueStyle(element.Handle);
+                }
                 else if (name.View() == L"RunningIndicator")
                     QueueIndicator(element.Handle);
             }
@@ -332,6 +337,7 @@ namespace
         std::atomic<bool> stopping{};
         std::atomic<bool> countInitialElements{true};
         std::atomic<unsigned> initialElements{};
+        std::atomic<bool> taskbarFrameSeen{};
         std::mutex taskbarLock;
         DispatcherQueue taskbarQueue{nullptr};
         std::map<DWORD, winrt::weak_ref<DesktopWindowXamlSource>> primarySources;
