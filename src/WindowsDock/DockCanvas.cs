@@ -5,10 +5,16 @@ namespace WindowsDock;
 internal enum DeskItemKind { Sticky, Text, Rectangle, Ellipse, Diamond, Line, Arrow, Sticker, Image, Chart, Table, Ink }
 internal enum DeskStroke { Solid, Dashed, Dotted }
 internal enum DeskLineAngle { Rising, Falling, Horizontal, Vertical }
+// New values only ever go on the end: saved canvases store these as numbers.
+internal enum DeskRoute { Straight, Elbow, Curved }
+internal enum DeskHeads { Default, None, End, Start, Both }
+internal enum DeskAnchor { Auto, Top, Right, Bottom, Left }
 internal sealed record DeskVertex(double X, double Y);
 internal sealed record DeskBoardItem(Guid Id, DeskItemKind Kind, double X, double Y, double Width, double Height,
     string Text, string Color, DeskStroke Stroke = DeskStroke.Solid, string? Image = null, bool Reverse = false,
-    DeskVertex[]? Vertices = null, Guid? From = null, Guid? To = null, DeskLineAngle Angle = DeskLineAngle.Rising);
+    DeskVertex[]? Vertices = null, Guid? From = null, Guid? To = null, DeskLineAngle Angle = DeskLineAngle.Rising,
+    double Rotation = 0, string? Fill = null, string? BorderColor = null, double BorderWidth = 2, DeskRoute Route = DeskRoute.Straight,
+    DeskHeads Heads = DeskHeads.Default, DeskAnchor FromAnchor = DeskAnchor.Auto, DeskAnchor ToAnchor = DeskAnchor.Auto);
 internal sealed record DeskCanvas(Guid Id, string Name, DeskBoardItem[] Items);
 
 internal static class DockCanvas

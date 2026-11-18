@@ -21,6 +21,16 @@ public partial class DashboardWindow
         _ => null
     };
 
+    /// <summary>Which ends of a line carry an arrowhead. Plain lines have none and arrows one at the end, unless set.</summary>
+    private static (bool Start, bool End) BoardHeads(DeskBoardItem item)
+    {
+        var heads = item.Heads != DeskHeads.Default ? item.Heads
+            : item.Kind == DeskItemKind.Line && item.From == null ? DeskHeads.None : DeskHeads.End;
+        var start = heads is DeskHeads.Start or DeskHeads.Both;
+        var end = heads is DeskHeads.End or DeskHeads.Both;
+        return item.Reverse ? (end, start) : (start, end);
+    }
+
     private static Line BoardStroke(DeskStroke style, Brush color) => new()
     {
         Stroke = color, StrokeThickness = 2.6, StrokeDashArray = BoardDashes(style), StrokeDashCap = PenLineCap.Round
@@ -73,7 +83,7 @@ public partial class DashboardWindow
             case DeskItemKind.Ink:
             {
                 var coordinates = new Canvas { Width = 100, Height = 100 };
-                coordinates.Children.Add(new Polyline { Stroke = color, StrokeThickness = 2, StrokeLineJoin = PenLineJoin.Round,
+                coordinates.Children.Add(new Polyline { Stroke = color, StrokeThickness = Math.Clamp(item.BorderWidth, 1, 16), StrokeLineJoin = PenLineJoin.Round,
                     StrokeDashArray = BoardDashes(item.Stroke), StrokeDashCap = PenLineCap.Round,
                     Points = new PointCollection((item.Vertices ?? []).Select(point => new Point(point.X * 100, point.Y * 100))) });
                 return new Viewbox { Child = coordinates, Stretch = Stretch.Fill };
@@ -83,7 +93,10 @@ public partial class DashboardWindow
             {
                 var local = new Canvas { Width = 170, Height = 56, ClipToBounds = false };
                 var line = BoardStroke(item.Stroke, color);
-                var arrow = new Polygon { Fill = color, Visibility = item.Kind == DeskItemKind.Arrow ? Visibility.Visible : Visibility.Collapsed };
+                line.StrokeThickness = Math.Clamp(item.BorderWidth * 1.3, 1, 16);
+                var (startHead, endHead) = BoardHeads(item);
+                var arrow = new Polygon { Fill = color, Visibility = endHead ? Visibility.Visible : Visibility.Collapsed };
+                var back = new Polygon { Fill = color, Visibility = startHead ? Visibility.Visible : Visibility.Collapsed };
                 var (from, to) = item.Angle switch
                 {
                     DeskLineAngle.Horizontal => (new Point(10, 28), new Point(157, 28)),
@@ -91,9 +104,11 @@ public partial class DashboardWindow
                     DeskLineAngle.Falling => (new Point(10, 12), new Point(157, 45)),
                     _ => (new Point(10, 45), new Point(157, 12))
                 };
-                SetBoardLine(line, arrow, item.Reverse ? to : from, item.Reverse ? from : to);
+                SetBoardLine(line, arrow, from, to);
+                SetBoardLine(new Line(), back, to, from);
                 local.Children.Add(line);
                 local.Children.Add(arrow);
+                local.Children.Add(back);
                 return new Viewbox { Child = local, Stretch = Stretch.Fill };
             }
             default:
@@ -104,10 +119,21 @@ public partial class DashboardWindow
                     DeskItemKind.Diamond => new Polygon { Points = new PointCollection([new(50, 0), new(100, 50), new(50, 100), new(0, 50)]), Stretch = Stretch.Fill },
                     _ => new Rectangle { RadiusX = 4, RadiusY = 4 }
                 };
-                shape.Stroke = color;
-                shape.StrokeThickness = 2;
+                var border = item.BorderColor is { } edge ? CanvasBrush(edge, color) : color;
+                shape.Stroke = item.BorderWidth <= 0 ? null : border;
+                shape.StrokeThickness = Math.Clamp(item.BorderWidth, 0, 16);
                 shape.StrokeDashArray = BoardDashes(item.Stroke);
-                shape.Fill = new SolidColorBrush(Color.FromArgb(38, color.Color.R, color.Color.G, color.Color.B));
+                shape.StrokeDashCap = PenLineCap.Round;
+                // No fill set means a soft tint of the item's colour; "none" leaves it see-through.
+                SolidColorBrush? fill = item.Fill switch
+                {
+                    null => new SolidColorBrush(Color.FromArgb(38, color.Color.R, color.Color.G, color.Color.B)),
+                    "none" => null,
+                    var hex => CanvasBrush(hex, color)
+                };
+                shape.Fill = fill ?? (Brush)Brushes.Transparent;
+                if (item.Fill is { } chosen && chosen != "none" && fill != null && !SystemParameters.HighContrast)
+                    text.Foreground = fill.Color.R * .299 + fill.Color.G * .587 + fill.Color.B * .114 > 145 ? Brushes.Black : Brushes.White;
                 text.VerticalAlignment = VerticalAlignment.Center;
                 text.TextAlignment = TextAlignment.Center;
                 return new Grid { Children = { shape, text } };

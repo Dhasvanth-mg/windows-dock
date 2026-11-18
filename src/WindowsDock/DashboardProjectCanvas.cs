@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using Path = System.Windows.Shapes.Path;
 
 namespace WindowsDock;
 
@@ -41,14 +42,18 @@ public partial class DashboardWindow
         drawing.RenderTransform = new TransformGroup { Children = { scale, pan } };
         viewport.Children.Add(drawing);
         var sidebar = new StackPanel();
-        var side = new ScrollViewer { Content = sidebar, Width = 238, Margin = new Thickness(12, 0, 0, 0),
+        var side = new ScrollViewer { Content = sidebar, Width = 262, Margin = new Thickness(12, 0, 0, 0),
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         var status = Text("", 11, AssistantSecondary);
         status.TextWrapping = TextWrapping.Wrap;
         var undo = new LinkedList<DeskCanvas>();
         var images = new Dictionary<string, BitmapSource?>(StringComparer.Ordinal);
         var items = new Dictionary<Guid, Border>();
-        var links = new List<(DeskBoardItem Item, Line Line, Polygon Arrow)>();
+        var links = new List<(DeskBoardItem Item, Path Line, Path Hit, Polygon End, Polygon Start)>();
+        var ends = new Dictionary<Guid, (Point Start, Point End)>();
+        var adornments = new List<FrameworkElement>();
+        var lastRoute = DeskRoute.Straight;
+        string? openPicker = null;
         Guid? selected = null;
         Guid? connectFrom = null;
         var drawingInk = false;
@@ -397,38 +402,85 @@ public partial class DashboardWindow
             drawing.Children.Clear();
             items.Clear();
             links.Clear();
+            adornments.Clear();
+            foreach (var item in board.Items.Where(entry => entry.From == null))
+                AddVisual(item);
+            // Connectors sit above the items they join, so an arrowhead is never hidden under a shape.
             foreach (var item in board.Items.Where(entry => entry.From != null))
             {
                 var color = CanvasBrush(item.Color, AssistantSecondary);
-                var line = BoardStroke(item.Stroke, color);
-                line.StrokeThickness = item.Id == selected ? 4 : 2;
-                line.Cursor = Cursors.Hand;
-                var arrow = new Polygon { Fill = color, IsHitTestVisible = false };
-                line.MouseLeftButtonDown += (_, args) => { Choose(item.Id); args.Handled = true; };
+                var width = Math.Clamp(item.BorderWidth * 1.3, 1, 16) + (item.Id == selected ? 1.2 : 0);
+                var line = new Path { Stroke = color, StrokeThickness = width, StrokeDashArray = BoardDashes(item.Stroke),
+                    StrokeDashCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false };
+                // A wide see-through twin makes a thin line easy to click.
+                var hit = new Path { Stroke = Brushes.Transparent, StrokeThickness = Math.Max(14, width + 8), Cursor = Cursors.Hand };
+                hit.MouseLeftButtonDown += (_, args) => { Choose(item.Id); args.Handled = true; };
+                var end = new Polygon { Fill = color, IsHitTestVisible = false };
+                var start = new Polygon { Fill = color, IsHitTestVisible = false };
                 drawing.Children.Add(line);
-                drawing.Children.Add(arrow);
-                links.Add((item, line, arrow));
+                drawing.Children.Add(hit);
+                drawing.Children.Add(end);
+                drawing.Children.Add(start);
+                links.Add((item, line, hit, end, start));
             }
-            foreach (var item in board.Items.Where(entry => entry.From == null))
-                AddVisual(item);
             PositionLinks();
+            Adorn();
+        }
+
+        // The item as it stands on screen right now, which differs from the saved one while it is being dragged.
+        DeskBoardItem? Live(Guid? id)
+        {
+            if (id is not { } key || board.Items.FirstOrDefault(entry => entry.Id == key) is not { } item)
+                return null;
+            return items.TryGetValue(key, out var frame)
+                ? item with { X = Canvas.GetLeft(frame), Y = Canvas.GetTop(frame), Width = frame.Width, Height = frame.Height }
+                : item;
         }
 
         void PositionLinks()
         {
-            foreach (var (item, line, arrow) in links)
+            ends.Clear();
+            foreach (var (item, line, hit, endHead, startHead) in links)
             {
-                if (item.From is not { } from || item.To is not { } to || !items.TryGetValue(from, out var first) ||
-                    !items.TryGetValue(to, out var second))
+                if (Live(item.From) is not { } a || Live(item.To) is not { } b)
                     continue;
-                var start = new Point(Canvas.GetLeft(first) + first.Width / 2, Canvas.GetTop(first) + first.Height / 2);
-                var end = new Point(Canvas.GetLeft(second) + second.Width / 2, Canvas.GetTop(second) + second.Height / 2);
-                var delta = end - start;
-                if (delta.Length < 1)
-                    delta = new Vector(1, 0);
-                start += delta * Math.Min(.46, EdgeInset(first, delta));
-                end -= delta * Math.Min(.46, EdgeInset(second, delta));
-                SetBoardLine(line, arrow, item.Reverse ? end : start, item.Reverse ? start : end);
+                var (fromSide, toSide) = DockCanvasGeometry.Ends(a, item.FromAnchor, b, item.ToAnchor);
+                var start = DockCanvasGeometry.Anchor(a, fromSide);
+                var finish = DockCanvasGeometry.Anchor(b, toSide);
+                var startOut = DockCanvasGeometry.Normal(a, fromSide);
+                var finishOut = DockCanvasGeometry.Normal(b, toSide);
+                Geometry geometry;
+                Vector arriving, leaving;
+                switch (item.Route)
+                {
+                    case DeskRoute.Elbow:
+                        var corners = DockCanvasGeometry.Elbow(start, startOut, finish, finishOut);
+                        var figure = new PathFigure { StartPoint = corners[0] };
+                        figure.Segments.Add(new PolyLineSegment(corners.Skip(1), true));
+                        geometry = new PathGeometry([figure]);
+                        arriving = -finishOut;
+                        leaving = startOut;
+                        break;
+                    case DeskRoute.Curved:
+                        var (first, second) = DockCanvasGeometry.Curve(start, startOut, finish, finishOut);
+                        var curve = new PathFigure { StartPoint = start };
+                        curve.Segments.Add(new BezierSegment(first, second, finish, true));
+                        geometry = new PathGeometry([curve]);
+                        arriving = -finishOut;
+                        leaving = startOut;
+                        break;
+                    default:
+                        geometry = new LineGeometry(start, finish);
+                        arriving = finish - start;
+                        leaving = finish - start;
+                        break;
+                }
+                line.Data = geometry;
+                hit.Data = geometry;
+                var (atStart, atEnd) = BoardHeads(item);
+                Arrowhead(endHead, finish, arriving, line.StrokeThickness, atEnd);
+                Arrowhead(startHead, start, -leaving, line.StrokeThickness, atStart);
+                ends[item.Id] = (start, finish);
             }
         }
 
@@ -436,7 +488,8 @@ public partial class DashboardWindow
         {
             var shape = new Border { Width = item.Width, Height = item.Height, Background = Brushes.Transparent,
                 BorderThickness = new Thickness(1), BorderBrush = item.Id == selected ? AccentFill : Brushes.Transparent,
-                Cursor = Cursors.SizeAll, ClipToBounds = true, Focusable = true };
+                Cursor = Cursors.SizeAll, ClipToBounds = true, Focusable = true,
+                RenderTransformOrigin = new Point(.5, .5), RenderTransform = new RotateTransform(item.Rotation) };
             AutomationProperties.SetName(shape, CanvasTitle(item.Kind));
             var body = new Grid();
             var rendered = CanvasVisual(item, item.Image == null ? null : GetImage(item.Image));
@@ -467,6 +520,7 @@ public partial class DashboardWindow
                 var delta = args.GetPosition(drawing) - from;
                 Canvas.SetLeft(shape, item.X + delta.X);
                 Canvas.SetTop(shape, item.Y + delta.Y);
+                HideAdornments();
                 PositionLinks();
             };
             shape.MouseLeftButtonUp += (_, args) =>
@@ -490,6 +544,7 @@ public partial class DashboardWindow
                     Background = AccentFill };
                 AutomationProperties.SetName(handle, "Resize item");
                 body.Children.Add(handle);
+                handle.DragStarted += (_, _) => HideAdornments();
                 handle.DragDelta += (_, args) =>
                 {
                     shape.Width = Math.Clamp(shape.Width + args.HorizontalChange / scale.ScaleX, 20, 1800);
@@ -499,6 +554,188 @@ public partial class DashboardWindow
                 handle.DragCompleted += (_, _) => Run(() => Update(item.Id,
                     entry => entry with { Width = shape.Width, Height = shape.Height }));
             }
+        }
+
+        void HideAdornments()
+        {
+            foreach (var element in adornments)
+                element.Visibility = Visibility.Collapsed;
+        }
+
+        // Handles around the selection: the four connection points and a rotation handle on an item, or the two
+        // ends of a connector. Dragging from a connection point onto another item clips an arrow between them.
+        void Adorn()
+        {
+            if (Live(selected) is not { } item)
+                return;
+            if (item.From != null)
+            {
+                if (ends.TryGetValue(item.Id, out var line))
+                {
+                    AddEndHandle(item, line.Start, fromEnd: true, line.End);
+                    AddEndHandle(item, line.End, fromEnd: false, line.Start);
+                }
+                return;
+            }
+            if (item.Kind is not (DeskItemKind.Line or DeskItemKind.Arrow or DeskItemKind.Ink))
+                foreach (var side in DockCanvasGeometry.Sides)
+                {
+                    var spot = DockCanvasGeometry.Anchor(item, side);
+                    var dot = Dot(spot, 12, AccentFill, $"Connect from the {side.ToString().ToLowerInvariant()} point");
+                    dot.Cursor = Cursors.Cross;
+                    var source = item;
+                    var fromSide = side;
+                    DragLine(dot, spot, source.Id, target =>
+                    {
+                        var (targetItem, targetSide) = target;
+                        var arrow = DockCanvas.Create(DeskItemKind.Arrow, 0, 0) with
+                        {
+                            From = source.Id, To = targetItem.Id, FromAnchor = fromSide, ToAnchor = targetSide, Route = lastRoute
+                        };
+                        Run(() => Commit(current => current with { Items = [.. current.Items, arrow] }, arrow.Id));
+                    });
+                }
+
+            // The rotation handle floats above the top edge and turns with the item.
+            var center = DockCanvasGeometry.Center(item);
+            var up = DockCanvasGeometry.Rotate(new Vector(0, -(item.Height / 2 + 26)), item.Rotation);
+            var knob = Dot(center + up, 14, Brush("#F4EFE4"), "Rotate");
+            knob.Cursor = Cursors.Hand;
+            var stem = new Line { X1 = center.X + up.X * .62, Y1 = center.Y + up.Y * .62, X2 = center.X + up.X, Y2 = center.Y + up.Y,
+                Stroke = AccentFill, StrokeThickness = 1.5, IsHitTestVisible = false };
+            drawing.Children.Insert(drawing.Children.IndexOf(knob), stem);
+            adornments.Add(stem);
+            var turning = false;
+            knob.MouseLeftButtonDown += (_, args) =>
+            {
+                turning = knob.CaptureMouse();
+                args.Handled = true;
+            };
+            knob.MouseMove += (_, args) =>
+            {
+                if (!turning || !items.TryGetValue(item.Id, out var frame))
+                    return;
+                var pointer = args.GetPosition(drawing) - center;
+                var angle = DockCanvasGeometry.SnapAngle(Math.Atan2(pointer.Y, pointer.X) * 180 / Math.PI + 90,
+                    Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+                ((RotateTransform)frame.RenderTransform).Angle = angle;
+                status.Text = $"{angle:0}°" + (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? "" : " · hold Shift to turn in 15° steps");
+                foreach (var element in adornments.Where(element => element != knob && element != stem))
+                    element.Visibility = Visibility.Collapsed;
+            };
+            knob.MouseLeftButtonUp += (_, args) =>
+            {
+                if (!turning)
+                    return;
+                turning = false;
+                knob.ReleaseMouseCapture();
+                args.Handled = true;
+                if (items.TryGetValue(item.Id, out var frame))
+                {
+                    var angle = ((RotateTransform)frame.RenderTransform).Angle;
+                    status.Text = "";
+                    Run(() => Update(item.Id, entry => entry with { Rotation = angle }));
+                }
+            };
+        }
+
+        Ellipse Dot(Point center, double size, Brush fill, string label)
+        {
+            var dot = new Ellipse { Width = size / scale.ScaleX, Height = size / scale.ScaleX, Fill = fill,
+                Stroke = Brush("#151412"), StrokeThickness = 1.5 / scale.ScaleX, ToolTip = label };
+            AutomationProperties.SetName(dot, label);
+            Canvas.SetLeft(dot, center.X - dot.Width / 2);
+            Canvas.SetTop(dot, center.Y - dot.Height / 2);
+            drawing.Children.Add(dot);
+            adornments.Add(dot);
+            return dot;
+        }
+
+        // The ends of a selected connector can be dragged to another point or another item.
+        void AddEndHandle(DeskBoardItem connector, Point spot, bool fromEnd, Point anchoredAt)
+        {
+            var handle = Dot(spot, 13, Brush("#F4EFE4"), fromEnd ? "Move where the line starts" : "Move where the line ends");
+            handle.Cursor = Cursors.Cross;
+            var keep = fromEnd ? connector.To : connector.From;
+            DragLine(handle, anchoredAt, keep, target =>
+            {
+                var (item, side) = target;
+                Run(() => Update(connector.Id, entry => fromEnd
+                    ? entry with { From = item.Id, FromAnchor = side }
+                    : entry with { To = item.Id, ToAnchor = side }));
+            }, hideLink: connector.Id);
+        }
+
+        // Drags a loose line from a fixed point; over an item it clips to that item's nearest connection point.
+        void DragLine(FrameworkElement grip, Point fixedEnd, Guid? exclude, Action<(DeskBoardItem Item, DeskAnchor Side)> dropped,
+            Guid? hideLink = null)
+        {
+            Line? preview = null;
+            Ellipse? snap = null;
+            (DeskBoardItem Item, DeskAnchor Side)? target = null;
+            grip.MouseLeftButtonDown += (_, args) =>
+            {
+                if (!grip.CaptureMouse())
+                    return;
+                preview = new Line { X1 = fixedEnd.X, Y1 = fixedEnd.Y, X2 = fixedEnd.X, Y2 = fixedEnd.Y, Stroke = AccentFill,
+                    StrokeThickness = 2 / scale.ScaleX, StrokeDashArray = new DoubleCollection([4, 3]), IsHitTestVisible = false };
+                drawing.Children.Add(preview);
+                if (hideLink is { } link && links.FirstOrDefault(entry => entry.Item.Id == link) is { Line: not null } shown)
+                    shown.Line.Opacity = .25;
+                args.Handled = true;
+            };
+            grip.MouseMove += (_, args) =>
+            {
+                if (preview == null)
+                    return;
+                var point = args.GetPosition(drawing);
+                target = ItemAt(point, exclude) is { } over ? (over, DockCanvasGeometry.Nearest(over, point)) : null;
+                var end = target is { } hit ? DockCanvasGeometry.Anchor(hit.Item, hit.Side) : point;
+                preview.X2 = end.X;
+                preview.Y2 = end.Y;
+                if (snap != null)
+                    drawing.Children.Remove(snap);
+                snap = null;
+                if (target != null)
+                {
+                    snap = new Ellipse { Width = 16 / scale.ScaleX, Height = 16 / scale.ScaleX, Stroke = AccentFill,
+                        StrokeThickness = 2.5 / scale.ScaleX, IsHitTestVisible = false };
+                    Canvas.SetLeft(snap, end.X - snap.Width / 2);
+                    Canvas.SetTop(snap, end.Y - snap.Height / 2);
+                    drawing.Children.Add(snap);
+                }
+                status.Text = target == null ? "Drop on another item to clip the line to it." : "";
+            };
+            grip.MouseLeftButtonUp += (_, args) =>
+            {
+                if (preview == null)
+                    return;
+                grip.ReleaseMouseCapture();
+                drawing.Children.Remove(preview);
+                if (snap != null)
+                    drawing.Children.Remove(snap);
+                preview = null;
+                snap = null;
+                args.Handled = true;
+                if (target is { } chosen)
+                    dropped(chosen);
+                else
+                    Draw();
+                target = null;
+            };
+        }
+
+        // The topmost item under a point, allowing for rotation and a small margin so edges are easy to hit.
+        DeskBoardItem? ItemAt(Point point, Guid? exclude)
+        {
+            foreach (var item in board.Items.Where(entry => entry.From == null && entry.Id != exclude &&
+                         entry.Kind is not (DeskItemKind.Line or DeskItemKind.Arrow or DeskItemKind.Ink)).Reverse())
+            {
+                var local = DockCanvasGeometry.Rotate(point - DockCanvasGeometry.Center(item), -item.Rotation);
+                if (Math.Abs(local.X) <= item.Width / 2 + 10 && Math.Abs(local.Y) <= item.Height / 2 + 10)
+                    return item;
+            }
+            return null;
         }
 
         void Inspect()
@@ -547,82 +784,201 @@ public partial class DashboardWindow
                 return;
             }
 
-            sidebar.Children.Add(SectionTitle(CanvasTitle(item.Kind)));
-            var text = Field("Canvas item content", 12_000);
-            text.AcceptsReturn = true;
-            text.TextWrapping = TextWrapping.Wrap;
-            text.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            text.Height = item.Kind is DeskItemKind.Chart or DeskItemKind.Table ? 140 : 84;
-            text.Text = item.Text;
-            if (item.Kind is not (DeskItemKind.Image or DeskItemKind.Ink or DeskItemKind.Line or DeskItemKind.Arrow))
+            sidebar.Children.Add(SectionTitle(CanvasTitle(item.Kind) + (item.From != null ? " (connector)" : "")));
+            var hasText = item.Kind is not (DeskItemKind.Image or DeskItemKind.Ink or DeskItemKind.Line or DeskItemKind.Arrow);
+            if (hasText)
             {
+                var text = Field("Canvas item content", 12_000);
+                text.AcceptsReturn = true;
+                text.TextWrapping = TextWrapping.Wrap;
+                text.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+                text.Height = item.Kind is DeskItemKind.Chart or DeskItemKind.Table ? 120 : 70;
+                text.Text = item.Text;
                 var caption = item.Kind switch
                 {
                     DeskItemKind.Chart => "One label,value on each line",
-                    DeskItemKind.Table => "Rows with tab-separated or comma-separated cells",
+                    DeskItemKind.Table => "Rows of tab- or comma-separated cells",
+                    DeskItemKind.Sticker => "Sticker",
                     _ => "Text"
                 };
+                // Text is saved when you click away from it, like a note.
+                text.LostKeyboardFocus += (_, _) =>
+                {
+                    if (text.Text == item.Text)
+                        return;
+                    if (item.Kind == DeskItemKind.Chart && DockCanvas.Chart(text.Text).Length == 0)
+                    {
+                        status.Text = "Add at least one label,value row.";
+                        return;
+                    }
+                    var value = text.Text;
+                    Dispatcher.BeginInvoke(() => Run(() => Update(item.Id, entry => entry with { Text = value })));
+                };
                 sidebar.Children.Add(Labeled(caption, text));
+                if (item.Kind == DeskItemKind.Sticker)
+                {
+                    var stickers = new WrapPanel();
+                    foreach (var symbol in new[] { "⭐", "💡", "📌", "🎯", "❤️", "⚡", "🌱", "🚀", "🎨", "🧩" })
+                        stickers.Children.Add(QuietButton(symbol, () => Run(() => Update(item.Id, entry => entry with { Text = symbol }))));
+                    sidebar.Children.Add(stickers);
+                }
             }
-            var colors = new WrapPanel();
-            var color = Field("Item color hex", 7);
-            color.Text = item.Color;
-            foreach (var preset in CanvasColors)
+
+            var isShape = item.Kind is DeskItemKind.Rectangle or DeskItemKind.Ellipse or DeskItemKind.Diamond;
+            var isLine = item.From != null || item.Kind is DeskItemKind.Line or DeskItemKind.Arrow;
+            if (isShape)
             {
-                var swatch = QuietButton(" ", () => color.Text = preset);
-                swatch.Width = 24;
-                swatch.Height = 24;
-                swatch.Background = CanvasBrush(preset, AssistantInk);
-                AutomationProperties.SetName(swatch, "Color " + preset);
-                colors.Children.Add(swatch);
+                sidebar.Children.Add(Picker("Fill", item.Fill, allowNone: true, pick => Change(entry => entry with { Fill = pick })));
+                sidebar.Children.Add(Picker("Border", item.BorderColor ?? item.Color, allowNone: false,
+                    pick => Change(entry => entry with { BorderColor = pick })));
+                sidebar.Children.Add(Choice("Border width", ["None", "Thin", "Medium", "Thick"], [0, 1.5, 3, 6], item.BorderWidth,
+                    value => Change(entry => entry with { BorderWidth = value })));
+                sidebar.Children.Add(StrokeChoice());
+                sidebar.Children.Add(Picker("Text colour", item.Color, allowNone: false, pick => Change(entry => entry with { Color = pick! })));
             }
-            sidebar.Children.Add(colors);
-            if (item.Kind == DeskItemKind.Sticker)
+            else
             {
-                var stickers = new WrapPanel();
-                foreach (var symbol in new[] { "⭐", "💡", "📌", "🎯", "❤️", "⚡", "🌱", "🚀", "🎨", "🧩" })
-                    stickers.Children.Add(QuietButton(symbol, () => text.Text = symbol));
-                sidebar.Children.Add(stickers);
+                sidebar.Children.Add(Picker(isLine ? "Line colour" : "Colour", item.Color, allowNone: false,
+                    pick => Change(entry => entry with { Color = pick! })));
             }
-            sidebar.Children.Add(Labeled("Color", color));
-            var style = new ComboBox { ItemsSource = Enum.GetValues<DeskStroke>(), SelectedItem = item.Stroke };
-            AutomationProperties.SetName(style, "Line style");
-            if (item.Kind is DeskItemKind.Line or DeskItemKind.Arrow or DeskItemKind.Rectangle or DeskItemKind.Ellipse or DeskItemKind.Diamond or DeskItemKind.Ink)
-                sidebar.Children.Add(Labeled("Line style", style));
-            var reverse = new CheckBox { Content = item.From == null ? "Flip direction" : "Reverse arrow", IsChecked = item.Reverse };
-            var angle = new ComboBox { ItemsSource = Enum.GetValues<DeskLineAngle>(), SelectedItem = item.Angle };
-            AutomationProperties.SetName(angle, "Line direction");
-            if (item.Kind is DeskItemKind.Arrow or DeskItemKind.Line)
+            if (isLine || item.Kind == DeskItemKind.Ink)
             {
-                if (item.From == null)
-                    sidebar.Children.Add(Labeled("Direction", angle));
-                sidebar.Children.Add(reverse);
+                sidebar.Children.Add(Choice("Line width", ["Thin", "Medium", "Thick", "Heavy"], [1, 2, 3.5, 6], item.BorderWidth,
+                    value => Change(entry => entry with { BorderWidth = value })));
+                sidebar.Children.Add(StrokeChoice());
             }
-            sidebar.Children.Add(ActionButton("Apply changes", () => Run(() =>
+            if (isLine)
             {
-                if (color.Text.Length != 7 || color.Text[0] != '#' || !color.Text.Skip(1).All(Uri.IsHexDigit))
-                    throw new ArgumentException("Use a hex color such as #8BB5DA.");
-                if (item.Kind == DeskItemKind.Chart && DockCanvas.Chart(text.Text).Length == 0)
-                    throw new ArgumentException("Add at least one label,value row.");
-                Update(item.Id, current => current with { Text = text.Text, Color = color.Text,
-                    Reverse = reverse.IsChecked == true, Stroke = (DeskStroke)(style.SelectedItem ?? DeskStroke.Solid),
-                    Angle = (DeskLineAngle)(angle.SelectedItem ?? DeskLineAngle.Rising) });
-            })));
+                var heads = item.Heads != DeskHeads.Default ? item.Heads
+                    : item.Kind == DeskItemKind.Line && item.From == null ? DeskHeads.None : DeskHeads.End;
+                sidebar.Children.Add(Choice("Arrowheads", ["None", "End", "Start", "Both"],
+                    [(double)DeskHeads.None, (double)DeskHeads.End, (double)DeskHeads.Start, (double)DeskHeads.Both], (double)heads,
+                    value => Change(entry => entry with { Heads = (DeskHeads)(int)value, Reverse = false })));
+            }
+            if (item.From != null)
+            {
+                sidebar.Children.Add(Choice("Path", ["Straight", "Elbow", "Curved"], [0, 1, 2], (double)item.Route, value =>
+                {
+                    lastRoute = (DeskRoute)(int)value;
+                    Change(entry => entry with { Route = lastRoute });
+                }));
+                string[] sides = ["Auto", "Top", "Right", "Bottom", "Left"];
+                double[] values = [0, 1, 2, 3, 4];
+                sidebar.Children.Add(Choice("Starts at", sides, values, (double)item.FromAnchor,
+                    value => Change(entry => entry with { FromAnchor = (DeskAnchor)(int)value })));
+                sidebar.Children.Add(Choice("Ends at", sides, values, (double)item.ToAnchor,
+                    value => Change(entry => entry with { ToAnchor = (DeskAnchor)(int)value })));
+            }
+            else if (item.Kind is DeskItemKind.Line or DeskItemKind.Arrow)
+                sidebar.Children.Add(Choice("Direction", ["↗", "↘", "→", "↓"], [0, 1, 2, 3], (double)item.Angle,
+                    value => Change(entry => entry with { Angle = (DeskLineAngle)(int)value })));
+
             if (item.From == null)
             {
-                sidebar.Children.Add(new WrapPanel { Children =
+                sidebar.Children.Add(Caption("Rotation"));
+                var angle = Field("Rotation in degrees", 4);
+                angle.Width = 56;
+                angle.Text = item.Rotation.ToString("0", CultureInfo.CurrentCulture);
+                angle.KeyDown += (_, args) =>
                 {
-                    QuietButton("Duplicate", () => Run(() =>
-                    {
-                        var copy = item with { Id = Guid.NewGuid(), X = item.X + 24, Y = item.Y + 24 };
-                        Commit(current => current with { Items = [.. current.Items, copy] }, copy.Id);
-                    })),
-                    QuietButton("Bring to front", () => Run(() => Commit(current => current with
-                        { Items = [.. current.Items.Where(entry => entry.Id != item.Id), current.Items.First(entry => entry.Id == item.Id)] }, item.Id)))
-                } });
+                    if (args.Key != Key.Enter)
+                        return;
+                    args.Handled = true;
+                    if (double.TryParse(angle.Text.TrimEnd('°'), NumberStyles.Float, CultureInfo.CurrentCulture, out var degrees))
+                        Change(entry => entry with { Rotation = DockCanvasGeometry.SnapAngle(degrees) });
+                    else
+                        status.Text = "Enter the rotation in degrees, such as 45.";
+                };
+                var turn = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
+                turn.Children.Add(angle);
+                foreach (var (label, step) in new[] { ("−15°", -15d), ("+15°", 15d), ("+90°", 90d) })
+                {
+                    var button = QuietButton(label, () => Change(entry => entry with { Rotation = DockCanvasGeometry.SnapAngle(entry.Rotation + step, true) }));
+                    button.Margin = new Thickness(10, 0, 0, 0);
+                    turn.Children.Add(button);
+                }
+                var reset = QuietButton("Straighten", () => Change(entry => entry with { Rotation = 0 }));
+                reset.Margin = new Thickness(10, 0, 0, 0);
+                turn.Children.Add(reset);
+                sidebar.Children.Add(turn);
             }
-            sidebar.Children.Add(QuietButton("Remove item", () => Run(() => Commit(current => DockCanvas.Remove(current, item.Id), null))));
+
+            var actions = new WrapPanel { Margin = new Thickness(0, 12, 0, 0) };
+            if (item.From == null)
+            {
+                actions.Children.Add(Gap(QuietButton("Duplicate", () => Run(() =>
+                {
+                    var copy = item with { Id = Guid.NewGuid(), X = item.X + 24, Y = item.Y + 24 };
+                    Commit(current => current with { Items = [.. current.Items, copy] }, copy.Id);
+                }))));
+                actions.Children.Add(Gap(QuietButton("Bring to front", () => Run(() => Commit(current => current with
+                    { Items = [.. current.Items.Where(entry => entry.Id != item.Id), current.Items.First(entry => entry.Id == item.Id)] }, item.Id)))));
+            }
+            var removeItem = QuietButton("Remove", () => Run(() => Commit(current => DockCanvas.Remove(current, item.Id), null)));
+            removeItem.Foreground = bad;
+            actions.Children.Add(removeItem);
+            sidebar.Children.Add(actions);
             sidebar.Children.Add(status);
+
+            void Change(Func<DeskBoardItem, DeskBoardItem> edit) => Run(() => Update(item.Id, edit));
+
+            FrameworkElement StrokeChoice() => Choice("Line style", ["Solid", "Dashed", "Dotted"], [0, 1, 2], (double)item.Stroke,
+                value => Change(entry => entry with { Stroke = (DeskStroke)(int)value }));
+
+            static FrameworkElement Gap(FrameworkElement element)
+            {
+                element.Margin = new Thickness(0, 0, 14, 0);
+                return element;
+            }
+        }
+
+        // One row per colour: its name and current swatch. A click opens the palette under it; only one is open at a time.
+        FrameworkElement Picker(string label, string? current, bool allowNone, Action<string?> pick)
+        {
+            var open = openPicker == label;
+            var panel = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+            var row = new DockPanel();
+            var chevron = DockGlyph(open ? 0xE70E : 0xE70D, 10, AssistantFaint);
+            chevron.VerticalAlignment = VerticalAlignment.Center;
+            chevron.Margin = new Thickness(8, 0, 0, 0);
+            DockPanel.SetDock(chevron, Dock.Right);
+            row.Children.Add(chevron);
+            var swatch = new Border { Width = 22, Height = 18, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1),
+                BorderBrush = Brush("#33FFFFFF"), Background = DockCanvasGeometry.IsColor(current) ? CanvasBrush(current!, AssistantInk) : Brushes.Transparent };
+            DockPanel.SetDock(swatch, Dock.Right);
+            row.Children.Add(swatch);
+            var note = current switch { null => " · soft tint", "none" => " · none", _ => "" };
+            var name = Text(label + note, 12, AssistantSecondary);
+            name.VerticalAlignment = VerticalAlignment.Center;
+            row.Children.Add(name);
+            var header = PlainButton(row, (open ? "Close " : "Choose ") + label.ToLowerInvariant(), () =>
+            {
+                openPicker = open ? null : label;
+                Inspect();
+            });
+            header.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+            header.Margin = new Thickness(-8, 0, -8, 0);
+            panel.Children.Add(header);
+            if (open)
+                panel.Children.Add(Spaced(CanvasPalette(current, allowNone, pick), 0, 6));
+            return panel;
+        }
+
+        TextBlock Caption(string label)
+        {
+            var caption = Text(label, 11, AssistantFaint);
+            caption.Margin = new Thickness(0, 10, 0, 4);
+            return caption;
+        }
+
+        // A labelled segmented choice. The closest value is shown as chosen, so older items with in-between widths still mark one.
+        FrameworkElement Choice(string label, string[] labels, double[] values, double current, Action<double> choose)
+        {
+            var nearest = Array.IndexOf(values, values.MinBy(value => Math.Abs(value - current)));
+            var panel = new StackPanel();
+            panel.Children.Add(Caption(label));
+            panel.Children.Add(Segmented(label, labels, nearest, index => choose(values[index])));
+            return panel;
         }
 
         void Update(Guid id, Func<DeskBoardItem, DeskBoardItem> edit) =>
@@ -709,6 +1065,80 @@ public partial class DashboardWindow
             Canvas.SetLeft(element, left);
             Canvas.SetTop(element, top);
             return element;
+        }
+    }
+
+    // An arrowhead whose size follows the line's thickness, pointing along the direction the line arrives in.
+    private static void Arrowhead(Polygon head, Point tip, Vector direction, double thickness, bool show)
+    {
+        head.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (!show || direction.Length < .001)
+            return;
+        direction.Normalize();
+        var across = new Vector(-direction.Y, direction.X);
+        var length = 9 + thickness * 2.2;
+        var half = 4 + thickness * 1.2;
+        head.Points = new PointCollection([tip, tip - direction * length + across * half, tip - direction * length - across * half]);
+    }
+
+    // The dock's own colour first, then each canvas hue, every one from a pale tint to a deep shade and then the same
+    // steps muted; a row of neutrals; and a box for any other hex colour.
+    private FrameworkElement CanvasPalette(string? current, bool allowNone, Action<string?> pick)
+    {
+        var panel = new StackPanel();
+        string[] hues = [chosenAccent.Hex, "#DE6F6F", "#E7BF68", "#A9BE83", "#8BC6B1", "#8BB5DA", "#9C8BDA", "#D58BC4"];
+        string[] neutrals = ["#FFFFFF", "#E6E4DF", "#C4C1BA", "#9A968F", "#716D66", "#4D4A45", "#33312D", "#22201E", "#141311", "#000000"];
+        var rows = hues.Select(DockCanvasGeometry.Shades).Append(neutrals).ToArray();
+        for (var row = 0; row < rows.Length; row++)
+        {
+            var line = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
+            foreach (var hex in rows[row])
+                line.Children.Add(Swatch(hex, row == 0 ? "Dock colour" : null));
+            panel.Children.Add(line);
+        }
+        var custom = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+        if (allowNone)
+        {
+            var none = QuietButton("No fill", () => pick("none"));
+            none.Margin = new Thickness(0, 0, 12, 0);
+            if (current == "none")
+                none.Foreground = AssistantInk;
+            custom.Children.Add(none);
+        }
+        var hexBox = Field("Any hex colour", 7);
+        hexBox.Width = 78;
+        hexBox.Text = DockCanvasGeometry.IsColor(current) ? current! : "";
+        hexBox.Tag = "#RRGGBB";
+        hexBox.KeyDown += (_, args) =>
+        {
+            if (args.Key != Key.Enter)
+                return;
+            args.Handled = true;
+            var value = hexBox.Text.Trim();
+            if (!value.StartsWith('#'))
+                value = "#" + value;
+            if (DockCanvasGeometry.IsColor(value))
+                pick(value.ToUpperInvariant());
+        };
+        custom.Children.Add(hexBox);
+        panel.Children.Add(custom);
+        return panel;
+
+        FrameworkElement Swatch(string hex, string? family)
+        {
+            var on = string.Equals(hex, current, StringComparison.OrdinalIgnoreCase);
+            var chip = new Border
+            {
+                Width = 20, Height = 20, CornerRadius = new CornerRadius(5), Background = CanvasBrush(hex, AssistantInk),
+                BorderThickness = new Thickness(on ? 2 : 1), BorderBrush = on ? AssistantInk : Brush("#22FFFFFF")
+            };
+            var button = PlainButton(chip, $"{family ?? "Colour"} {hex}", () => pick(hex));
+            button.Padding = new Thickness(0);
+            button.Margin = new Thickness(0, 0, 2, 0);
+            button.ToolTip = hex;
+            if (on)
+                AutomationProperties.SetItemStatus(button, "Chosen");
+            return button;
         }
     }
 
