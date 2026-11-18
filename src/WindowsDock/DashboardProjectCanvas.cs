@@ -45,46 +45,137 @@ public partial class DashboardWindow
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         var status = Text("", 11, AssistantSecondary);
         status.TextWrapping = TextWrapping.Wrap;
-        var toolbar = new WrapPanel { Margin = new Thickness(0, 0, 0, 7) };
         var undo = new LinkedList<DeskCanvas>();
         var images = new Dictionary<string, BitmapSource?>(StringComparer.Ordinal);
         var items = new Dictionary<Guid, Border>();
         var links = new List<(DeskBoardItem Item, Line Line, Polygon Arrow)>();
         Guid? selected = null;
         Guid? connectFrom = null;
-        var mode = new ToggleButton { Content = "Draw", Margin = new Thickness(3) };
+        var drawingInk = false;
+        var deleteArmed = false;
         Polyline? ink = null;
         Point? panStart = null;
         Point originalPan = default;
-        var tools = new ComboBox { ItemsSource = CanvasTools.Select(item => item.Title), SelectedIndex = 0, Width = 130 };
-        AutomationProperties.SetName(tools, "Canvas tool");
-        toolbar.Children.Add(tools);
-        toolbar.Children.Add(ActionButton("Add item", () => Run(() =>
+
+        // A dot grid that pans and zooms with the board, the way whiteboard apps show where the paper is.
+        var dots = new DrawingBrush(new GeometryDrawing(Brush("#2EFFFFFF"), null, new EllipseGeometry(new Point(1, 1), 1, 1)))
         {
-            var kind = CanvasTools[tools.SelectedIndex].Kind;
-            if (kind == DeskItemKind.Image)
-            {
-                if (DockDeskImages.Choose(window) is { } image)
-                    Insert(kind, image: image);
-            }
-            else
-                Insert(kind);
-        })));
-        toolbar.Children.Add(QuietButton("Paste", () => Run(Paste)));
-        toolbar.Children.Add(mode);
-        toolbar.Children.Add(QuietButton("Connect", () =>
+            TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 24, 24), ViewportUnits = BrushMappingMode.Absolute,
+            Viewbox = new Rect(0, 0, 24, 24), ViewboxUnits = BrushMappingMode.Absolute, Transform = drawing.RenderTransform
+        };
+        var grid = new Border { Background = SystemParameters.HighContrast ? null : dots, IsHitTestVisible = false };
+        viewport.Children.Insert(0, grid);
+
+        // Tools sit in a floating rail on the left of the board. A click drops that item in the middle of the view;
+        // the pen and connector stay on until used or until Esc.
+        var rail = new StackPanel { Margin = new Thickness(6) };
+        var railCard = Floating(rail, HorizontalAlignment.Left, VerticalAlignment.Top);
+        railCard.Margin = new Thickness(12, 12, 0, 12);
+        Button? penButton = null, connectButton = null;
+        void AddTool(FrameworkElement icon, string label, Action action, out Button button)
         {
+            button = MakeButton(icon, label, action);
+            button.Style = (Style)FindResource("AssistantPickerButton");
+            button.Width = button.Height = 34;
+            button.Padding = new Thickness(0);
+            button.Margin = new Thickness(0, 0, 0, 2);
+            button.HorizontalContentAlignment = HorizontalAlignment.Center;
+            button.ToolTip = label;
+            rail.Children.Add(button);
+        }
+        void Separator() => rail.Children.Add(new Border { Height = 1, Margin = new Thickness(6, 4, 6, 6), Background = AssistantRule });
+        AddTool(CanvasToolIcon("pen"), "Pen (draw freehand)", () =>
+        {
+            drawingInk = !drawingInk;
+            connectFrom = null;
+            status.Text = drawingInk ? "Drawing. Press Esc or click the pen again to stop." : "";
+            MarkTools();
+        }, out var pen);
+        penButton = pen;
+        AddTool(CanvasToolIcon("connect"), "Connect two items with an arrow", () =>
+        {
+            drawingInk = false;
             connectFrom = selected is { } id && items.ContainsKey(id) ? id : null;
-            status.Text = connectFrom == null ? "Select a starting item first." : "Select the item the arrow points to.";
-        }));
-        toolbar.Children.Add(QuietButton("Fit canvas", Fit));
-        toolbar.Children.Add(QuietButton("Undo", Undo));
-        toolbar.Children.Add(QuietButton("Canvas details", () => Select(null)));
-        DockPanel.SetDock(toolbar, Dock.Top);
+            status.Text = connectFrom == null ? "Select a starting item first." : "Now select the item the arrow points to.";
+            MarkTools();
+        }, out var connect);
+        connectButton = connect;
+        Separator();
+        foreach (var (kind, title) in CanvasTools)
+        {
+            var toolKind = kind;
+            AddTool(CanvasToolIcon(kind.ToString()), "Add " + title.ToLowerInvariant(), () => Run(() =>
+            {
+                drawingInk = false;
+                MarkTools();
+                if (toolKind == DeskItemKind.Image)
+                {
+                    if (DockDeskImages.Choose(DialogOwner(window)) is { } image)
+                        Insert(toolKind, image: image);
+                }
+                else
+                    Insert(toolKind);
+            }), out _);
+        }
+        var railScroll = new ScrollViewer { Content = rail, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden };
+        railCard.Child = railScroll;
+        viewport.Children.Add(railCard);
+
+        var zoomLabel = Text("100%", 12, AssistantSecondary);
+        zoomLabel.Width = 42;
+        zoomLabel.TextAlignment = TextAlignment.Center;
+        zoomLabel.VerticalAlignment = VerticalAlignment.Center;
+        var zoomRow = new StackPanel { Orientation = Orientation.Horizontal };
+        zoomRow.Children.Add(ChipIcon(0xE738, "Zoom out", () => ZoomBy(1 / 1.25)));
+        zoomRow.Children.Add(zoomLabel);
+        zoomRow.Children.Add(ChipIcon(0xE710, "Zoom in", () => ZoomBy(1.25)));
+        zoomRow.Children.Add(ChipIcon(0xE9A6, "Fit the board in view", Fit));
+        var zoomCard = Floating(zoomRow, HorizontalAlignment.Right, VerticalAlignment.Bottom);
+        zoomCard.Margin = new Thickness(0, 0, 12, 12);
+        viewport.Children.Add(zoomCard);
+
+        var editRow = new StackPanel { Orientation = Orientation.Horizontal };
+        editRow.Children.Add(ChipIcon(0xE7A7, "Undo (Ctrl+Z)", Undo));
+        editRow.Children.Add(ChipIcon(0xE77F, "Paste a picture, text or table cells (Ctrl+V)", () => Run(Paste)));
+        editRow.Children.Add(ChipIcon(0xE713, "Canvas name and settings", () => Select(null)));
+        var editCard = Floating(editRow, HorizontalAlignment.Right, VerticalAlignment.Top);
+        editCard.Margin = new Thickness(0, 12, 12, 0);
+        viewport.Children.Add(editCard);
+        var overlays = new FrameworkElement[] { railCard, zoomCard, editCard };
+
         DockPanel.SetDock(side, Dock.Right);
-        layout.Children.Add(toolbar);
         layout.Children.Add(side);
         layout.Children.Add(viewport);
+        scale.Changed += (_, _) => zoomLabel.Text = $"{scale.ScaleX * 100:0}%";
+
+        void MarkTools()
+        {
+            foreach (var (button, on) in new[] { (penButton, drawingInk), (connectButton, connectFrom != null) })
+                if (button != null)
+                {
+                    button.Background = on ? controlSelected : Brushes.Transparent;
+                    AutomationProperties.SetItemStatus(button, on ? "On" : "");
+                }
+            viewport.Cursor = drawingInk ? Cursors.Pen : null;
+        }
+
+        void ZoomBy(double factor)
+        {
+            var center = new Point(viewport.ActualWidth / 2, viewport.ActualHeight / 2);
+            var next = Math.Clamp(scale.ScaleX * factor, .15, 3);
+            var ratio = next / scale.ScaleX;
+            pan.X = center.X - (center.X - pan.X) * ratio;
+            pan.Y = center.Y - (center.Y - pan.Y) * ratio;
+            scale.ScaleX = scale.ScaleY = next;
+        }
+
+        bool OnOverlay(object source)
+        {
+            for (var element = source as DependencyObject; element != null; element = VisualTreeHelper.GetParent(element))
+                if (overlays.Contains(element))
+                    return true;
+            return false;
+        }
         viewport.PreviewMouseWheel += (_, args) =>
         {
             var point = args.GetPosition(viewport);
@@ -110,7 +201,7 @@ public partial class DashboardWindow
         };
         viewport.PreviewMouseLeftButtonDown += (_, args) =>
         {
-            if (mode.IsChecked != true)
+            if (!drawingInk || OnOverlay(args.OriginalSource))
                 return;
             var point = args.GetPosition(drawing);
             ink = new Polyline { Stroke = AssistantInk, StrokeThickness = 3, IsHitTestVisible = false, Points = new PointCollection([point]) };
@@ -173,11 +264,12 @@ public partial class DashboardWindow
                 Undo();
             else if (args.Key == Key.Delete && selected is { } id)
                 Run(() => Commit(current => DockCanvas.Remove(current, id), null));
-            else if (args.Key == Key.Escape && (connectFrom != null || mode.IsChecked == true))
+            else if (args.Key == Key.Escape && (connectFrom != null || drawingInk))
             {
                 connectFrom = null;
-                mode.IsChecked = false;
+                drawingInk = false;
                 status.Text = "";
+                MarkTools();
             }
             else
                 return;
@@ -227,10 +319,13 @@ public partial class DashboardWindow
             var top = visible.Min(item => item.Y);
             var width = visible.Max(item => item.X + item.Width) - left;
             var height = visible.Max(item => item.Y + item.Height) - top;
-            scale.ScaleX = scale.ScaleY = Math.Clamp(Math.Min((viewport.ActualWidth - 50) / width,
-                (viewport.ActualHeight - 50) / height), .15, 1.15);
-            pan.X = (viewport.ActualWidth - width * scale.ScaleX) / 2 - left * scale.ScaleX;
-            pan.Y = (viewport.ActualHeight - height * scale.ScaleY) / 2 - top * scale.ScaleY;
+            // Leave room for the tool rail on the left and the floating controls top and bottom.
+            const double railRoom = 72, edge = 24, bars = 56;
+            var roomWidth = viewport.ActualWidth - railRoom - edge;
+            var roomHeight = viewport.ActualHeight - 2 * bars;
+            scale.ScaleX = scale.ScaleY = Math.Clamp(Math.Min(roomWidth / width, roomHeight / height), .15, 1.15);
+            pan.X = railRoom + (roomWidth - width * scale.ScaleX) / 2 - left * scale.ScaleX;
+            pan.Y = bars + (roomHeight - height * scale.ScaleY) / 2 - top * scale.ScaleY;
         }
 
         void Run(Action work)
@@ -289,6 +384,7 @@ public partial class DashboardWindow
             if (connectFrom is { } from && from != id && items.ContainsKey(id))
             {
                 connectFrom = null;
+                MarkTools();
                 var arrow = DockCanvas.Create(DeskItemKind.Arrow, 0, 0) with { From = from, To = id };
                 Run(() => Commit(current => current with { Items = [.. current.Items, arrow] }, arrow.Id));
             }
@@ -414,6 +510,7 @@ public partial class DashboardWindow
                 name.Text = board.Name;
                 var hint = Text("Drag items to arrange them. Right-drag to pan and scroll to zoom. Paste a picture, text, or spreadsheet cells.", 12, AssistantSecondary);
                 hint.TextWrapping = TextWrapping.Wrap;
+                hint.Margin = new Thickness(0, 0, 0, 14);
                 sidebar.Children.Add(hint);
                 sidebar.Children.Add(Labeled("Name", name));
                 sidebar.Children.Add(QuietButton("Save canvas name", () => Run(() =>
@@ -421,16 +518,31 @@ public partial class DashboardWindow
                     Commit(current => current with { Name = DockDeskspaces.Label(name.Text) }, null);
                     window.Title = board.Name;
                 })));
-                sidebar.Children.Add(QuietButton("Delete canvas", () =>
+                // Deleting asks by changing the button rather than opening a message box.
+                var remove = QuietButton(deleteArmed ? $"Yes, delete {board.Name}" : "Delete canvas", () =>
                 {
-                    if (MessageBox.Show(DialogOwner(window), $"Delete {board.Name}?", "Project canvas", MessageBoxButton.YesNo,
-                        MessageBoxImage.None, MessageBoxResult.No) == MessageBoxResult.Yes)
-                        Run(() =>
-                        {
-                            DockDeskspaces.RemoveCanvas(desk, boardId);
-                            back();
-                        });
-                }));
+                    if (!deleteArmed)
+                    {
+                        deleteArmed = true;
+                        Inspect();
+                        return;
+                    }
+                    deleteArmed = false;
+                    Run(() =>
+                    {
+                        DockDeskspaces.RemoveCanvas(desk, boardId);
+                        back();
+                    });
+                });
+                if (deleteArmed)
+                    remove.Foreground = bad;
+                sidebar.Children.Add(remove);
+                if (deleteArmed)
+                    sidebar.Children.Add(QuietButton("Keep it", () =>
+                    {
+                        deleteArmed = false;
+                        Inspect();
+                    }));
                 sidebar.Children.Add(status);
                 return;
             }
@@ -515,6 +627,89 @@ public partial class DashboardWindow
 
         void Update(Guid id, Func<DeskBoardItem, DeskBoardItem> edit) =>
             Commit(current => current with { Items = current.Items.Select(item => item.Id == id ? edit(item) : item).ToArray() }, id);
+    }
+
+    // A small rounded card that floats over the board, for the tool rail and the zoom and edit controls.
+    private Border Floating(UIElement child, HorizontalAlignment horizontal, VerticalAlignment vertical) => new()
+    {
+        Child = child, HorizontalAlignment = horizontal, VerticalAlignment = vertical,
+        Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : controlFill,
+        BorderBrush = AssistantRule, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10),
+        Padding = new Thickness(3)
+    };
+
+    private Button ChipIcon(int glyph, string label, Action action)
+    {
+        var button = IconButton(glyph, label, action);
+        button.Width = 32;
+        button.Height = 30;
+        button.Margin = new Thickness(0);
+        return button;
+    }
+
+    // Tool icons drawn as the thing they make, so a rectangle tool looks like a rectangle.
+    private FrameworkElement CanvasToolIcon(string tool)
+    {
+        var ink = SystemParameters.HighContrast ? SystemColors.ControlTextBrush : AssistantInk;
+        var soft = SystemParameters.HighContrast ? SystemColors.ControlTextBrush : AssistantSecondary;
+        FrameworkElement Glyph(int code) => DockGlyph(code, 15, ink);
+        var canvas = new Canvas { Width = 18, Height = 18 };
+        switch (tool)
+        {
+            case "pen":
+                canvas.Children.Add(new Polyline { Points = new PointCollection { new(2, 13), new(5, 7), new(8, 12), new(11, 5), new(14, 11), new(16.5, 6) },
+                    Stroke = ink, StrokeThickness = 1.8, StrokeLineJoin = PenLineJoin.Round, StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round });
+                return canvas;
+            case "connect": return Glyph(0xE71B);
+            case nameof(DeskItemKind.Sticky):
+                canvas.Children.Add(new Polygon { Points = new PointCollection { new(2, 2), new(16, 2), new(16, 12), new(12, 16), new(2, 16) },
+                    Fill = Brush("#E7BF68") });
+                canvas.Children.Add(new Polygon { Points = new PointCollection { new(16, 12), new(12, 12), new(12, 16) }, Fill = Brush("#B8913F") });
+                return canvas;
+            case nameof(DeskItemKind.Text):
+                return new TextBlock { Text = "T", FontSize = 16, FontWeight = FontWeights.SemiBold, Foreground = ink,
+                    FontFamily = new FontFamily("Georgia"), HorizontalAlignment = HorizontalAlignment.Center };
+            case nameof(DeskItemKind.Rectangle):
+                canvas.Children.Add(Place(new Rectangle { Width = 15, Height = 12, Stroke = ink, StrokeThickness = 1.6, RadiusX = 2, RadiusY = 2 }, 1.5, 3));
+                return canvas;
+            case nameof(DeskItemKind.Ellipse):
+                canvas.Children.Add(Place(new Ellipse { Width = 15, Height = 13, Stroke = ink, StrokeThickness = 1.6 }, 1.5, 2.5));
+                return canvas;
+            case nameof(DeskItemKind.Diamond):
+                canvas.Children.Add(new Polygon { Points = new PointCollection { new(9, 1.5), new(16.5, 9), new(9, 16.5), new(1.5, 9) },
+                    Stroke = ink, StrokeThickness = 1.6 });
+                return canvas;
+            case nameof(DeskItemKind.Line):
+                canvas.Children.Add(new Line { X1 = 2, Y1 = 16, X2 = 16, Y2 = 2, Stroke = ink, StrokeThickness = 1.8,
+                    StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round });
+                return canvas;
+            case nameof(DeskItemKind.Arrow):
+                canvas.Children.Add(new Line { X1 = 2, Y1 = 16, X2 = 14, Y2 = 4, Stroke = ink, StrokeThickness = 1.8,
+                    StrokeStartLineCap = PenLineCap.Round });
+                canvas.Children.Add(new Polygon { Points = new PointCollection { new(16.5, 1.5), new(15.5, 9), new(9, 2.5) }, Fill = ink });
+                return canvas;
+            case nameof(DeskItemKind.Sticker): return Glyph(0xE734);
+            case nameof(DeskItemKind.Image): return Glyph(0xEB9F);
+            case nameof(DeskItemKind.Chart):
+                foreach (var (x, height) in new[] { (2.0, 7.0), (7.5, 13.0), (13.0, 10.0) })
+                    canvas.Children.Add(Place(new Rectangle { Width = 4, Height = height, Fill = x == 7.5 ? AccentFill : soft, RadiusX = 1, RadiusY = 1 },
+                        x, 16 - height));
+                return canvas;
+            case nameof(DeskItemKind.Table):
+                canvas.Children.Add(Place(new Rectangle { Width = 15, Height = 13, Stroke = ink, StrokeThickness = 1.4, RadiusX = 1.5, RadiusY = 1.5 }, 1.5, 2.5));
+                canvas.Children.Add(new Line { X1 = 1.5, X2 = 16.5, Y1 = 7, Y2 = 7, Stroke = ink, StrokeThickness = 1.2 });
+                canvas.Children.Add(new Line { X1 = 7, X2 = 7, Y1 = 2.5, Y2 = 15.5, Stroke = ink, StrokeThickness = 1.2 });
+                return canvas;
+            default: return Glyph(0xE710);
+        }
+
+        static UIElement Place(FrameworkElement element, double left, double top)
+        {
+            Canvas.SetLeft(element, left);
+            Canvas.SetTop(element, top);
+            return element;
+        }
     }
 
     private static double EdgeInset(Border frame, Vector vector) => Math.Min(
