@@ -70,7 +70,7 @@ public partial class DashboardWindow
     {
         if (agentPanel == panel.Window)
         {
-            panel.Window.Activate();
+            ActivatePanel(panel.Window);
             return;
         }
         ParkToolPanel();
@@ -78,7 +78,7 @@ public partial class DashboardWindow
         agentPanel = panel.Window;
         modalOpen = true;
         panel.Window.Show();
-        panel.Window.Activate();
+        ActivatePanel(panel.Window);
         UpdatePanelSwitchers();
     }
 

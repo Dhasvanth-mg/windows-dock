@@ -423,7 +423,7 @@ public partial class DashboardWindow
                 })));
                 sidebar.Children.Add(QuietButton("Delete canvas", () =>
                 {
-                    if (MessageBox.Show(window, $"Delete {board.Name}?", "Project canvas", MessageBoxButton.YesNo,
+                    if (MessageBox.Show(DialogOwner(window), $"Delete {board.Name}?", "Project canvas", MessageBoxButton.YesNo,
                         MessageBoxImage.None, MessageBoxResult.No) == MessageBoxResult.Yes)
                         Run(() =>
                         {

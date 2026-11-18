@@ -141,7 +141,7 @@ public partial class DashboardWindow
                 if (match.Active)
                     bracket.Children.Add(QuietButton("Withdraw", () =>
                     {
-                        if (MessageBox.Show(window, "Withdraw from this tournament and end the current run?", "Hold’em tournament",
+                        if (MessageBox.Show(DialogOwner(window), "Withdraw from this tournament and end the current run?", "Hold’em tournament",
                             MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) == MessageBoxResult.Yes)
                             Change(current => DockPokerTournament.Withdraw(current, match.Id));
                     }));

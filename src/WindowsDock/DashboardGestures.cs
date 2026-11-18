@@ -367,7 +367,7 @@ public partial class DashboardWindow
                 return;
             origin = null;
             Mouse.Capture(null);
-            if (DashboardReceivesGestures)
+            if (DashboardReceivesGestures || hostedWindow != null)
                 Dismiss();
         };
     }

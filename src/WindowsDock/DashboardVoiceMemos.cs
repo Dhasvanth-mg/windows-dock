@@ -219,7 +219,7 @@ public partial class DashboardWindow
             });
             var remove = ActionButton("Delete memo", () =>
             {
-                if (MessageBox.Show(window, "Delete this recording and transcript?", "Voice memos",
+                if (MessageBox.Show(DialogOwner(window), "Delete this recording and transcript?", "Voice memos",
                     MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
                     return;
                 try
@@ -246,7 +246,7 @@ public partial class DashboardWindow
                     status.Text = "Set a Groq API key in Assistants to transcribe this memo.";
                     return;
                 }
-                if (MessageBox.Show(window, "Send this recording to Groq for transcription using your API account?",
+                if (MessageBox.Show(DialogOwner(window), "Send this recording to Groq for transcription using your API account?",
                     "Transcribe memo", MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
                     return;
                 editor.IsEnabled = false;

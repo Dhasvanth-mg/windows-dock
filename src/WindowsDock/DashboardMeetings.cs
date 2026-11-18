@@ -142,7 +142,7 @@ public partial class DashboardWindow
         range.SelectedDateChanged += (_, _) => Render();
         remove.Click += (_, _) =>
         {
-            if (editId == Guid.Empty || MessageBox.Show(window, "Delete this local event?", "Calendar",
+            if (editId == Guid.Empty || MessageBox.Show(DialogOwner(window), "Delete this local event?", "Calendar",
                 MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
                 return;
             try

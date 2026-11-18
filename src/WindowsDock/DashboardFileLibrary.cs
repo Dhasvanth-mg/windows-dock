@@ -222,7 +222,7 @@ public partial class DashboardWindow
 
         async Task RemoveAsync(LibraryResult result)
         {
-            if (MessageBox.Show(window, $"Remove {result.Name} and its search terms from the library?", "Remove upload",
+            if (MessageBox.Show(DialogOwner(window), $"Remove {result.Name} and its search terms from the library?", "Remove upload",
                 MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
                 return;
             try

@@ -203,7 +203,7 @@ public partial class DashboardWindow
                 sidebar.Children.Add(QuietButton("Rename network", Rename));
                 sidebar.Children.Add(QuietButton("Delete network", () =>
                 {
-                    if (MessageBox.Show(window, $"Delete {map.Name}?", "People network", MessageBoxButton.YesNo,
+                    if (MessageBox.Show(DialogOwner(window), $"Delete {map.Name}?", "People network", MessageBoxButton.YesNo,
                         MessageBoxImage.None, MessageBoxResult.No) == MessageBoxResult.Yes)
                         Run(() => { DockDeskspaces.Change(desk, item => item with { Maps = item.Maps.Where(saved => saved.Id != mapId).ToArray() }); ShowDeskspaces(desk); });
                 }));

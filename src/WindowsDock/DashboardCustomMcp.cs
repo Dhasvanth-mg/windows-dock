@@ -132,7 +132,7 @@ public partial class DashboardWindow
 
         remove.Click += (_, _) =>
         {
-            if (editing == null || MessageBox.Show(window, $"Remove {editing.Label} from {persona.Name}?",
+            if (editing == null || MessageBox.Show(DialogOwner(window), $"Remove {editing.Label} from {persona.Name}?",
                 "Remove connection", MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
                 return;
             try
@@ -163,7 +163,7 @@ public partial class DashboardWindow
                 return;
             var slot = Array.IndexOf(AssistantPersonas.All, persona);
             var chat = assistantConversations[slot];
-            if (chat.Context != null && MessageBox.Show(window, "Replace the context already attached to this draft?",
+            if (chat.Context != null && MessageBox.Show(DialogOwner(window), "Replace the context already attached to this draft?",
                 "Attach MCP result", MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) != MessageBoxResult.Yes)
                 return;
             chat.Context = result;

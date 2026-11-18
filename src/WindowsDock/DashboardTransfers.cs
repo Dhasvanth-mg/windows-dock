@@ -31,7 +31,7 @@ public partial class DashboardWindow
         content.Children.Add(list);
         content.Children.Add(actions);
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
-        timer.Tick += (_, _) => { if (refresh.IsEnabled && window.IsActive) _ = LoadAsync(); };
+        timer.Tick += (_, _) => { if (refresh.IsEnabled && PanelActive(window)) _ = LoadAsync(); };
         cancellation.Register(timer.Stop);
         timer.Start();
         _ = LoadAsync();

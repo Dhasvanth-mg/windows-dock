@@ -746,6 +746,7 @@ public partial class DashboardWindow
             Source = new Uri("/WindowsDock;component/DashboardControls.xaml", UriKind.Relative)
         });
         ApplyDashboardResources(window);
+        var hosted = !expandable && width <= HostedPanelLimit;
         var compactWidth = window.Width;
         var compactHeight = window.Height;
         if (expandable)
@@ -754,7 +755,7 @@ public partial class DashboardWindow
             DockPanel.SetDock(full, Dock.Right);
             header.Children.Insert(1, full);
         }
-        var footer = section is { } selected ? DockNavigation(window, selected) : DockGrip(window, swipe =>
+        FrameworkElement? footer = section is { } selected ? DockNavigation(window, selected) : hosted ? null : DockGrip(window, swipe =>
         {
             if (swipe == DockSwipe.Right && backRoute != null)
             {
@@ -765,8 +766,11 @@ public partial class DashboardWindow
             else if (swipe == DockSwipe.Down)
                 window.Close();
         }, null, false);
-        DockPanel.SetDock(footer, Dock.Bottom);
-        frame.Children.Add(footer);
+        if (footer != null)
+        {
+            DockPanel.SetDock(footer, Dock.Bottom);
+            frame.Children.Add(footer);
+        }
         frame.Children.Add(body ?? new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
             PanningMode = PanningMode.VerticalOnly });
         var card = Card(frame);
@@ -775,7 +779,16 @@ public partial class DashboardWindow
         card.Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : assistantShell;
         card.Padding = new Thickness(18, 14, 18, 14);
         card.BorderBrush = AssistantRule;
-        window.Content = card;
+        if (hosted)
+        {
+            // Inside the dashboard the panel sits on the dashboard's own surface, so it needs no frame of its own.
+            card.Background = Brushes.Transparent;
+            card.BorderThickness = new Thickness(0);
+            card.Padding = new Thickness(0);
+            HostPanel(window, card);
+        }
+        else
+            window.Content = card;
 
         var lifetime = new CancellationTokenSource();
         var cancellation = lifetime.Token;
@@ -830,6 +843,7 @@ public partial class DashboardWindow
         {
             lifetime.Cancel();
             lifetime.Dispose();
+            ForgetPanel(window);
             OnToolPanelClosed(entry, returnFocus);
         };
         var direction = nextDockSlide;
@@ -840,7 +854,7 @@ public partial class DashboardWindow
 
         void Position()
         {
-            if (expanded || PresentationSource.FromVisual(window) is not HwndSource hwnd)
+            if (expanded || hosted || PresentationSource.FromVisual(window) is not HwndSource hwnd)
                 return;
             var area = TaskbarScreen().Bounds;
             var scale = VisualTreeHelper.GetDpi(window);

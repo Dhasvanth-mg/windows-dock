@@ -299,6 +299,8 @@
             <ScrollViewer x:Name="PageScroll" Grid.Row="1" VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
                 <ContentControl x:Name="PageHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
             </ScrollViewer>
+            <ContentControl x:Name="ToolHost" Grid.Row="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                            Focusable="False" Visibility="Collapsed"/>
             <ContentControl x:Name="DockNavigationHost" Grid.Row="2" HorizontalContentAlignment="Stretch"
                             Visibility="Collapsed"/>
         </Grid>

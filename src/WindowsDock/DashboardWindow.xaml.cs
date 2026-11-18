@@ -167,7 +167,12 @@ public partial class DashboardWindow : Window
                     Dismiss();
             }
         };
-        PreviewMouseDown += (_, _) => agentPanel?.Close();
+        // A click on the dashboard closes a panel floating over it, but not one shown inside it.
+        PreviewMouseDown += (_, _) =>
+        {
+            if (agentPanel != null && agentPanel != hostedWindow)
+                agentPanel.Close();
+        };
         Deactivated += (_, _) => Dispatcher.BeginInvoke(() =>
         {
             if (controllerPid == 0 && !closed && IsVisible && !IsActive && !modalOpen && Mouse.Captured == null &&
@@ -301,6 +306,9 @@ public partial class DashboardWindow : Window
 
     private void ShowPage(DashboardPage page)
     {
+        // Choosing a tab while a panel is showing inside the dashboard puts the panel away first.
+        if (hostedWindow != null)
+            ParkToolPanel();
         if (currentPage != page)
             PageScroll.ScrollToTop();
         pageInitialized = true;

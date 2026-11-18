@@ -71,7 +71,7 @@ public partial class DashboardWindow
             }));
             top.Children.Add(QuietButton("Delete deskspace", () =>
             {
-                if (MessageBox.Show(window, $"Remove {desk.Name}, its People networks, and its canvases?", "Deskspace",
+                if (MessageBox.Show(DialogOwner(window), $"Remove {desk.Name}, its People networks, and its canvases?", "Deskspace",
                     MessageBoxButton.YesNo, MessageBoxImage.None, MessageBoxResult.No) == MessageBoxResult.Yes)
                     Run(() => { DockDeskspaces.Remove(desk.Id); Reload(null); });
             }));
