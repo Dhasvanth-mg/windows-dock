@@ -18,6 +18,29 @@ public sealed class DockDeskspaceAppletTests : IDisposable
     }
 
     [Fact]
+    public void StandaloneBoardsRemainIndependentOfDeskspaceDeletion()
+    {
+        var standalone = DockDeskspaces.AddCanvas(null, "Independent board");
+        var sticky = DockCanvas.Create(DeskItemKind.Sticky, 10, 20, "Keep this idea");
+        DockDeskspaces.ChangeCanvas(null, standalone.Id, board => board with { Items = [sticky] });
+        Assert.Empty(DockDeskspaces.Spaces());
+        Assert.Equal(sticky, Assert.Single(DockDeskspaces.FindCanvas(null, standalone.Id)!.Items));
+
+        var desk = DockDeskspaces.Add("Temporary workspace");
+        var moved = DockDeskspaces.AddCanvas(desk.Id, "Moved board");
+        DockDeskspaces.ChangeCanvas(desk.Id, moved.Id, board => board with { Items = [sticky] });
+        DockDeskspaces.MakeCanvasStandalone(desk.Id, moved.Id);
+        Assert.Empty(DockDeskspaces.Get(desk.Id).Canvases!);
+        Assert.Throws<IOException>(() => DockDeskspaces.ChangeCanvas(desk.Id, moved.Id, board => board));
+        DockDeskspaces.Remove(desk.Id);
+        Assert.Equal(2, DockDeskspaces.ListCanvases().Length);
+        Assert.All(DockDeskspaces.ListCanvases(), entry => Assert.Null(entry.SpaceId));
+        Assert.Equal(sticky, Assert.Single(DockDeskspaces.FindCanvas(null, moved.Id)!.Items));
+        DockDeskspaces.RemoveCanvas(null, standalone.Id);
+        Assert.Equal(moved.Id, Assert.Single(DockDeskspaces.ListCanvases()).Canvas.Id);
+    }
+
+    [Fact]
     public void PeopleAndProjectCanvasesHaveIndependentContents()
     {
         var room = DockDeskspaces.Add("Studio");

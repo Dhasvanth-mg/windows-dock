@@ -1,5 +1,17 @@
 # Feature tracker
 
+## Continue coding controls and standalone canvases after checking the running build
+
+- Status: Verified and deployed. Startup now launches the verified release.
+- Scope: Continue the coding chat controls and standalone Miro-style canvas request against the latest checkout and running installation.
+- Acceptance criteria: Check the current build and deployment first, preserve other unfinished edits, verify the normal entry points for both features, and make the verified version available from the registered startup copy.
+- Findings: The feature implementation was committed in `6d3b157`. Later canvas work adds templates, connection points, rotation, paths, fills, borders, and a shaded palette. The latest recorded suite passed 179 tests. On November 19 the running controller and startup registration pointed to the previous `dock-reveal-20261116-105047` installation. Its managed DLL lacks the standalone canvas entry point, coding controls, and newer canvas geometry. The tracker records that newer packages were launched separately and startup still pointed to the earlier copy.
+- Follow-up scope: Plan additional improvements after reviewing the current feature gaps. Record priorities, dependencies, and acceptance criteria for the proposed work.
+- Verification: All 191 tests passed from a snapshot of the committed application source. Twelve focused cases cover live protocol payloads, turn identity, unsupported server methods, endpoint validation, and standalone board persistence. A Windows fixture created, edited, reopened, and rendered an independent board, then checked coding controls and draft and thinking-choice retention across pane navigation. The signed-in Codex CLI listed models, accepted model and thinking settings, and returned the expected answer in an ephemeral test chat. The 319-file x64 package and archive checksum passed verification.
+- Deployment: Stopped the old controller through its restore command, launched the verified native package, and updated the existing sign-in registration. The new controller, monitor, and prepared dashboard are running. Explorer stayed in the same process and the controller reported the full native dock active. The installed native launcher event opened and dismissed Dashboard.
+- Follow-up outcome: Added `docs/feature-roadmap.md` with prioritized canvas editing, shared coding controls, recovery, and project integration increments, plus additional feature ideas and completion checks.
+- Limits and remaining work: The existing desktop clients' private connections still require a supported shared transport for direct live control. The saved-copy flow is text-only. Real Claude continuation, image and PDF uploads, and provider approval-hook decisions still require live checks. Pointer dragging of canvas anchors and rotation still needs a physical check. The pre-existing taskbar visibility edits are still uncommitted and were excluded from the verified release.
+
 ## Make the dock open much faster
 
 - Status: Built, tested and measured on release-mode builds. Running as `artifacts/release-20261118-fast3`.
@@ -100,10 +112,10 @@
 
 ## Coding chat controls and the Deskspace canvas
 
-- Status: In progress. The session building this stopped with its work uncommitted and not compiling. Its work was committed as found, with one fix: in `DashboardCodingControls.cs` the live or saved-copy switch and five buttons attached handlers before the controls those handlers repaint were declared (C# error CS0165); they are now attached after. The build passes and 162 of 162 tests pass. None of this was checked in the running app.
+- Status: Built, verified, and deployed. The original implementation in `6d3b157` includes the fix for handlers referring to controls before their declaration. The November 19 continuation above records the current 191-test run, Windows UI checks, signed-in Codex protocol check, and installed release.
 - Scope: Work on item 3 of the remaining-work review, including in-dock controls for existing coding chats. The follow-up confirms the Miro-style project canvas should also be usable on its own, with no workspace required.
 - Acceptance criteria: The coding pane exposes supported in-dock turn and model controls for the selected conversation and reports connection state. Project canvases have a direct entry point, create and reopen boards independently, and preserve the editor and existing Deskspace boards. Verify the changed paths with focused tests and the Windows dashboard.
-- Remaining work: Confirm the available provider transports and canvas behavior, implement the supported changes, and check the resulting UI and provider flows.
+- Remaining work: Direct control of chats on private desktop connections, real Claude continuation, and live approval and upload checks remain open. Project canvases can be created and reopened independently from Desk, Widgets, and Search. Existing Deskspace boards can be moved to the standalone shelf.
 
 ## Remaining work review
 
